@@ -19,6 +19,7 @@ import GroupChatPage from "./pages/GroupChatPage";
 import MusicPage from "./pages/MusicPage";
 import BottlePage from "./pages/BottlePage";
 import CameraPage from "./pages/CameraPage";
+import WerewolfPage from "./pages/WerewolfPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/chat/:characterId" element={<ChatPage />} />
             <Route path="/space" element={<SpacePage />} />
             <Route path="/games" element={<GamesPage />} />
+            <Route path="/werewolf" element={<WerewolfPage />} />
             <Route path="/group" element={<GroupPage />} />
             <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
             <Route path="/music" element={<MusicPage />} />

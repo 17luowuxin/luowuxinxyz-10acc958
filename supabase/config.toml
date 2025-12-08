@@ -1,1 +1,4 @@
 project_id = "emvolhvffoqsfmhbcadk"
+
+[functions.werewolf-game]
+verify_jwt = false
