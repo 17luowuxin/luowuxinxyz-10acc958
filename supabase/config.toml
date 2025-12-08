@@ -2,3 +2,6 @@ project_id = "emvolhvffoqsfmhbcadk"
 
 [functions.werewolf-game]
 verify_jwt = false
+
+[functions.script-murder]
+verify_jwt = false

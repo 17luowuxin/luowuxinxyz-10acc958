@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 
 const games = [
   { id: 'werewolf', name: '狼人杀', desc: '和AI好友一起玩狼人杀', icon: Skull, color: 'from-red-500 to-purple-600', route: '/werewolf' },
-  { id: 'script', name: '剧本杀', desc: '沉浸式角色扮演', icon: BookOpen, color: 'from-purple-500 to-pink-500', route: null },
+  { id: 'script', name: '剧本杀', desc: '沉浸式角色扮演推理', icon: BookOpen, color: 'from-purple-500 to-pink-500', route: '/script-murder' },
   { id: 'riddle', name: '猜谜语', desc: '考验智慧的时刻', icon: HelpCircle, color: 'from-blue-500 to-cyan-500', route: null },
   { id: 'truth', name: '真心话大冒险', desc: '刺激又有趣', icon: Heart, color: 'from-pink-500 to-red-500', route: null },
 ];
