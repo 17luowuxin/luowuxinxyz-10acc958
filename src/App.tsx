@@ -36,6 +36,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/home" element={<Index />} />
             <Route path="/lock" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/album" element={<AlbumPage />} />

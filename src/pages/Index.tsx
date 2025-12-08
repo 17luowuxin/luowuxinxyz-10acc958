@@ -22,6 +22,8 @@ const Index: React.FC = () => {
     if (location.pathname === '/lock') {
       setIsLocked(true);
       navigate('/', { replace: true });
+    } else if (location.pathname === '/home') {
+      setIsLocked(false);
     }
   }, [location.pathname, navigate]);
 
