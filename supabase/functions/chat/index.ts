@@ -40,8 +40,16 @@ serve(async (req) => {
         headers["anthropic-version"] = "2023-06-01";
       } else if (provider === 'custom' && customBaseUrl) {
         apiKey = userApiKey;
-        apiUrl = customBaseUrl;
-        model = customModel || "gpt-3.5-turbo";
+        // Ensure the URL ends with /chat/completions
+        let finalUrl = customBaseUrl.trim();
+        if (!finalUrl.endsWith('/chat/completions')) {
+          if (!finalUrl.endsWith('/')) finalUrl += '/';
+          if (!finalUrl.includes('/v1/')) finalUrl += 'v1/';
+          if (!finalUrl.endsWith('/')) finalUrl += 'chat/completions';
+          else finalUrl += 'chat/completions';
+        }
+        apiUrl = finalUrl;
+        model = customModel || "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
       } else {
         // Unknown provider, fallback to Lovable AI

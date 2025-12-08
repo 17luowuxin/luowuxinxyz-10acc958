@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import LockScreen from '@/components/phone/LockScreen';
 import HomeScreen from '@/components/phone/HomeScreen';
@@ -8,6 +8,7 @@ import PhoneFrame from '@/components/phone/PhoneFrame';
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isLocked, setIsLocked] = useState(true);
 
   useEffect(() => {
@@ -15,6 +16,14 @@ const Index: React.FC = () => {
       navigate('/auth');
     }
   }, [user, loading, navigate]);
+
+  // Handle /lock route to go back to lock screen
+  useEffect(() => {
+    if (location.pathname === '/lock') {
+      setIsLocked(true);
+      navigate('/', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   if (loading) {
     return (
