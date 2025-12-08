@@ -134,6 +134,7 @@ const ChatPage: React.FC = () => {
         persona: character?.persona 
       };
       
+      // Only add user API config if they have one configured
       if (apiConfig.apiKey && apiConfig.provider) {
         body.userApiKey = apiConfig.apiKey;
         body.provider = apiConfig.provider;
@@ -141,16 +142,31 @@ const ChatPage: React.FC = () => {
         if (apiConfig.customModel) body.customModel = apiConfig.customModel;
       }
       
-      const resp = await supabase.functions.invoke('chat', { body });
+      // Use fetch directly for streaming
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
 
-      if (resp.error) {
-        console.error('Chat error:', resp.error);
-        toast.error(resp.error.message || 'AI服务暂时不可用，请检查API设置');
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
+        console.error('Chat error:', errorData);
+        toast.error(errorData.error || 'AI服务暂时不可用');
         setLoading(false);
         return;
       }
       
-      const reader = resp.data.getReader();
+      if (!resp.body) {
+        toast.error('无法获取响应');
+        setLoading(false);
+        return;
+      }
+      
+      const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = '';
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: '' }]);

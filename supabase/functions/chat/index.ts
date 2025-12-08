@@ -13,15 +13,14 @@ serve(async (req) => {
   try {
     const { messages, persona, characterName, userApiKey, provider, customBaseUrl, customModel } = await req.json();
     
-    // Use user's custom API key or default Lovable AI
-    let apiKey = Deno.env.get("LOVABLE_API_KEY");
-    let apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    let model = "google/gemini-2.5-flash";
+    let apiKey: string | undefined;
+    let apiUrl: string;
+    let model: string;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
     
-    // If user provides their own API key
+    // Priority: user's custom API key > Lovable AI
     if (userApiKey && provider) {
       if (provider === 'deepseek') {
         apiKey = userApiKey;
@@ -44,14 +43,31 @@ serve(async (req) => {
         apiUrl = customBaseUrl;
         model = customModel || "gpt-3.5-turbo";
         headers["Authorization"] = `Bearer ${apiKey}`;
+      } else {
+        // Unknown provider, fallback to Lovable AI
+        apiKey = Deno.env.get("LOVABLE_API_KEY");
+        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+        model = "google/gemini-2.5-flash";
+        headers["Authorization"] = `Bearer ${apiKey}`;
       }
     } else {
+      // No user API key, use Lovable AI
+      apiKey = Deno.env.get("LOVABLE_API_KEY");
+      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      model = "google/gemini-2.5-flash";
       headers["Authorization"] = `Bearer ${apiKey}`;
     }
 
     if (!apiKey) {
-      throw new Error("API key not configured");
+      console.error("No API key available");
+      return new Response(JSON.stringify({ error: "API密钥未配置" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    console.log("Using provider:", userApiKey ? provider : "lovable-ai");
+    console.log("API URL:", apiUrl);
 
     const systemPrompt = `你是一个名叫"${characterName}"的虚拟角色。
 ${persona ? `角色设定: ${persona}` : ''}
@@ -60,7 +76,7 @@ ${persona ? `角色设定: ${persona}` : ''}
 
     let requestBody: Record<string, unknown>;
     
-    if (provider === 'anthropic') {
+    if (provider === 'anthropic' && userApiKey) {
       requestBody = {
         model,
         max_tokens: 1024,
@@ -80,6 +96,8 @@ ${persona ? `角色设定: ${persona}` : ''}
         stream: true,
       };
     }
+
+    console.log("Sending request to AI...");
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -104,11 +122,13 @@ ${persona ? `角色设定: ${persona}` : ''}
         });
       }
       
-      return new Response(JSON.stringify({ error: "AI服务暂时不可用" }), {
+      return new Response(JSON.stringify({ error: "AI服务暂时不可用: " + errorText }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("AI response received, streaming...");
 
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
