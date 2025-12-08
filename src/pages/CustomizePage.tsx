@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, Upload, Sparkles, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,9 +32,13 @@ const CustomizePage: React.FC = () => {
   const [friendBubbleColor, setFriendBubbleColor] = useState('#B5D8FF');
   const [bubbleStyle, setBubbleStyle] = useState('rounded');
   const [opacity, setOpacity] = useState([1]);
+  const [bubbleSize, setBubbleSize] = useState([16]); // font size in px
   const [chatBackgroundUrl, setChatBackgroundUrl] = useState('');
+  const [globalBackgroundUrl, setGlobalBackgroundUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [globalUploading, setGlobalUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const globalFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) fetchSettings();
@@ -47,7 +51,9 @@ const CustomizePage: React.FC = () => {
       setFriendBubbleColor(data.friend_bubble_color || '#B5D8FF');
       setBubbleStyle(data.bubble_style || 'rounded');
       setOpacity([Number(data.bubble_opacity) || 1]);
+      setBubbleSize([(data as any).bubble_size || 16]);
       setChatBackgroundUrl(data.chat_background_url || '');
+      setGlobalBackgroundUrl((data as any).global_background_url || '');
     }
   };
 
@@ -76,16 +82,45 @@ const CustomizePage: React.FC = () => {
     toast.success('背景图上传成功');
   };
 
+  const handleGlobalBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+
+    setGlobalUploading(true);
+    const fileName = `${user.id}/global-bg-${Date.now()}.${file.name.split('.').pop()}`;
+    
+    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
+    if (uploadError) {
+      toast.error('上传失败');
+      setGlobalUploading(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+    setGlobalBackgroundUrl(publicUrl);
+    setGlobalUploading(false);
+    toast.success('全局背景图上传成功');
+  };
+
   const handleSave = async () => {
-    const { error } = await supabase.from('customization').update({
+    const { error } = await supabase.from('customization').upsert({
+      user_id: user?.id,
       bubble_color: bubbleColor,
       friend_bubble_color: friendBubbleColor,
       bubble_style: bubbleStyle,
       bubble_opacity: opacity[0],
+      bubble_size: bubbleSize[0],
       chat_background_url: chatBackgroundUrl,
-    }).eq('user_id', user?.id);
+      global_background_url: globalBackgroundUrl,
+    }, { onConflict: 'user_id' });
     
     if (error) {
+      console.error('Save error:', error);
       toast.error('保存失败');
     } else {
       toast.success('美化设置已保存!');
@@ -120,16 +155,47 @@ const CustomizePage: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-6 pb-24">
-        {/* Global beautification section */}
+        {/* Global App Background */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">全局美化</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">上传图片作为整个应用的透明背景</p>
+          
+          <div className="space-y-4">
+            <p className="text-sm font-medium">全局背景图片</p>
+            <div 
+              onClick={() => globalFileInputRef.current?.click()}
+              className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
+            >
+              {globalBackgroundUrl ? (
+                <div className="relative w-full h-32">
+                  <img src={globalBackgroundUrl} alt="全局背景" className="w-full h-full object-cover rounded-xl" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
+                    <span className="text-white text-sm">点击更换</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-8 h-8 text-primary mb-2" />
+                  <span className="text-primary text-sm">{globalUploading ? '上传中...' : '点击上传全局背景'}</span>
+                </>
+              )}
+            </div>
+            <input ref={globalFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGlobalBackgroundUpload} />
+          </div>
+        </div>
+
+        {/* Chat Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-5 h-5 text-primary" />
-            <h3 className="font-bold text-lg">全局美化</h3>
+            <h3 className="font-bold text-lg">聊天背景</h3>
           </div>
-          <p className="text-muted-foreground text-sm mb-4">上传图片作为聊天背景</p>
           
           <div className="space-y-4">
-            <p className="text-sm font-medium">聊天背景图片</p>
+            <p className="text-sm font-medium">聊天页面背景图片</p>
             <div 
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
@@ -203,6 +269,18 @@ const CustomizePage: React.FC = () => {
                 className="w-full"
               />
             </div>
+
+            <div>
+              <p className="text-sm font-medium mb-3">气泡大小 {bubbleSize[0]}px</p>
+              <Slider 
+                value={bubbleSize} 
+                onValueChange={setBubbleSize} 
+                max={24} 
+                min={12}
+                step={1} 
+                className="w-full"
+              />
+            </div>
           </div>
         </div>
 
@@ -259,18 +337,24 @@ const CustomizePage: React.FC = () => {
               backgroundColor: chatBackgroundUrl ? undefined : 'hsl(var(--muted))'
             }}
           >
-            <div className="flex justify-end">
+            <div className="flex justify-end items-end gap-2">
               <div 
                 className={getBubblePreviewClass(bubbleStyle, true)}
-                style={{ backgroundColor: bubbleColor, opacity: opacity[0], color: '#333' }}
+                style={{ backgroundColor: bubbleColor, opacity: opacity[0], color: '#333', fontSize: `${bubbleSize[0]}px` }}
               >
                 你好呀~
               </div>
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-xs text-gray-600 flex-shrink-0">
+                我
+              </div>
             </div>
-            <div className="flex justify-start">
+            <div className="flex justify-start items-end gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-xs text-gray-500 flex-shrink-0">
+                友
+              </div>
               <div 
                 className={getBubblePreviewClass(bubbleStyle, false)}
-                style={{ backgroundColor: friendBubbleColor, opacity: opacity[0], color: '#333' }}
+                style={{ backgroundColor: friendBubbleColor, opacity: opacity[0], color: '#333', fontSize: `${bubbleSize[0]}px` }}
               >
                 你好! 很高兴认识你 💕
               </div>

@@ -49,27 +49,39 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/lockscreen.${fileExt}`;
+      const fileName = `${user.id}/lockscreen-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from('backgrounds')
         .getPublicUrl(fileName);
 
-      await supabase
+      // Use upsert to handle case where customization record might not exist
+      const { error: updateError } = await supabase
         .from('customization')
-        .update({ lock_screen_bg_url: publicUrl })
-        .eq('user_id', user.id);
+        .upsert({ 
+          user_id: user.id,
+          lock_screen_bg_url: publicUrl + '?t=' + Date.now()
+        }, { onConflict: 'user_id' });
 
-      setBgUrl(publicUrl);
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw updateError;
+      }
+
+      setBgUrl(publicUrl + '?t=' + Date.now());
       toast.success('锁屏背景已更新');
     } catch (error) {
-      toast.error('上传失败');
+      console.error('Lock screen upload error:', error);
+      toast.error('上传失败，请重试');
     } finally {
       setUploading(false);
     }
