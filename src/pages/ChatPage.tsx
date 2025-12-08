@@ -205,6 +205,7 @@ const ChatPage: React.FC = () => {
   const userBubbleColor = customization.bubble_color || '#FFB5C5';
   const friendBubbleColor = customization.friend_bubble_color || '#B5D8FF';
   const bubbleOpacity = customization.bubble_opacity ?? 0.95;
+  const bubbleSize = customization.bubble_size || 16;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -236,56 +237,78 @@ const ChatPage: React.FC = () => {
         }}
       >
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {/* Friend avatar */}
-            {msg.role !== 'user' && (
-              <Avatar className="w-8 h-8 flex-shrink-0 border border-pink-100">
-                <AvatarImage src={character?.avatar_url} />
-                <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs text-gray-500">
-                  {character?.name?.charAt(0) || '?'}
-                </AvatarFallback>
-              </Avatar>
-            )}
+          <div key={msg.id} className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+            {/* Avatar */}
+            <Avatar className="w-10 h-10 flex-shrink-0 border-2 border-white shadow-sm mt-0.5">
+              {msg.role === 'user' ? (
+                <>
+                  <AvatarImage src={profile?.avatar_url} />
+                  <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-sm text-gray-600">
+                    {profile?.nickname?.charAt(0) || '我'}
+                  </AvatarFallback>
+                </>
+              ) : (
+                <>
+                  <AvatarImage src={character?.avatar_url} />
+                  <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-sm text-gray-500">
+                    {character?.name?.charAt(0) || '?'}
+                  </AvatarFallback>
+                </>
+              )}
+            </Avatar>
             
-            <div 
-              className={getBubbleStyle(msg.role === 'user')}
-              style={{ 
-                backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
-                opacity: bubbleOpacity,
-                color: '#333'
-              }}
-            >
-              {msg.content}
+            {/* Bubble with arrow */}
+            <div className={`relative max-w-[70%] ${msg.role === 'user' ? 'mr-1' : 'ml-1'}`}>
+              {/* Triangle arrow */}
+              <div 
+                className={`absolute top-3 w-0 h-0 border-8 ${
+                  msg.role === 'user' 
+                    ? 'right-[-8px] border-l-[8px] border-r-0 border-transparent' 
+                    : 'left-[-8px] border-r-[8px] border-l-0 border-transparent'
+                }`}
+                style={{ 
+                  borderLeftColor: msg.role === 'user' ? userBubbleColor : 'transparent',
+                  borderRightColor: msg.role !== 'user' ? friendBubbleColor : 'transparent'
+                }}
+              />
+              <div 
+                className={getBubbleStyle(msg.role === 'user')}
+                style={{ 
+                  backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
+                  opacity: bubbleOpacity,
+                  color: '#333',
+                  fontSize: `${bubbleSize}px`,
+                  lineHeight: '1.5'
+                }}
+              >
+                {msg.content}
+              </div>
             </div>
-            
-            {/* User avatar */}
-            {msg.role === 'user' && (
-              <Avatar className="w-8 h-8 flex-shrink-0 border border-pink-100">
-                <AvatarImage src={profile?.avatar_url} />
-                <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-xs text-gray-600">
-                  {profile?.nickname?.charAt(0) || '我'}
-                </AvatarFallback>
-              </Avatar>
-            )}
           </div>
         ))}
         
         {loading && (
-          <div className="flex items-end gap-2 justify-start">
-            <Avatar className="w-8 h-8 flex-shrink-0 border border-pink-100">
+          <div className="flex items-start gap-2 flex-row">
+            <Avatar className="w-10 h-10 flex-shrink-0 border-2 border-white shadow-sm mt-0.5">
               <AvatarImage src={character?.avatar_url} />
-              <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs">
+              <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-sm">
                 {character?.name?.charAt(0) || '?'}
               </AvatarFallback>
             </Avatar>
-            <div 
-              className="px-4 py-3 rounded-2xl rounded-bl-md shadow-sm" 
-              style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
-            >
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="relative ml-1">
+              <div 
+                className="absolute top-3 left-[-8px] w-0 h-0 border-8 border-r-[8px] border-l-0 border-transparent"
+                style={{ borderRightColor: friendBubbleColor }}
+              />
+              <div 
+                className="px-4 py-3 rounded-2xl rounded-tl-md shadow-sm" 
+                style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
+              >
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
               </div>
             </div>
           </div>

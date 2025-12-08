@@ -200,10 +200,12 @@ export type Database = {
           app_icons: Json | null
           bubble_color: string | null
           bubble_opacity: number | null
+          bubble_size: number | null
           bubble_style: string | null
           chat_background_url: string | null
           created_at: string
           friend_bubble_color: string | null
+          global_background_url: string | null
           id: string
           lock_screen_bg_url: string | null
           theme: string | null
@@ -214,10 +216,12 @@ export type Database = {
           app_icons?: Json | null
           bubble_color?: string | null
           bubble_opacity?: number | null
+          bubble_size?: number | null
           bubble_style?: string | null
           chat_background_url?: string | null
           created_at?: string
           friend_bubble_color?: string | null
+          global_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
           theme?: string | null
@@ -228,10 +232,12 @@ export type Database = {
           app_icons?: Json | null
           bubble_color?: string | null
           bubble_opacity?: number | null
+          bubble_size?: number | null
           bubble_style?: string | null
           chat_background_url?: string | null
           created_at?: string
           friend_bubble_color?: string | null
+          global_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
           theme?: string | null
