@@ -15,6 +15,7 @@ import ChatPage from "./pages/ChatPage";
 import SpacePage from "./pages/SpacePage";
 import GamesPage from "./pages/GamesPage";
 import GroupPage from "./pages/GroupPage";
+import GroupChatPage from "./pages/GroupChatPage";
 import MusicPage from "./pages/MusicPage";
 import BottlePage from "./pages/BottlePage";
 import CameraPage from "./pages/CameraPage";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/space" element={<SpacePage />} />
             <Route path="/games" element={<GamesPage />} />
             <Route path="/group" element={<GroupPage />} />
+            <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
             <Route path="/music" element={<MusicPage />} />
             <Route path="/bottle" element={<BottlePage />} />
             <Route path="/camera" element={<CameraPage />} />
