@@ -16,6 +16,7 @@ import {
   Camera,
   Gamepad2,
   Users,
+  Lock,
   LucideIcon,
 } from 'lucide-react';
 
@@ -51,20 +52,22 @@ const HomeScreen: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      fetchAppIcons();
+      initializeCustomization();
     }
   }, [user]);
 
-  const fetchAppIcons = async () => {
+  const initializeCustomization = async () => {
     try {
+      // First try to fetch existing customization
       const { data, error } = await supabase
         .from('customization')
         .select('app_icons')
         .eq('user_id', user!.id)
         .single();
       
-      if (error) {
-        console.error('Fetch icons error:', error);
+      if (error && error.code === 'PGRST116') {
+        // No record exists, create one
+        await supabase.from('customization').insert({ user_id: user!.id, app_icons: {} });
         return;
       }
       
@@ -106,16 +109,24 @@ const HomeScreen: React.FC = () => {
 
       const newIcons = { ...appIcons, [editingApp]: publicUrl };
       
-      const { error: updateError } = await supabase
+      // First try update, if no rows affected then upsert
+      const { error: updateError, count } = await supabase
         .from('customization')
         .update({ app_icons: newIcons })
         .eq('user_id', user.id);
 
       if (updateError) {
-        console.error('Update error:', updateError);
-        toast.dismiss();
-        toast.error('保存失败');
-        return;
+        // Try upsert instead
+        const { error: upsertError } = await supabase
+          .from('customization')
+          .upsert({ user_id: user.id, app_icons: newIcons }, { onConflict: 'user_id' });
+        
+        if (upsertError) {
+          console.error('Upsert error:', upsertError);
+          toast.dismiss();
+          toast.error('保存失败');
+          return;
+        }
       }
 
       setAppIcons(newIcons);
@@ -223,14 +234,15 @@ const HomeScreen: React.FC = () => {
         ))}
       </motion.div>
 
-      {/* Bottom lock indicator */}
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2">
-        <div className="w-8 h-8 rounded-full bg-foreground/10 flex items-center justify-center">
-          <div className="w-4 h-5 border-2 border-foreground/30 rounded-sm relative">
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-2 h-2 border-2 border-foreground/30 rounded-full" />
-          </div>
-        </div>
-      </div>
+      {/* Return to lock screen button */}
+      <motion.button
+        onClick={() => navigate('/lock')}
+        className="fixed bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full bg-foreground/10 backdrop-blur-sm text-foreground/70 text-sm"
+        whileTap={{ scale: 0.95 }}
+      >
+        <Lock className="w-4 h-4" />
+        <span>返回锁屏</span>
+      </motion.button>
 
       {/* Home indicator */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-28 h-1 bg-foreground/15 rounded-full" />
