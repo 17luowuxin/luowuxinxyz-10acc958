@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import {
   Image,
   User,
@@ -13,9 +16,18 @@ import {
   Music,
   Mail,
   Camera,
+  LucideIcon,
 } from 'lucide-react';
 
-const apps = [
+interface AppConfig {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  color: string;
+  route: string;
+}
+
+const defaultApps: AppConfig[] = [
   { id: 'album', name: '相册', icon: Image, color: 'from-candy-blue to-candy-mint', route: '/album' },
   { id: 'profile', name: '我的', icon: User, color: 'from-candy-pink to-candy-purple', route: '/profile' },
   { id: 'settings', name: '设置', icon: Settings, color: 'from-gray-400 to-gray-600', route: '/settings' },
@@ -31,6 +43,67 @@ const apps = [
 
 const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [appIcons, setAppIcons] = useState<Record<string, string>>({});
+  const [editingApp, setEditingApp] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchAppIcons();
+    }
+  }, [user]);
+
+  const fetchAppIcons = async () => {
+    const { data } = await supabase
+      .from('customization')
+      .select('app_icons')
+      .eq('user_id', user!.id)
+      .single();
+    
+    if (data?.app_icons) {
+      setAppIcons(data.app_icons as Record<string, string>);
+    }
+  };
+
+  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !editingApp) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/icons/${editingApp}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('backgrounds')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('backgrounds')
+        .getPublicUrl(fileName);
+
+      const newIcons = { ...appIcons, [editingApp]: publicUrl };
+      
+      await supabase
+        .from('customization')
+        .update({ app_icons: newIcons })
+        .eq('user_id', user.id);
+
+      setAppIcons(newIcons);
+      toast.success('图标已更新');
+    } catch (error) {
+      toast.error('上传失败');
+    } finally {
+      setEditingApp(null);
+    }
+  };
+
+  const handleLongPress = (appId: string) => {
+    setEditingApp(appId);
+    fileInputRef.current?.click();
+  };
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -49,6 +122,14 @@ const HomeScreen: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted to-background p-6 pt-12">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleIconUpload}
+      />
+
       {/* Status bar placeholder */}
       <div className="flex justify-between items-center mb-8 px-2">
         <span className="text-sm font-medium text-muted-foreground">
@@ -67,18 +148,35 @@ const HomeScreen: React.FC = () => {
         animate="show"
         className="grid grid-cols-4 gap-6"
       >
-        {apps.map((app) => (
+        {defaultApps.map((app) => (
           <motion.button
             key={app.id}
             variants={itemVariants}
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate(app.route)}
-            className="flex flex-col items-center gap-2"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              handleLongPress(app.id);
+            }}
+            className="flex flex-col items-center gap-2 group"
           >
-            <div className={`app-icon bg-gradient-to-br ${app.color}`}>
-              <app.icon className="w-7 h-7 text-white" />
-            </div>
+            {appIcons[app.id] ? (
+              <div className="w-14 h-14 rounded-2xl shadow-soft transition-all duration-300 overflow-hidden">
+                <img 
+                  src={appIcons[app.id]} 
+                  alt={app.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className={`app-icon bg-gradient-to-br ${app.color}`}>
+                <app.icon className="w-7 h-7 text-white" />
+              </div>
+            )}
             <span className="text-xs font-medium text-foreground/80">{app.name}</span>
+            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              右键换图标
+            </span>
           </motion.button>
         ))}
       </motion.div>
@@ -91,27 +189,45 @@ const HomeScreen: React.FC = () => {
             onClick={() => navigate('/friends')}
             className="flex flex-col items-center gap-1"
           >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-orange to-candy-pink flex items-center justify-center shadow-soft">
-              <Users className="w-6 h-6 text-white" />
-            </div>
+            {appIcons['friends'] ? (
+              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
+                <img src={appIcons['friends']} alt="好友" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-orange to-candy-pink flex items-center justify-center shadow-soft">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+            )}
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate('/album')}
             className="flex flex-col items-center gap-1"
           >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-blue to-candy-mint flex items-center justify-center shadow-soft">
-              <Image className="w-6 h-6 text-white" />
-            </div>
+            {appIcons['album'] ? (
+              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
+                <img src={appIcons['album']} alt="相册" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-blue to-candy-mint flex items-center justify-center shadow-soft">
+                <Image className="w-6 h-6 text-white" />
+              </div>
+            )}
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate('/music')}
             className="flex flex-col items-center gap-1"
           >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-purple to-candy-pink flex items-center justify-center shadow-soft">
-              <Music className="w-6 h-6 text-white" />
-            </div>
+            {appIcons['music'] ? (
+              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
+                <img src={appIcons['music']} alt="音乐" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-purple to-candy-pink flex items-center justify-center shadow-soft">
+                <Music className="w-6 h-6 text-white" />
+              </div>
+            )}
           </motion.button>
         </div>
       </div>

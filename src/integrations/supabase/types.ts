@@ -197,6 +197,7 @@ export type Database = {
       }
       customization: {
         Row: {
+          app_icons: Json | null
           bubble_color: string | null
           bubble_opacity: number | null
           bubble_style: string | null
@@ -204,11 +205,13 @@ export type Database = {
           created_at: string
           friend_bubble_color: string | null
           id: string
+          lock_screen_bg_url: string | null
           theme: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          app_icons?: Json | null
           bubble_color?: string | null
           bubble_opacity?: number | null
           bubble_style?: string | null
@@ -216,11 +219,13 @@ export type Database = {
           created_at?: string
           friend_bubble_color?: string | null
           id?: string
+          lock_screen_bg_url?: string | null
           theme?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          app_icons?: Json | null
           bubble_color?: string | null
           bubble_opacity?: number | null
           bubble_style?: string | null
@@ -228,6 +233,7 @@ export type Database = {
           created_at?: string
           friend_bubble_color?: string | null
           id?: string
+          lock_screen_bg_url?: string | null
           theme?: string | null
           updated_at?: string
           user_id?: string
