@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.truth-dare]
 verify_jwt = false
+
+[functions.test-api-connection]
+verify_jwt = false
