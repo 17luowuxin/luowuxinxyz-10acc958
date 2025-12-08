@@ -1,5 +1,8 @@
 project_id = "emvolhvffoqsfmhbcadk"
 
+[functions.chat]
+verify_jwt = false
+
 [functions.werewolf-game]
 verify_jwt = false
 
@@ -10,4 +13,16 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.test-api-connection]
+verify_jwt = false
+
+[functions.group-chat]
+verify_jwt = false
+
+[functions.generate-moment]
+verify_jwt = false
+
+[functions.reply-comment]
+verify_jwt = false
+
+[functions.riddle-game]
 verify_jwt = false

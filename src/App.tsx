@@ -22,6 +22,7 @@ import CameraPage from "./pages/CameraPage";
 import WerewolfPage from "./pages/WerewolfPage";
 import ScriptMurderPage from "./pages/ScriptMurderPage";
 import TruthDarePage from "./pages/TruthDarePage";
+import RiddlePage from "./pages/RiddlePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/werewolf" element={<WerewolfPage />} />
             <Route path="/script-murder" element={<ScriptMurderPage />} />
             <Route path="/truth-dare" element={<TruthDarePage />} />
+            <Route path="/riddle" element={<RiddlePage />} />
             <Route path="/group" element={<GroupPage />} />
             <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
             <Route path="/music" element={<MusicPage />} />
