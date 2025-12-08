@@ -9,13 +9,13 @@ import {
   User,
   Settings,
   Palette,
-  Users,
-  Globe,
-  Gamepad2,
   MessageCircle,
+  Star,
   Music,
   Mail,
   Camera,
+  Gamepad2,
+  Users,
   LucideIcon,
 } from 'lucide-react';
 
@@ -23,22 +23,23 @@ interface AppConfig {
   id: string;
   name: string;
   icon: LucideIcon;
-  color: string;
+  bgColor: string;
   route: string;
 }
 
+// Macaron color palette matching the reference image
 const defaultApps: AppConfig[] = [
-  { id: 'album', name: '相册', icon: Image, color: 'from-candy-blue to-candy-mint', route: '/album' },
-  { id: 'profile', name: '我的', icon: User, color: 'from-candy-pink to-candy-purple', route: '/profile' },
-  { id: 'settings', name: '设置', icon: Settings, color: 'from-gray-400 to-gray-600', route: '/settings' },
-  { id: 'customize', name: '美化', icon: Palette, color: 'from-candy-purple to-candy-blue', route: '/customize' },
-  { id: 'friends', name: '好友', icon: Users, color: 'from-candy-orange to-candy-pink', route: '/friends' },
-  { id: 'space', name: '空间', icon: Globe, color: 'from-candy-yellow to-candy-orange', route: '/space' },
-  { id: 'games', name: '游戏', icon: Gamepad2, color: 'from-candy-mint to-candy-blue', route: '/games' },
-  { id: 'group', name: '群聊', icon: MessageCircle, color: 'from-candy-pink to-candy-orange', route: '/group' },
-  { id: 'music', name: '音乐', icon: Music, color: 'from-candy-purple to-candy-pink', route: '/music' },
-  { id: 'bottle', name: '漂流瓶', icon: Mail, color: 'from-candy-blue to-candy-purple', route: '/bottle' },
-  { id: 'camera', name: '相机', icon: Camera, color: 'from-gray-700 to-gray-900', route: '/camera' },
+  { id: 'album', name: '相册', icon: Image, bgColor: 'bg-[#F06292]', route: '/album' },
+  { id: 'camera', name: '相机', icon: Camera, bgColor: 'bg-[#42A5F5]', route: '/camera' },
+  { id: 'profile', name: '我的', icon: User, bgColor: 'bg-[#26A69A]', route: '/profile' },
+  { id: 'settings', name: '设置', icon: Settings, bgColor: 'bg-[#78909C]', route: '/settings' },
+  { id: 'customize', name: '美化', icon: Palette, bgColor: 'bg-[#FFA726]', route: '/customize' },
+  { id: 'friends', name: '好友', icon: MessageCircle, bgColor: 'bg-[#42A5F5]', route: '/friends' },
+  { id: 'group', name: '群聊', icon: Users, bgColor: 'bg-[#26A69A]', route: '/group' },
+  { id: 'space', name: '空间', icon: Star, bgColor: 'bg-[#EC407A]', route: '/space' },
+  { id: 'music', name: '音乐', icon: Music, bgColor: 'bg-[#5C6BC0]', route: '/music' },
+  { id: 'games', name: '游戏', icon: Gamepad2, bgColor: 'bg-[#FFA726]', route: '/games' },
+  { id: 'bottle', name: '漂流瓶', icon: Mail, bgColor: 'bg-[#AB47BC]', route: '/bottle' },
 ];
 
 const HomeScreen: React.FC = () => {
@@ -110,18 +111,18 @@ const HomeScreen: React.FC = () => {
     show: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.05,
+        staggerChildren: 0.03,
       },
     },
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, scale: 0.8, y: 20 },
-    show: { opacity: 1, scale: 1, y: 0 },
+    hidden: { opacity: 0, scale: 0.8 },
+    show: { opacity: 1, scale: 1 },
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted to-background p-6 pt-12">
+    <div className="min-h-screen bg-background p-5 pt-8">
       <input
         ref={fileInputRef}
         type="file"
@@ -130,23 +131,19 @@ const HomeScreen: React.FC = () => {
         onChange={handleIconUpload}
       />
 
-      {/* Status bar placeholder */}
-      <div className="flex justify-between items-center mb-8 px-2">
-        <span className="text-sm font-medium text-muted-foreground">
+      {/* Status bar */}
+      <div className="flex justify-between items-center mb-6 px-1">
+        <span className="text-lg font-semibold text-foreground/80">
           {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
         </span>
-        <div className="flex items-center gap-1">
-          <div className="w-4 h-2 bg-muted-foreground/50 rounded-sm" />
-          <div className="w-6 h-3 bg-candy-mint rounded-sm" />
-        </div>
       </div>
 
-      {/* App grid */}
+      {/* App grid - 4 columns with smaller icons */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-4 gap-6"
+        className="grid grid-cols-4 gap-5"
       >
         {defaultApps.map((app) => (
           <motion.button
@@ -158,79 +155,39 @@ const HomeScreen: React.FC = () => {
               e.preventDefault();
               handleLongPress(app.id);
             }}
-            className="flex flex-col items-center gap-2 group"
+            className="flex flex-col items-center gap-1.5"
           >
             {appIcons[app.id] ? (
-              <div className="w-14 h-14 rounded-2xl shadow-soft transition-all duration-300 overflow-hidden">
+              <div className="w-[52px] h-[52px] rounded-[16px] shadow-soft overflow-hidden">
                 <img 
                   src={appIcons[app.id]} 
                   alt={app.name}
+                  loading="eager"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
               </div>
             ) : (
-              <div className={`app-icon bg-gradient-to-br ${app.color}`}>
-                <app.icon className="w-7 h-7 text-white" />
+              <div className={`app-icon ${app.bgColor}`}>
+                <app.icon className="w-6 h-6 text-white" strokeWidth={1.8} />
               </div>
             )}
-            <span className="text-xs font-medium text-foreground/80">{app.name}</span>
-            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-              右键换图标
-            </span>
+            <span className="text-xs font-medium text-foreground/70">{app.name}</span>
           </motion.button>
         ))}
       </motion.div>
 
-      {/* Dock */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm">
-        <div className="glass rounded-3xl px-6 py-4 flex justify-around items-center shadow-card">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate('/friends')}
-            className="flex flex-col items-center gap-1"
-          >
-            {appIcons['friends'] ? (
-              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
-                <img src={appIcons['friends']} alt="好友" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-orange to-candy-pink flex items-center justify-center shadow-soft">
-                <Users className="w-6 h-6 text-white" />
-              </div>
-            )}
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate('/album')}
-            className="flex flex-col items-center gap-1"
-          >
-            {appIcons['album'] ? (
-              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
-                <img src={appIcons['album']} alt="相册" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-blue to-candy-mint flex items-center justify-center shadow-soft">
-                <Image className="w-6 h-6 text-white" />
-              </div>
-            )}
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate('/music')}
-            className="flex flex-col items-center gap-1"
-          >
-            {appIcons['music'] ? (
-              <div className="w-12 h-12 rounded-2xl shadow-soft overflow-hidden">
-                <img src={appIcons['music']} alt="音乐" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-candy-purple to-candy-pink flex items-center justify-center shadow-soft">
-                <Music className="w-6 h-6 text-white" />
-              </div>
-            )}
-          </motion.button>
+      {/* Bottom lock indicator */}
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2">
+        <div className="w-8 h-8 rounded-full bg-foreground/10 flex items-center justify-center">
+          <div className="w-4 h-5 border-2 border-foreground/30 rounded-sm relative">
+            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-2 h-2 border-2 border-foreground/30 rounded-full" />
+          </div>
         </div>
       </div>
+
+      {/* Home indicator */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-28 h-1 bg-foreground/15 rounded-full" />
     </div>
   );
 };
