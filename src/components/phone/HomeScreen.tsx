@@ -27,7 +27,6 @@ interface AppConfig {
   route: string;
 }
 
-// Macaron color palette matching the reference image
 const defaultApps: AppConfig[] = [
   { id: 'album', name: '相册', icon: Image, bgColor: 'bg-[#F06292]', route: '/album' },
   { id: 'camera', name: '相机', icon: Camera, bgColor: 'bg-[#42A5F5]', route: '/camera' },
@@ -47,6 +46,7 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const [appIcons, setAppIcons] = useState<Record<string, string>>({});
   const [editingApp, setEditingApp] = useState<string | null>(null);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,30 +56,49 @@ const HomeScreen: React.FC = () => {
   }, [user]);
 
   const fetchAppIcons = async () => {
-    const { data } = await supabase
-      .from('customization')
-      .select('app_icons')
-      .eq('user_id', user!.id)
-      .single();
-    
-    if (data?.app_icons) {
-      setAppIcons(data.app_icons as Record<string, string>);
+    try {
+      const { data, error } = await supabase
+        .from('customization')
+        .select('app_icons')
+        .eq('user_id', user!.id)
+        .single();
+      
+      if (error) {
+        console.error('Fetch icons error:', error);
+        return;
+      }
+      
+      if (data?.app_icons && typeof data.app_icons === 'object') {
+        setAppIcons(data.app_icons as Record<string, string>);
+      }
+    } catch (err) {
+      console.error('Fetch icons error:', err);
     }
   };
 
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !editingApp) return;
+    if (!file || !user || !editingApp) {
+      setEditingApp(null);
+      return;
+    }
 
     try {
+      toast.loading('正在上传图标...');
+      
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/icons/${editingApp}.${fileExt}`;
+      const fileName = `${user.id}/icons/${editingApp}-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
         .upload(fileName, file, { upsert: true });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast.dismiss();
+        toast.error('上传失败: ' + uploadError.message);
+        return;
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from('backgrounds')
@@ -87,32 +106,59 @@ const HomeScreen: React.FC = () => {
 
       const newIcons = { ...appIcons, [editingApp]: publicUrl };
       
-      await supabase
+      const { error: updateError } = await supabase
         .from('customization')
         .update({ app_icons: newIcons })
         .eq('user_id', user.id);
 
+      if (updateError) {
+        console.error('Update error:', updateError);
+        toast.dismiss();
+        toast.error('保存失败');
+        return;
+      }
+
       setAppIcons(newIcons);
-      toast.success('图标已更新');
+      toast.dismiss();
+      toast.success('图标已更新！');
     } catch (error) {
-      toast.error('上传失败');
+      console.error('Icon upload error:', error);
+      toast.dismiss();
+      toast.error('上传失败，请重试');
     } finally {
       setEditingApp(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  const handleLongPress = (appId: string) => {
+  const handleTouchStart = (appId: string) => {
+    const timer = setTimeout(() => {
+      setEditingApp(appId);
+      fileInputRef.current?.click();
+    }, 600);
+    setLongPressTimer(timer);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, appId: string) => {
+    e.preventDefault();
     setEditingApp(appId);
-    fileInputRef.current?.click();
+    setTimeout(() => fileInputRef.current?.click(), 100);
   };
 
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.03,
-      },
+      transition: { staggerChildren: 0.03 },
     },
   };
 
@@ -138,7 +184,7 @@ const HomeScreen: React.FC = () => {
         </span>
       </div>
 
-      {/* App grid - 4 columns with smaller icons */}
+      {/* App grid */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -151,14 +197,14 @@ const HomeScreen: React.FC = () => {
             variants={itemVariants}
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate(app.route)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              handleLongPress(app.id);
-            }}
+            onTouchStart={() => handleTouchStart(app.id)}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            onContextMenu={(e) => handleContextMenu(e, app.id)}
             className="flex flex-col items-center gap-1.5"
           >
             {appIcons[app.id] ? (
-              <div className="w-[52px] h-[52px] rounded-[16px] shadow-soft overflow-hidden">
+              <div className="w-[52px] h-[52px] rounded-[16px] shadow-soft overflow-hidden ring-2 ring-white/50">
                 <img 
                   src={appIcons[app.id]} 
                   alt={app.name}
