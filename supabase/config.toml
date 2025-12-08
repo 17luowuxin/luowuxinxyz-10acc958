@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.script-murder]
 verify_jwt = false
+
+[functions.truth-dare]
+verify_jwt = false
