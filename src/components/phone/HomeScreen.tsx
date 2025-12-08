@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +17,7 @@ import {
   Gamepad2,
   Users,
   Lock,
-  Plus,
+  X,
   LucideIcon,
 } from 'lucide-react';
 
@@ -47,8 +47,10 @@ const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [appIcons, setAppIcons] = useState<Record<string, string>>({});
-  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedAppForUpload, setSelectedAppForUpload] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -79,8 +81,8 @@ const HomeScreen: React.FC = () => {
 
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !selectedApp) {
-      setSelectedApp(null);
+    if (!file || !user || !selectedAppForUpload) {
+      setSelectedAppForUpload(null);
       return;
     }
 
@@ -88,7 +90,7 @@ const HomeScreen: React.FC = () => {
       toast.loading('正在上传图标...');
       
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/icons/${selectedApp}-${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/icons/${selectedAppForUpload}-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
@@ -105,7 +107,7 @@ const HomeScreen: React.FC = () => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
-      const newIcons = { ...appIcons, [selectedApp]: publicUrl };
+      const newIcons = { ...appIcons, [selectedAppForUpload]: publicUrl };
       
       const { error: upsertError } = await supabase
         .from('customization')
@@ -126,31 +128,43 @@ const HomeScreen: React.FC = () => {
       toast.dismiss();
       toast.error('上传失败，请重试');
     } finally {
-      setSelectedApp(null);
+      setSelectedAppForUpload(null);
+      setEditMode(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
+  // Long press to enter edit mode (like iOS)
+  const handleTouchStart = (appId: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setEditMode(true);
+      toast.success('编辑模式：点击图标更换图片');
+    }, 600);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const handleIconClick = (appId: string, route: string) => {
-    if (selectedApp === appId) {
-      // Already selected, trigger file input
+    if (editMode) {
+      // In edit mode, click to change icon
+      setSelectedAppForUpload(appId);
       fileInputRef.current?.click();
-    } else if (selectedApp) {
-      // Another icon was selected, navigate to this one
-      setSelectedApp(null);
-      navigate(route);
     } else {
-      // No selection, just navigate
+      // Normal mode, navigate
       navigate(route);
     }
   };
 
-  const handleSelectIcon = (e: React.MouseEvent, appId: string) => {
-    e.stopPropagation();
-    setSelectedApp(appId);
-    fileInputRef.current?.click();
+  const exitEditMode = () => {
+    setEditMode(false);
+    setSelectedAppForUpload(null);
   };
 
   const containerVariants = {
@@ -183,12 +197,40 @@ const HomeScreen: React.FC = () => {
         </span>
       </div>
 
+      {/* Edit mode overlay */}
+      <AnimatePresence>
+        {editMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 z-10"
+            onClick={exitEditMode}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Exit edit mode button */}
+      <AnimatePresence>
+        {editMode && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={exitEditMode}
+            className="fixed top-12 right-4 z-20 w-8 h-8 bg-foreground/80 rounded-full flex items-center justify-center"
+          >
+            <X className="w-5 h-5 text-background" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* App grid */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-4 gap-5"
+        className="grid grid-cols-4 gap-5 relative z-10"
       >
         {defaultApps.map((app) => (
           <motion.div
@@ -198,7 +240,16 @@ const HomeScreen: React.FC = () => {
           >
             <motion.button
               whileTap={{ scale: 0.9 }}
+              animate={editMode ? { 
+                rotate: [0, -2, 2, -2, 0],
+                transition: { repeat: Infinity, duration: 0.3 }
+              } : {}}
               onClick={() => handleIconClick(app.id, app.route)}
+              onTouchStart={() => handleTouchStart(app.id)}
+              onTouchEnd={handleTouchEnd}
+              onMouseDown={() => handleTouchStart(app.id)}
+              onMouseUp={handleTouchEnd}
+              onMouseLeave={handleTouchEnd}
               className="relative"
             >
               {appIcons[app.id] ? (
@@ -216,13 +267,6 @@ const HomeScreen: React.FC = () => {
                   <app.icon className="w-6 h-6 text-white" strokeWidth={1.8} />
                 </div>
               )}
-              {/* Plus overlay button */}
-              <button
-                onClick={(e) => handleSelectIcon(e, app.id)}
-                className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center shadow-md border-2 border-background"
-              >
-                <Plus className="w-3 h-3 text-primary-foreground" />
-              </button>
             </motion.button>
             <span className="text-xs font-medium text-foreground/70">{app.name}</span>
           </motion.div>
