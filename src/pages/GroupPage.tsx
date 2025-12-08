@@ -90,7 +90,7 @@ const GroupPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="flex items-center justify-between mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
           <ChevronLeft className="w-6 h-6" />
         </Button>
         <h1 className="text-xl font-bold">群聊</h1>

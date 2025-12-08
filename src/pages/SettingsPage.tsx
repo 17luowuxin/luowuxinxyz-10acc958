@@ -149,7 +149,7 @@ const SettingsPage: React.FC = () => {
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/home')}
           className="rounded-full bg-white/60 backdrop-blur-sm shadow-sm"
         >
           <ChevronLeft className="w-5 h-5 text-gray-600" />

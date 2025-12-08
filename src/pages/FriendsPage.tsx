@@ -168,7 +168,7 @@ const FriendsPage: React.FC = () => {
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/home')}
           className="rounded-full"
         >
           <ChevronLeft className="w-6 h-6 text-gray-600" />

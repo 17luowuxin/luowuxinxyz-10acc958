@@ -17,6 +17,7 @@ import {
   Gamepad2,
   Users,
   Lock,
+  Plus,
   LucideIcon,
 } from 'lucide-react';
 
@@ -46,8 +47,7 @@ const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [appIcons, setAppIcons] = useState<Record<string, string>>({});
-  const [editingApp, setEditingApp] = useState<string | null>(null);
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,7 +58,6 @@ const HomeScreen: React.FC = () => {
 
   const initializeCustomization = async () => {
     try {
-      // First try to fetch existing customization
       const { data, error } = await supabase
         .from('customization')
         .select('app_icons')
@@ -66,7 +65,6 @@ const HomeScreen: React.FC = () => {
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // No record exists, create one
         await supabase.from('customization').insert({ user_id: user!.id, app_icons: {} });
         return;
       }
@@ -81,8 +79,8 @@ const HomeScreen: React.FC = () => {
 
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !editingApp) {
-      setEditingApp(null);
+    if (!file || !user || !selectedApp) {
+      setSelectedApp(null);
       return;
     }
 
@@ -90,7 +88,7 @@ const HomeScreen: React.FC = () => {
       toast.loading('正在上传图标...');
       
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/icons/${editingApp}-${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/icons/${selectedApp}-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
@@ -107,26 +105,17 @@ const HomeScreen: React.FC = () => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
-      const newIcons = { ...appIcons, [editingApp]: publicUrl };
+      const newIcons = { ...appIcons, [selectedApp]: publicUrl };
       
-      // First try update, if no rows affected then upsert
-      const { error: updateError, count } = await supabase
+      const { error: upsertError } = await supabase
         .from('customization')
-        .update({ app_icons: newIcons })
-        .eq('user_id', user.id);
-
-      if (updateError) {
-        // Try upsert instead
-        const { error: upsertError } = await supabase
-          .from('customization')
-          .upsert({ user_id: user.id, app_icons: newIcons }, { onConflict: 'user_id' });
-        
-        if (upsertError) {
-          console.error('Upsert error:', upsertError);
-          toast.dismiss();
-          toast.error('保存失败');
-          return;
-        }
+        .upsert({ user_id: user.id, app_icons: newIcons }, { onConflict: 'user_id' });
+      
+      if (upsertError) {
+        console.error('Upsert error:', upsertError);
+        toast.dismiss();
+        toast.error('保存失败');
+        return;
       }
 
       setAppIcons(newIcons);
@@ -137,32 +126,31 @@ const HomeScreen: React.FC = () => {
       toast.dismiss();
       toast.error('上传失败，请重试');
     } finally {
-      setEditingApp(null);
+      setSelectedApp(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
-  const handleTouchStart = (appId: string) => {
-    const timer = setTimeout(() => {
-      setEditingApp(appId);
+  const handleIconClick = (appId: string, route: string) => {
+    if (selectedApp === appId) {
+      // Already selected, trigger file input
       fileInputRef.current?.click();
-    }, 600);
-    setLongPressTimer(timer);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
+    } else if (selectedApp) {
+      // Another icon was selected, navigate to this one
+      setSelectedApp(null);
+      navigate(route);
+    } else {
+      // No selection, just navigate
+      navigate(route);
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, appId: string) => {
-    e.preventDefault();
-    setEditingApp(appId);
-    setTimeout(() => fileInputRef.current?.click(), 100);
+  const handleSelectIcon = (e: React.MouseEvent, appId: string) => {
+    e.stopPropagation();
+    setSelectedApp(appId);
+    fileInputRef.current?.click();
   };
 
   const containerVariants = {
@@ -203,34 +191,41 @@ const HomeScreen: React.FC = () => {
         className="grid grid-cols-4 gap-5"
       >
         {defaultApps.map((app) => (
-          <motion.button
+          <motion.div
             key={app.id}
             variants={itemVariants}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(app.route)}
-            onTouchStart={() => handleTouchStart(app.id)}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
-            onContextMenu={(e) => handleContextMenu(e, app.id)}
-            className="flex flex-col items-center gap-1.5"
+            className="flex flex-col items-center gap-1.5 relative"
           >
-            {appIcons[app.id] ? (
-              <div className="w-[52px] h-[52px] rounded-[16px] shadow-soft overflow-hidden ring-2 ring-white/50">
-                <img 
-                  src={appIcons[app.id]} 
-                  alt={app.name}
-                  loading="eager"
-                  decoding="async"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className={`app-icon ${app.bgColor}`}>
-                <app.icon className="w-6 h-6 text-white" strokeWidth={1.8} />
-              </div>
-            )}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleIconClick(app.id, app.route)}
+              className="relative"
+            >
+              {appIcons[app.id] ? (
+                <div className="w-[52px] h-[52px] rounded-[16px] shadow-soft overflow-hidden ring-2 ring-white/50">
+                  <img 
+                    src={appIcons[app.id]} 
+                    alt={app.name}
+                    loading="eager"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className={`app-icon ${app.bgColor}`}>
+                  <app.icon className="w-6 h-6 text-white" strokeWidth={1.8} />
+                </div>
+              )}
+              {/* Plus overlay button */}
+              <button
+                onClick={(e) => handleSelectIcon(e, app.id)}
+                className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center shadow-md border-2 border-background"
+              >
+                <Plus className="w-3 h-3 text-primary-foreground" />
+              </button>
+            </motion.button>
             <span className="text-xs font-medium text-foreground/70">{app.name}</span>
-          </motion.button>
+          </motion.div>
         ))}
       </motion.div>
 

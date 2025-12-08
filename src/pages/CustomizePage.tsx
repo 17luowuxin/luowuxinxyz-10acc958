@@ -109,7 +109,7 @@ const CustomizePage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
             <ChevronLeft className="w-6 h-6" />
           </Button>
           <h1 className="text-xl font-bold ml-2 text-primary">美化</h1>
