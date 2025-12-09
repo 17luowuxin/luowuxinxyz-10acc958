@@ -87,14 +87,11 @@ const SpacePage: React.FC = () => {
             .eq('moment_id', moment.id)
             .order('created_at');
           
-          // 判断是否是用户自己发的（character_id为空或特殊标记）
-          const isUserPost = !moment.character_id || moment.character_id === user?.id;
-          
           return {
             ...moment,
             character: moment.characters,
             comments: comments || [],
-            is_user_post: isUserPost
+            is_user_post: moment.is_user_post === true
           };
         })
       );
@@ -156,60 +153,68 @@ const SpacePage: React.FC = () => {
     if (!newPostContent.trim()) return;
     
     setPosting(true);
+    const postContent = newPostContent.trim();
+    
     try {
-      // 用户发说说，使用一个特殊的character_id（用户自己的id）
-      // 需要先检查是否有角色，如果有就用第一个角色的id（为了满足外键约束）
       if (characters.length === 0) {
         toast.error('请先创建至少一个AI角色');
         setPosting(false);
         return;
       }
 
+      // 使用第一个角色的ID满足外键约束，但标记为用户发的帖子
       const { data: momentData, error } = await supabase.from('moments').insert({
         user_id: user?.id,
-        character_id: user?.id, // 用用户ID作为特殊标记
-        content: newPostContent.trim()
-      }).select().single();
+        character_id: characters[0].id,
+        content: postContent,
+        is_user_post: true
+      } as any).select().single();
 
       if (error) throw error;
 
       toast.success('发布成功!');
       setNewPostContent('');
       setPostDialogOpen(false);
+      
+      // 立即刷新列表显示用户的帖子
+      fetchAllMoments();
 
-      // AI角色回复用户的说说
+      // AI角色回复用户的说说（后台异步执行，不阻塞UI）
       const numReplies = Math.min(Math.floor(Math.random() * 3) + 1, characters.length);
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
       const replyChars = shuffled.slice(0, numReplies);
 
-      for (const char of replyChars) {
-        try {
-          const { data: replyData } = await supabase.functions.invoke('generate-moment', {
-            body: { 
-              character: char, 
-              type: 'reply',
-              userPost: newPostContent.trim(),
-              userApiKey: apiConfig.apiKey,
-              provider: apiConfig.provider,
-              customBaseUrl: apiConfig.customBaseUrl,
-              customModel: apiConfig.customModel
-            }
-          });
-
-          if (replyData?.content) {
-            await supabase.from('comments').insert({
-              moment_id: momentData.id,
-              user_id: user?.id,
-              content: replyData.content,
-              is_character_reply: true
+      // 异步生成回复
+      (async () => {
+        for (const char of replyChars) {
+          try {
+            const { data: replyData } = await supabase.functions.invoke('generate-moment', {
+              body: { 
+                character: char, 
+                type: 'reply',
+                userPost: postContent,
+                userApiKey: apiConfig.apiKey,
+                provider: apiConfig.provider,
+                customBaseUrl: apiConfig.customBaseUrl,
+                customModel: apiConfig.customModel
+              }
             });
-          }
-        } catch (err) {
-          console.error('AI reply error:', err);
-        }
-      }
 
-      fetchAllMoments();
+            if (replyData?.content) {
+              await supabase.from('comments').insert({
+                moment_id: momentData.id,
+                user_id: user?.id,
+                content: replyData.content,
+                is_character_reply: true
+              });
+              // 每次有新回复就刷新列表
+              fetchAllMoments();
+            }
+          } catch (err) {
+            console.error('AI reply error:', err);
+          }
+        }
+      })();
     } catch (err) {
       console.error('Post error:', err);
       toast.error('发布失败');
