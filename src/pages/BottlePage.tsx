@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Waves, Sparkles, RefreshCw, Settings } from 'lucide-react';
+import { ChevronLeft, Send, Waves, Sparkles, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
@@ -26,7 +27,6 @@ const BottlePage: React.FC = () => {
   const [bottles, setBottles] = useState<BottleMessage[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [currentReply, setCurrentReply] = useState<{ content: string; character: string } | null>(null);
-  const [animating, setAnimating] = useState(false);
 
   useEffect(() => {
     if (user) fetchBottles();
@@ -51,14 +51,22 @@ const BottlePage: React.FC = () => {
     }
   };
 
+  const deleteBottle = async (bottleId: string) => {
+    try {
+      await supabase.from('bottles').delete().eq('id', bottleId);
+      setBottles(prev => prev.filter(b => b.id !== bottleId));
+      toast.success('已删除');
+    } catch (err) {
+      toast.error('删除失败');
+    }
+  };
+
   const throwBottle = async () => {
     if (!input.trim() || sending) return;
     
     setSending(true);
-    setAnimating(true);
     
     try {
-      // 先保存漂流瓶
       const { data: bottleData, error: insertError } = await supabase
         .from('bottles')
         .insert({ 
@@ -70,12 +78,10 @@ const BottlePage: React.FC = () => {
 
       if (insertError) throw insertError;
 
-      toast.success('漂流瓶已扔出，等待神秘回复...');
+      toast.success('漂流瓶已扔出，等待回复...');
       setInput('');
       setShowCompose(false);
 
-      // 调用AI生成回复（传入userId以获取用户的角色）
-      console.log('Sending bottle with apiConfig:', apiConfig, 'userId:', user?.id);
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bottle-reply`, {
         method: 'POST',
         headers: {
@@ -101,7 +107,6 @@ const BottlePage: React.FC = () => {
 
       const { reply, character } = await response.json();
 
-      // 更新漂流瓶回复
       await supabase
         .from('bottles')
         .update({ 
@@ -112,18 +117,14 @@ const BottlePage: React.FC = () => {
         } as any)
         .eq('id', bottleData.id);
 
-      // 显示回复动画
       setCurrentReply({ content: reply, character });
-      
-      // 刷新列表
       fetchBottles();
       
     } catch (err: any) {
       console.error('Throw bottle error:', err);
-      toast.error(err.message || '发送失败，请重试');
+      toast.error(err.message || '发送失败');
     } finally {
       setSending(false);
-      setTimeout(() => setAnimating(false), 500);
     }
   };
 
@@ -142,65 +143,62 @@ const BottlePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-cyan-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-b from-sky-100 via-cyan-50 to-blue-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b">
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
-            <ChevronLeft className="w-6 h-6" />
-          </Button>
-          <h1 className="text-xl font-bold ml-2 bg-gradient-to-r from-cyan-500 to-blue-500 bg-clip-text text-transparent">
-            漂流瓶
-          </h1>
-        </div>
+      <header className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-cyan-100 dark:border-slate-700">
         <div className="flex items-center gap-2">
-          {apiConfig?.apiKey && (
-            <span className="text-xs bg-cyan-100 dark:bg-cyan-900 text-cyan-600 dark:text-cyan-300 px-2 py-1 rounded-full">
-              自定义API
-            </span>
-          )}
-          <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
-            <Settings className="w-5 h-5" />
+          <Button variant="ghost" size="icon" onClick={() => navigate('/home')} className="w-8 h-8">
+            <ChevronLeft className="w-5 h-5" />
           </Button>
+          <div className="flex items-center gap-1.5">
+            <Waves className="w-5 h-5 text-cyan-500" />
+            <h1 className="font-bold text-lg bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+              漂流瓶
+            </h1>
+          </div>
         </div>
-      </div>
-
-      {/* Ocean Animation Background */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20">
-          <Waves className="w-full h-32 text-cyan-400 animate-pulse" />
-        </div>
-      </div>
+        {apiConfig?.apiKey && (
+          <span className="text-[10px] bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded-full">
+            自定义API
+          </span>
+        )}
+      </header>
 
       {/* Main Content */}
-      <div className="p-4 space-y-4 pb-32">
+      <div className="p-3 space-y-3 pb-6">
         {/* Reply Modal */}
         <AnimatePresence>
           {currentReply && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.8, y: 50 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.8, y: -50 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
               onClick={() => setCurrentReply(null)}
             >
               <motion.div 
-                className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl"
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-white dark:bg-slate-800 rounded-2xl p-4 max-w-[280px] w-full shadow-xl"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="text-center mb-4">
-                  <Sparkles className="w-10 h-10 mx-auto text-yellow-400 mb-2" />
-                  <h3 className="font-bold text-lg text-foreground">收到神秘回复！</h3>
-                  <p className="text-sm text-cyan-500">来自 {currentReply.character}</p>
+                <div className="text-center mb-3">
+                  <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-gradient-to-br from-yellow-200 to-orange-200 dark:from-yellow-600 dark:to-orange-600 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-yellow-600 dark:text-yellow-200" />
+                  </div>
+                  <h3 className="font-bold text-foreground">收到回复!</h3>
+                  <p className="text-xs text-cyan-500">来自 {currentReply.character}</p>
                 </div>
-                <div className="bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-slate-700 dark:to-slate-600 rounded-2xl p-4 mb-4">
+                <div className="bg-gradient-to-br from-cyan-50 to-sky-50 dark:from-slate-700 dark:to-slate-600 rounded-xl p-3 mb-3 text-sm">
                   <p className="text-foreground leading-relaxed">{currentReply.content}</p>
                 </div>
                 <Button 
                   onClick={() => setCurrentReply(null)}
-                  className="w-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
+                  size="sm"
+                  className="w-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm h-9"
                 >
-                  收下回复
+                  收下
                 </Button>
               </motion.div>
             </motion.div>
@@ -208,106 +206,142 @@ const BottlePage: React.FC = () => {
         </AnimatePresence>
 
         {/* Compose Section */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {showCompose ? (
             <motion.div
+              key="compose"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-lg border border-cyan-100 dark:border-slate-700"
+              className="bg-white dark:bg-slate-800 rounded-2xl p-3 shadow-sm border border-cyan-100 dark:border-slate-700"
             >
-              <h3 className="font-bold mb-3 flex items-center gap-2">
-                <Send className="w-5 h-5 text-cyan-500" />
-                写一个漂流瓶
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Send className="w-4 h-4 text-cyan-500" />
+                  写漂流瓶
+                </div>
+                <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setShowCompose(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="写下你想说的话，扔进大海吧..."
-                className="min-h-[120px] rounded-2xl border-cyan-200 dark:border-slate-600 resize-none mb-3"
+                placeholder="写下你想说的话..."
+                className="min-h-[80px] text-sm rounded-xl border-cyan-200 dark:border-slate-600 resize-none mb-2"
                 maxLength={500}
               />
               <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">{input.length}/500</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setShowCompose(false)} className="rounded-full">
-                    取消
-                  </Button>
-                  <Button 
-                    onClick={throwBottle}
-                    disabled={!input.trim() || sending}
-                    className="rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
-                  >
-                    {sending ? (
-                      <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Waves className="w-4 h-4 mr-2" />
-                    )}
-                    {sending ? '扔出中...' : '扔出去'}
-                  </Button>
-                </div>
+                <span className="text-[10px] text-muted-foreground">{input.length}/500</span>
+                <Button 
+                  onClick={throwBottle}
+                  disabled={!input.trim() || sending}
+                  size="sm"
+                  className="rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white h-8 px-4 text-sm"
+                >
+                  {sending ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <Waves className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  {sending ? '扔出中' : '扔出去'}
+                </Button>
               </div>
             </motion.div>
           ) : (
             <motion.button
+              key="trigger"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               onClick={() => setShowCompose(true)}
-              className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white rounded-3xl p-5 shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-shadow"
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-2xl p-3 shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              <Waves className="w-6 h-6" />
-              <span className="font-bold text-lg">扔一个漂流瓶</span>
+              <Waves className="w-5 h-5" />
+              <span className="font-medium">扔一个漂流瓶</span>
             </motion.button>
           )}
         </AnimatePresence>
 
         {/* Bottles History */}
-        <div className="space-y-3">
-          <h3 className="font-bold text-foreground/80 flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            我的漂流瓶
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground/70 flex items-center gap-1.5 px-1">
+            <Sparkles className="w-3.5 h-3.5" />
+            我的漂流瓶 ({bottles.length})
           </h3>
           
           {bottles.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Waves className="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p>还没有漂流瓶</p>
-              <p className="text-sm">扔一个出去吧~</p>
+            <div className="text-center py-8 text-muted-foreground">
+              <Waves className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">还没有漂流瓶</p>
+              <p className="text-xs">扔一个出去吧~</p>
             </div>
           ) : (
-            bottles.map((bottle, index) => (
-              <motion.div
-                key={bottle.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-md border border-cyan-50 dark:border-slate-700"
-              >
-                {/* My message */}
-                <div className="mb-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-muted-foreground">我扔出的</span>
-                    <span className="text-xs text-muted-foreground">{formatTime(bottle.created_at)}</span>
-                  </div>
-                  <p className="text-foreground bg-cyan-50 dark:bg-slate-700 rounded-xl p-3">
-                    {bottle.content}
-                  </p>
-                </div>
-                
-                {/* Reply */}
-                {bottle.reply && (
-                  <div className="border-t border-cyan-100 dark:border-slate-600 pt-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Sparkles className="w-3 h-3 text-yellow-400" />
-                      <span className="text-xs text-cyan-500 font-medium">{bottle.character || '神秘人'}</span>
+            <div className="space-y-2">
+              {bottles.map((bottle, index) => (
+                <motion.div
+                  key={bottle.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm border border-cyan-50 dark:border-slate-700 relative group"
+                >
+                  {/* Delete Button */}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-50 dark:bg-red-900/30 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 dark:hover:bg-red-900/50">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="max-w-[280px] rounded-2xl">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-base">删除漂流瓶？</AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
+                          将永久删除这个漂流瓶及其回复
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="gap-2">
+                        <AlertDialogCancel className="h-8 text-sm rounded-full">取消</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={() => deleteBottle(bottle.id)}
+                          className="h-8 text-sm rounded-full bg-red-500 hover:bg-red-600"
+                        >
+                          删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  {/* My message */}
+                  <div className="mb-2">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] text-muted-foreground">我扔出的</span>
+                      <span className="text-[10px] text-muted-foreground">{formatTime(bottle.created_at)}</span>
                     </div>
-                    <p className="text-foreground bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-slate-700 dark:to-slate-600 rounded-xl p-3">
-                      {bottle.reply}
+                    <p className="text-sm text-foreground bg-cyan-50/80 dark:bg-slate-700/50 rounded-lg p-2.5 leading-relaxed">
+                      {bottle.content}
                     </p>
                   </div>
-                )}
-              </motion.div>
-            ))
+                  
+                  {/* Reply */}
+                  {bottle.reply ? (
+                    <div className="border-t border-cyan-100/50 dark:border-slate-600/50 pt-2">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Sparkles className="w-2.5 h-2.5 text-yellow-500" />
+                        <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-medium">{bottle.character || '神秘人'}</span>
+                      </div>
+                      <p className="text-sm text-foreground bg-gradient-to-br from-amber-50/80 to-orange-50/80 dark:from-slate-700/50 dark:to-slate-600/50 rounded-lg p-2.5 leading-relaxed">
+                        {bottle.reply}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pt-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      等待回复中...
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
           )}
         </div>
       </div>
