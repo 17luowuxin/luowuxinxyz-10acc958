@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 import { SCRIPTS, Script, ScriptRole } from '@/data/scripts';
-import GameBGM from '@/components/GameBGM';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,12 +62,23 @@ const ScriptMurderPage: React.FC = () => {
   const [playerAction, setPlayerAction] = useState<'intro' | 'discuss' | 'vote' | 'reveal' | null>(null);
   const [showVoteDialog, setShowVoteDialog] = useState(false);
   const [selectedRole, setSelectedRole] = useState<ScriptRole | null>(null);
+  const [userProfile, setUserProfile] = useState<{ avatar_url: string | null } | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchCharacters();
+      fetchUserProfile();
     }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('user_id', user!.id)
+      .maybeSingle();
+    if (data) setUserProfile(data);
+  };
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -130,7 +140,7 @@ const ScriptMurderPage: React.FC = () => {
           id: 'player',
           name: '我',
           persona: '玩家',
-          avatar_url: null,
+          avatar_url: userProfile?.avatar_url || null,
         },
         role: chosenRole,
         isPlayer: true,
@@ -926,9 +936,6 @@ const ScriptMurderPage: React.FC = () => {
 
       {/* Vote Dialog */}
       {renderVoteDialog()}
-
-      {/* Background Music */}
-      <GameBGM gameType="script-murder" isPlaying={gamePhase !== 'select' && gamePhase !== 'assign'} />
     </div>
   );
 };

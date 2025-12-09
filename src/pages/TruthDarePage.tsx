@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
-import GameBGM from '@/components/GameBGM';
+
 
 interface Character {
   id: string;
@@ -425,9 +425,6 @@ const TruthDarePage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Background Music */}
-      <GameBGM gameType="truth-dare" isPlaying={gamePhase !== 'setup'} />
     </div>
   );
 };

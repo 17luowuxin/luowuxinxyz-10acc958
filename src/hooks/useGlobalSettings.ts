@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -12,27 +12,50 @@ const fontFamilyMap: Record<string, string> = {
   'longcang': '"Long Cang", cursive',
 };
 
+const applyFont = (fontId: string) => {
+  const fontFamily = fontFamilyMap[fontId] || fontFamilyMap['default'];
+  document.documentElement.style.fontFamily = fontFamily;
+  document.body.style.fontFamily = fontFamily;
+  
+  // Apply to all elements using style tag
+  const style = document.createElement('style');
+  style.id = 'global-font-style';
+  style.textContent = `* { font-family: ${fontFamily} !important; }`;
+  
+  // Remove old style if exists
+  const oldStyle = document.getElementById('global-font-style');
+  if (oldStyle) oldStyle.remove();
+  
+  document.head.appendChild(style);
+  
+  // Save to localStorage for persistence
+  localStorage.setItem('selectedFont', fontId);
+};
+
 export const useGlobalSettings = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Apply saved font from localStorage on mount (before user loads)
   useEffect(() => {
-    if (user) {
-      loadSettings();
-    } else {
-      // Apply default font when not logged in
-      document.documentElement.style.fontFamily = fontFamilyMap['default'];
-      setLoading(false);
+    const savedFont = localStorage.getItem('selectedFont');
+    if (savedFont) {
+      applyFont(savedFont);
     }
-  }, [user]);
+  }, []);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       const { data } = await supabase
         .from('customization')
         .select('*')
-        .eq('user_id', user!.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (data) {
@@ -40,20 +63,7 @@ export const useGlobalSettings = () => {
         
         // Apply font globally
         const fontId = (data as any).font_family || 'default';
-        const fontFamily = fontFamilyMap[fontId] || fontFamilyMap['default'];
-        document.documentElement.style.fontFamily = fontFamily;
-        document.body.style.fontFamily = fontFamily;
-        
-        // Apply to all elements using style tag
-        const style = document.createElement('style');
-        style.id = 'global-font-style';
-        style.textContent = `* { font-family: ${fontFamily} !important; }`;
-        
-        // Remove old style if exists
-        const oldStyle = document.getElementById('global-font-style');
-        if (oldStyle) oldStyle.remove();
-        
-        document.head.appendChild(style);
+        applyFont(fontId);
         
         // Apply theme
         if (data.theme) {
@@ -66,7 +76,11 @@ export const useGlobalSettings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   return { settings, loading, reloadSettings: loadSettings };
 };
