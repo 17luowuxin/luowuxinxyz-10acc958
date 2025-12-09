@@ -85,29 +85,39 @@ serve(async (req) => {
     const responses: { characterId: string; characterName: string; content: string }[] = [];
 
     for (const character of responders) {
-      const systemPrompt = `你是群聊中的一个角色，名叫"${character.name}"。
+      const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
+      
+      const systemPrompt = `你正在模拟微信群聊中的角色"${character.name}"。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
-群聊中还有其他角色：${characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、')}
-用户"${userName}"也在群里。${userPersona ? `关于用户: ${userPersona}` : ''}
+群聊成员: ${userName}(用户)${otherCharacters ? `、${otherCharacters}` : ''}
 
-请用符合你角色性格的方式回复用户的消息。回复要简洁自然，像朋友聊天一样。
-注意：你只需要扮演${character.name}这一个角色，不要扮演其他角色。`;
+【重要规则】
+1. 你只扮演${character.name}，直接用第一人称回复，不要加角色名前缀
+2. 回复要简短自然，像真实微信群聊一样，一般1-2句话
+3. 可以用括号表达动作或情绪，如(笑)(无语)(拍桌子)，但不要编号
+4. 不要回复其他角色的话，只回复用户"${userName}"
+5. 根据人设保持角色性格特点
+${userPersona ? `6. 关于用户${userName}: ${userPersona}` : ''}
+
+错误示例: "角色名: 1（表情）内容" 
+正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"`;
 
       const requestBody = provider === 'anthropic' && userApiKey ? {
         model,
-        max_tokens: 1024,
+        max_tokens: 256,
         messages: [
           ...messages.slice(-10),
-          { role: "user", content: `${userName}说: ${userMessage}` }
+          { role: "user", content: `${userName}: ${userMessage}` }
         ],
         system: systemPrompt,
       } : {
         model,
+        max_tokens: 256,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages.slice(-10),
-          { role: "user", content: `${userName}说: ${userMessage}` }
+          { role: "user", content: `${userName}: ${userMessage}` }
         ],
       };
 
@@ -132,7 +142,13 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
         content = data.choices?.[0]?.message?.content || '';
       }
       
+      // 清理回复内容，移除可能的角色名前缀和编号
       if (content) {
+        // 移除开头的角色名:、数字编号等
+        content = content.replace(/^[^:：]*[:：]\s*/g, '');
+        content = content.replace(/^\d+[\.\s、]*/, '');
+        content = content.trim();
+        
         responses.push({
           characterId: character.id,
           characterName: character.name,
