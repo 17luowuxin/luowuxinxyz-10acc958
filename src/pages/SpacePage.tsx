@@ -204,7 +204,7 @@ const SpacePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background/80 backdrop-blur-sm">
       {/* Header */}
       <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card/80 backdrop-blur-lg border-b">
         <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>

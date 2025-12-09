@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 const BottlePage: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen bg-background/80 backdrop-blur-sm p-4">
       <div className="flex items-center mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate('/home')}><ChevronLeft className="w-6 h-6" /></Button>
         <h1 className="text-xl font-bold ml-2">漂流瓶</h1>

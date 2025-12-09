@@ -154,7 +154,7 @@ const FriendsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pink-50 via-white to-purple-50 p-4">
+    <div className="min-h-screen bg-background/80 backdrop-blur-sm p-4">
       <input
         ref={fileInputRef}
         type="file"

@@ -181,7 +181,7 @@ const HomeScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-5 pt-8">
+    <div className="min-h-screen bg-transparent p-5 pt-8">
       <input
         ref={fileInputRef}
         type="file"

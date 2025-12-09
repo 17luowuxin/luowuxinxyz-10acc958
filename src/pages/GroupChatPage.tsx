@@ -159,7 +159,7 @@ const GroupChatPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background/80 backdrop-blur-sm flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center p-4 border-b bg-card">
         <Button variant="ghost" size="icon" onClick={() => navigate('/group')}>
