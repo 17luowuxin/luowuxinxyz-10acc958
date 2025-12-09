@@ -94,12 +94,14 @@ const BottlePage: React.FC = () => {
 
       const { reply, character } = await response.json();
 
-      // 更新漂流瓶回复（使用类型断言绕过类型检查）
+      // 更新漂流瓶回复
       await supabase
         .from('bottles')
         .update({ 
           is_picked: true,
           picked_by: user?.id,
+          reply: reply,
+          character_name: character,
         } as any)
         .eq('id', bottleData.id);
 

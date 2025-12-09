@@ -64,27 +64,33 @@ export type Database = {
       }
       bottles: {
         Row: {
+          character_name: string | null
           content: string
           created_at: string
           id: string
           is_picked: boolean | null
           picked_by: string | null
+          reply: string | null
           user_id: string
         }
         Insert: {
+          character_name?: string | null
           content: string
           created_at?: string
           id?: string
           is_picked?: boolean | null
           picked_by?: string | null
+          reply?: string | null
           user_id: string
         }
         Update: {
+          character_name?: string | null
           content?: string
           created_at?: string
           id?: string
           is_picked?: boolean | null
           picked_by?: string | null
+          reply?: string | null
           user_id?: string
         }
         Relationships: []
