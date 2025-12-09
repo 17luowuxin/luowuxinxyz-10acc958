@@ -6,81 +6,40 @@ import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMusicPlayer } from '@/contexts/MusicContext';
 import { toast } from 'sonner';
-
-interface MusicTrack {
-  id: string;
-  title: string;
-  audio_url: string;
-  cover_url: string | null;
-  user_id: string;
-  created_at: string;
-}
-
-type LoopMode = 'none' | 'single' | 'all';
 
 const MusicPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [tracks, setTracks] = useState<MusicTrack[]>([]);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(-1);
-  const [playing, setPlaying] = useState(false);
-  const [loopMode, setLoopMode] = useState<LoopMode>('none');
+  const {
+    tracks,
+    currentTrack,
+    currentTrackIndex,
+    playing,
+    loopMode,
+    currentTime,
+    duration,
+    defaultCoverUrl,
+    setDefaultCoverUrl,
+    playTrack,
+    togglePlay,
+    prevTrack,
+    nextTrack,
+    cycleLoopMode,
+    seekTo,
+    fetchTracks,
+  } = useMusicPlayer();
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const [selectedTrackIdForCover, setSelectedTrackIdForCover] = useState<string | null>(null);
-  const [defaultCoverUrl, setDefaultCoverUrl] = useState<string | null>(null);
   const [showTrackList, setShowTrackList] = useState(false);
-
-  const currentTrack = currentTrackIndex >= 0 ? tracks[currentTrackIndex] : null;
-
-  useEffect(() => {
-    if (user) fetchTracks();
-  }, [user]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const updateTime = () => {
-      if (!isDragging) {
-        setCurrentTime(audio.currentTime);
-      }
-    };
-
-    const updateDuration = () => {
-      setDuration(audio.duration || 0);
-    };
-
-    audio.addEventListener('timeupdate', updateTime);
-    audio.addEventListener('loadedmetadata', updateDuration);
-    audio.addEventListener('durationchange', updateDuration);
-
-    return () => {
-      audio.removeEventListener('timeupdate', updateTime);
-      audio.removeEventListener('loadedmetadata', updateDuration);
-      audio.removeEventListener('durationchange', updateDuration);
-    };
-  }, [isDragging, currentTrack]);
-
-  const fetchTracks = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('music')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    if (data) setTracks(data);
-    if (error) console.error(error);
-  };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,7 +63,7 @@ const MusicPage: React.FC = () => {
           title, 
           audio_url: urlData.publicUrl, 
           user_id: user.id,
-          cover_url: defaultCoverUrl // 使用默认封面
+          cover_url: defaultCoverUrl
         });
       
       if (insertError) throw insertError;
@@ -135,7 +94,6 @@ const MusicPage: React.FC = () => {
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
       
       if (trackId) {
-        // 更新指定歌曲的封面
         await supabase
           .from('music')
           .update({ cover_url: urlData.publicUrl })
@@ -143,7 +101,6 @@ const MusicPage: React.FC = () => {
         toast.success('封面已更新');
         fetchTracks();
       } else {
-        // 没有选中歌曲时，设置为默认封面
         setDefaultCoverUrl(urlData.publicUrl);
         toast.success('封面已设置，上传歌曲时将自动使用此封面');
       }
@@ -165,65 +122,16 @@ const MusicPage: React.FC = () => {
 
   const handleDelete = async (trackId: string) => {
     await supabase.from('music').delete().eq('id', trackId);
-    if (currentTrack?.id === trackId) {
-      setCurrentTrackIndex(-1);
-      setPlaying(false);
-    }
     fetchTracks();
     toast.success('已删除');
   };
 
-  const playTrack = (index: number) => {
-    setCurrentTrackIndex(index);
-    setPlaying(true);
-    setCurrentTime(0);
-    setTimeout(() => audioRef.current?.play(), 100);
-  };
-
-  const togglePlay = () => {
-    if (!audioRef.current || !currentTrack) return;
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setPlaying(!playing);
-  };
-
-  const handleEnded = () => {
-    if (loopMode === 'single') {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play();
-      }
-    } else if (loopMode === 'all' && tracks.length > 0) {
-      const nextIndex = (currentTrackIndex + 1) % tracks.length;
-      playTrack(nextIndex);
-    } else if (currentTrackIndex < tracks.length - 1) {
-      playTrack(currentTrackIndex + 1);
-    } else {
-      setPlaying(false);
-    }
-  };
-
-  const prevTrack = () => {
-    if (tracks.length === 0) return;
-    const prevIndex = currentTrackIndex <= 0 ? tracks.length - 1 : currentTrackIndex - 1;
-    playTrack(prevIndex);
-  };
-
-  const nextTrack = () => {
-    if (tracks.length === 0) return;
-    const nextIndex = (currentTrackIndex + 1) % tracks.length;
-    playTrack(nextIndex);
-  };
-
-  const cycleLoopMode = () => {
-    const modes: LoopMode[] = ['none', 'single', 'all'];
-    const currentIndex = modes.indexOf(loopMode);
-    const newMode = modes[(currentIndex + 1) % modes.length];
-    setLoopMode(newMode);
+  const handleLoopMode = () => {
+    cycleLoopMode();
     const modeNames = { none: '顺序播放', single: '单曲循环', all: '列表循环' };
+    const modes = ['none', 'single', 'all'] as const;
+    const currentIdx = modes.indexOf(loopMode);
+    const newMode = modes[(currentIdx + 1) % modes.length];
     toast.success(modeNames[newMode]);
   };
 
@@ -235,28 +143,20 @@ const MusicPage: React.FC = () => {
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressRef.current || !audioRef.current || !duration) return;
+    if (!progressRef.current || !duration) return;
     const rect = progressRef.current.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
-    audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    seekTo(newTime);
   };
 
   const handleProgressDrag = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!progressRef.current || !audioRef.current || !duration) return;
+    if (!progressRef.current || !duration) return;
     const rect = progressRef.current.getBoundingClientRect();
     const touch = e.touches[0];
     const percent = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
     const newTime = percent * duration;
-    setCurrentTime(newTime);
-  };
-
-  const handleProgressDragEnd = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = currentTime;
-    }
-    setIsDragging(false);
+    seekTo(newTime);
   };
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -266,7 +166,6 @@ const MusicPage: React.FC = () => {
     setTimeout(() => coverInputRef.current?.click(), 0);
   };
 
-  // 获取当前显示的封面
   const displayCoverUrl = currentTrack?.cover_url || defaultCoverUrl;
 
   return (
@@ -279,7 +178,6 @@ const MusicPage: React.FC = () => {
           </Button>
           <h1 className="text-xl font-bold ml-2">音乐</h1>
         </div>
-        {/* Upload Button in Header */}
         <label className="cursor-pointer">
           <input
             ref={audioInputRef}
@@ -300,7 +198,6 @@ const MusicPage: React.FC = () => {
         </label>
       </div>
 
-      {/* Hidden cover input */}
       <input
         ref={coverInputRef}
         type="file"
@@ -309,22 +206,17 @@ const MusicPage: React.FC = () => {
         onChange={handleCoverUpload}
       />
 
-      {/* Main Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {/* Rotating Disc - 网易云/QQ音乐风格 */}
         <div className="flex flex-col items-center py-4">
           <div className="relative">
-            {/* 唱片背景光晕 */}
             <div className="absolute inset-0 w-40 h-40 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 blur-xl" />
             
-            {/* 旋转唱片 - 点击上传封面 (缩小尺寸) */}
             <motion.div
               animate={{ rotate: playing ? 360 : 0 }}
               transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
               className="relative w-40 h-40 rounded-full shadow-2xl overflow-hidden cursor-pointer group"
               onClick={() => triggerCoverUpload(currentTrack?.id || null)}
             >
-              {/* 封面图片铺满整个唱片 */}
               {displayCoverUrl ? (
                 <img 
                   src={displayCoverUrl} 
@@ -337,7 +229,6 @@ const MusicPage: React.FC = () => {
                 </div>
               )}
               
-              {/* 悬停上传提示 */}
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <div className="text-center text-white">
                   <Image className="w-6 h-6 mx-auto mb-1" />
@@ -345,57 +236,49 @@ const MusicPage: React.FC = () => {
                 </div>
               </div>
               
-              {/* 唱片纹路叠加层 */}
               <div className="absolute inset-0 rounded-full pointer-events-none">
                 <div className="absolute inset-0 rounded-full border-2 border-black/20" />
                 <div className="absolute inset-[15%] rounded-full border border-black/10" />
                 <div className="absolute inset-[30%] rounded-full border border-black/10" />
               </div>
               
-              {/* 中心小孔 */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-zinc-900 border-2 border-zinc-600 shadow-inner" />
             </motion.div>
           </div>
 
-          {/* Current Track Title */}
-          <p className="mt-6 text-lg font-bold text-foreground truncate max-w-[250px]">
+          <p className="mt-4 text-lg font-bold text-foreground truncate max-w-[250px]">
             {currentTrack?.title || '未选择歌曲'}
           </p>
           
-          {/* 进度条 */}
-          <div className="w-full max-w-xs mt-6 px-2">
+          <div className="w-full max-w-xs mt-4 px-2">
             <div 
               ref={progressRef}
               className="relative h-1.5 bg-muted rounded-full cursor-pointer group"
               onClick={handleProgressClick}
               onTouchStart={() => setIsDragging(true)}
               onTouchMove={handleProgressDrag}
-              onTouchEnd={handleProgressDragEnd}
+              onTouchEnd={() => setIsDragging(false)}
             >
-              {/* 进度 */}
               <div 
                 className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
-              {/* 拖动点 */}
               <div 
                 className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ left: `calc(${progress}% - 8px)` }}
               />
             </div>
-            {/* 时间显示 */}
             <div className="flex justify-between mt-2 text-xs text-muted-foreground">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-4 mt-6">
+          <div className="flex items-center gap-4 mt-4">
             <Button
               variant="ghost"
               size="icon"
-              onClick={cycleLoopMode}
+              onClick={handleLoopMode}
               className={loopMode !== 'none' ? 'text-primary' : 'text-muted-foreground'}
             >
               {loopMode === 'single' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
@@ -425,7 +308,6 @@ const MusicPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Track List - 可折叠 */}
         <div className="mt-4">
           <button
             onClick={() => setShowTrackList(!showTrackList)}
@@ -459,7 +341,6 @@ const MusicPage: React.FC = () => {
                         : 'bg-card/60 hover:bg-card/80'
                     }`}
                   >
-                    {/* Cover thumbnail */}
                     <div
                       className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer relative group"
                       style={{
@@ -478,7 +359,6 @@ const MusicPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Title */}
                     <div className="flex-1 min-w-0" onClick={() => playTrack(index)}>
                       {editingId === track.id ? (
                         <div className="flex items-center gap-2">
@@ -512,7 +392,6 @@ const MusicPage: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
                     {editingId !== track.id && (
                       <div className="flex items-center">
                         <Button
@@ -547,17 +426,6 @@ const MusicPage: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Hidden Audio Element */}
-      {currentTrack && (
-        <audio
-          ref={audioRef}
-          src={currentTrack.audio_url}
-          onEnded={handleEnded}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-        />
-      )}
     </div>
   );
 };
