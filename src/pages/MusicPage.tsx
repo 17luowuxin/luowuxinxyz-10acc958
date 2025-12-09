@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Music, Play, Pause, Upload, Repeat, Repeat1, SkipBack, SkipForward, Edit2, Image, Check, X, Trash2, Shuffle } from 'lucide-react';
+import { ChevronLeft, Music, Play, Pause, Upload, Repeat, Repeat1, SkipBack, SkipForward, Edit2, Image, Check, X, Trash2, Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
@@ -38,6 +38,7 @@ const MusicPage: React.FC = () => {
   const progressRef = useRef<HTMLDivElement>(null);
   const [selectedTrackIdForCover, setSelectedTrackIdForCover] = useState<string | null>(null);
   const [defaultCoverUrl, setDefaultCoverUrl] = useState<string | null>(null);
+  const [showTrackList, setShowTrackList] = useState(false);
 
   const currentTrack = currentTrackIndex >= 0 ? tracks[currentTrackIndex] : null;
 
@@ -314,13 +315,13 @@ const MusicPage: React.FC = () => {
         <div className="flex flex-col items-center py-4">
           <div className="relative">
             {/* 唱片背景光晕 */}
-            <div className="absolute inset-0 w-56 h-56 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 blur-xl" />
+            <div className="absolute inset-0 w-40 h-40 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 blur-xl" />
             
-            {/* 旋转唱片 - 点击上传封面 */}
+            {/* 旋转唱片 - 点击上传封面 (缩小尺寸) */}
             <motion.div
               animate={{ rotate: playing ? 360 : 0 }}
               transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
-              className="relative w-56 h-56 rounded-full shadow-2xl overflow-hidden cursor-pointer group"
+              className="relative w-40 h-40 rounded-full shadow-2xl overflow-hidden cursor-pointer group"
               onClick={() => triggerCoverUpload(currentTrack?.id || null)}
             >
               {/* 封面图片铺满整个唱片 */}
@@ -332,27 +333,27 @@ const MusicPage: React.FC = () => {
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <Music className="w-16 h-16 text-primary-foreground/70" />
+                  <Music className="w-12 h-12 text-primary-foreground/70" />
                 </div>
               )}
               
               {/* 悬停上传提示 */}
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <div className="text-center text-white">
-                  <Image className="w-8 h-8 mx-auto mb-2" />
-                  <span className="text-sm">点击上传封面</span>
+                  <Image className="w-6 h-6 mx-auto mb-1" />
+                  <span className="text-xs">点击上传封面</span>
                 </div>
               </div>
               
               {/* 唱片纹路叠加层 */}
               <div className="absolute inset-0 rounded-full pointer-events-none">
-                <div className="absolute inset-0 rounded-full border-4 border-black/20" />
+                <div className="absolute inset-0 rounded-full border-2 border-black/20" />
                 <div className="absolute inset-[15%] rounded-full border border-black/10" />
                 <div className="absolute inset-[30%] rounded-full border border-black/10" />
               </div>
               
               {/* 中心小孔 */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-zinc-900 border-2 border-zinc-600 shadow-inner" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-zinc-900 border-2 border-zinc-600 shadow-inner" />
             </motion.div>
           </div>
 
@@ -424,108 +425,125 @@ const MusicPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Track List */}
-        <div className="mt-6 space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground mb-3">歌曲列表 ({tracks.length})</h2>
-          {tracks.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <Music className="w-16 h-16 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">暂无歌曲</p>
-              <p className="text-xs mt-1">点击右上角上传音乐文件</p>
-            </div>
-          ) : (
-            tracks.map((track, index) => (
-              <div
-                key={track.id}
-                className={`flex items-center gap-3 p-3 rounded-2xl transition-all ${
-                  currentTrackIndex === index 
-                    ? 'bg-primary/20 border border-primary/30' 
-                    : 'bg-card/60 hover:bg-card/80'
-                }`}
-              >
-                {/* Cover thumbnail */}
-                <div
-                  className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer relative group"
-                  style={{
-                    background: track.cover_url 
-                      ? `url(${track.cover_url}) center/cover` 
-                      : 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))'
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    triggerCoverUpload(track.id);
-                  }}
-                >
-                  {!track.cover_url && <Music className="w-5 h-5 text-primary-foreground" />}
-                  <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <Image className="w-4 h-4" />
-                  </div>
+        {/* Track List - 可折叠 */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowTrackList(!showTrackList)}
+            className="w-full flex items-center justify-between p-3 bg-card/60 rounded-2xl mb-2"
+          >
+            <span className="text-sm font-semibold text-muted-foreground">
+              歌曲列表 ({tracks.length})
+            </span>
+            {showTrackList ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+          
+          {showTrackList && (
+            <div className="space-y-2">
+              {tracks.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Music className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">暂无歌曲</p>
+                  <p className="text-xs mt-1">点击右上角上传音乐</p>
                 </div>
-
-                {/* Title */}
-                <div className="flex-1 min-w-0" onClick={() => playTrack(index)}>
-                  {editingId === track.id ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="h-8 text-sm"
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateTitle(track.id)}
-                      />
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleUpdateTitle(track.id); }}>
-                        <Check className="w-4 h-4 text-green-500" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setEditingId(null); }}>
-                        <X className="w-4 h-4" />
-                      </Button>
+              ) : (
+                tracks.map((track, index) => (
+                  <div
+                    key={track.id}
+                    className={`flex items-center gap-3 p-3 rounded-2xl transition-all ${
+                      currentTrackIndex === index 
+                        ? 'bg-primary/20 border border-primary/30' 
+                        : 'bg-card/60 hover:bg-card/80'
+                    }`}
+                  >
+                    {/* Cover thumbnail */}
+                    <div
+                      className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer relative group"
+                      style={{
+                        background: track.cover_url 
+                          ? `url(${track.cover_url}) center/cover` 
+                          : 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))'
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerCoverUpload(track.id);
+                      }}
+                    >
+                      {!track.cover_url && <Music className="w-4 h-4 text-primary-foreground" />}
+                      <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Image className="w-3 h-3" />
+                      </div>
                     </div>
-                  ) : (
-                    <div className="cursor-pointer">
-                      <p className={`font-medium truncate ${currentTrackIndex === index ? 'text-primary' : 'text-foreground'}`}>
-                        {track.title}
-                      </p>
-                      {currentTrackIndex === index && playing && (
-                        <p className="text-xs text-primary/70 flex items-center gap-1">
-                          <span className="inline-block w-2 h-2 bg-primary rounded-full animate-pulse" />
-                          正在播放
-                        </p>
+
+                    {/* Title */}
+                    <div className="flex-1 min-w-0" onClick={() => playTrack(index)}>
+                      {editingId === track.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            className="h-7 text-sm"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.key === 'Enter' && handleUpdateTitle(track.id)}
+                          />
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleUpdateTitle(track.id); }}>
+                            <Check className="w-3 h-3 text-green-500" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setEditingId(null); }}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="cursor-pointer">
+                          <p className={`text-sm font-medium truncate ${currentTrackIndex === index ? 'text-primary' : 'text-foreground'}`}>
+                            {track.title}
+                          </p>
+                          {currentTrackIndex === index && playing && (
+                            <p className="text-xs text-primary/70 flex items-center gap-1">
+                              <span className="inline-block w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
+                              正在播放
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                {/* Actions */}
-                {editingId !== track.id && (
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingId(track.id);
-                        setEditTitle(track.title);
-                      }}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(track.id);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {/* Actions */}
+                    {editingId !== track.id && (
+                      <div className="flex items-center">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingId(track.id);
+                            setEditTitle(track.title);
+                          }}
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(track.id);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))
+                ))
+              )}
+            </div>
           )}
         </div>
       </div>
