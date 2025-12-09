@@ -211,6 +211,7 @@ export type Database = {
           theme: string | null
           updated_at: string
           user_id: string
+          video_background_url: string | null
         }
         Insert: {
           app_icons?: Json | null
@@ -227,6 +228,7 @@ export type Database = {
           theme?: string | null
           updated_at?: string
           user_id: string
+          video_background_url?: string | null
         }
         Update: {
           app_icons?: Json | null
@@ -243,6 +245,7 @@ export type Database = {
           theme?: string | null
           updated_at?: string
           user_id?: string
+          video_background_url?: string | null
         }
         Relationships: []
       }
