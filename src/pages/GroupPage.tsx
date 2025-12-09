@@ -160,6 +160,10 @@ const GroupPage: React.FC = () => {
         <div className="space-y-3">
           {groups.map((group, i) => {
             const members = group.group_members || [];
+            const memberChars = members.map((m: any) => m.characters).filter(Boolean);
+            const displayMembers = memberChars.slice(0, 4);
+            const gridSize = displayMembers.length <= 1 ? 1 : 2;
+            
             return (
               <motion.div
                 key={group.id}
@@ -170,19 +174,35 @@ const GroupPage: React.FC = () => {
                 onClick={() => navigate(`/group-chat/${group.id}`)}
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-candy-blue to-candy-purple flex items-center justify-center relative">
-                    <Users className="w-6 h-6 text-white" />
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-candy-pink text-white text-xs flex items-center justify-center font-bold">
-                      {members.length}
-                    </div>
+                  {/* 四宫格头像 */}
+                  <div 
+                    className="w-14 h-14 rounded-xl overflow-hidden bg-muted grid gap-0.5 flex-shrink-0"
+                    style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+                  >
+                    {displayMembers.map((member: any) => (
+                      <div key={member.id} className="w-full h-full bg-muted overflow-hidden">
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} className="w-full h-full object-cover" alt={member.name} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-candy-pink to-candy-purple">
+                            <User className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {displayMembers.length < 4 && displayMembers.length > 1 && 
+                      Array(4 - displayMembers.length).fill(0).map((_, idx) => (
+                        <div key={`empty-${idx}`} className="w-full h-full bg-muted/50" />
+                      ))
+                    }
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold">{group.name}</h3>
                     <p className="text-sm text-muted-foreground truncate">
-                      {members.map((m: any) => m.characters?.name).filter(Boolean).join('、') || '暂无成员'}
+                      {memberChars.map((m: any) => m.name).join('、') || '暂无成员'}
                     </p>
                   </div>
-                  <MessageCircle className="w-5 h-5 text-muted-foreground" />
+                  <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                 </div>
               </motion.div>
             );

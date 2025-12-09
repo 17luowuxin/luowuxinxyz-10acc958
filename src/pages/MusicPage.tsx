@@ -94,18 +94,18 @@ const MusicPage: React.FC = () => {
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
       
       if (trackId) {
-        console.log('Updating cover for track:', trackId, 'with URL:', urlData.publicUrl);
-        const { data: updateData, error: updateError } = await supabase
+        // RLS requires user_id match for update
+        const { error: updateError } = await supabase
           .from('music')
           .update({ cover_url: urlData.publicUrl })
           .eq('id', trackId)
-          .select();
+          .eq('user_id', user.id);
         
-        console.log('Update result:', updateData, updateError);
         if (updateError) throw updateError;
+        
+        // Refetch tracks to update UI
+        await fetchTracks();
         toast.success('封面已更新');
-        // Wait a bit then fetch to ensure DB is updated
-        setTimeout(() => fetchTracks(), 300);
       } else {
         setDefaultCoverUrl(urlData.publicUrl);
         toast.success('封面已设置，上传歌曲时将自动使用此封面');
