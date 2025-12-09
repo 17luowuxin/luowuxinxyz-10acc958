@@ -65,11 +65,13 @@ const SpacePage: React.FC = () => {
   }, [user]);
 
   const fetchUserProfile = async () => {
-    const { data } = await supabase
+    if (!user?.id) return;
+    const { data, error } = await supabase
       .from('profiles')
       .select('nickname, persona, avatar_url')
-      .eq('user_id', user?.id)
-      .maybeSingle();
+      .eq('user_id', user.id)
+      .single();
+    console.log('Fetched user profile:', data, error);
     if (data) setUserProfile(data);
   };
 
