@@ -301,38 +301,35 @@ const MusicPage: React.FC = () => {
             {/* 唱片背景光晕 */}
             <div className="absolute inset-0 w-56 h-56 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 blur-xl" />
             
-            {/* 外层黑胶唱片 */}
-            <div className="relative w-56 h-56 rounded-full bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-1 shadow-2xl">
-              {/* 唱片纹路 */}
-              <div className="absolute inset-2 rounded-full border border-zinc-700/50" />
-              <div className="absolute inset-4 rounded-full border border-zinc-700/30" />
-              <div className="absolute inset-6 rounded-full border border-zinc-700/20" />
-              
-              <motion.div
-                animate={{ rotate: playing ? 360 : 0 }}
-                transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
-                className="w-full h-full rounded-full flex items-center justify-center"
-              >
-                {/* 中心封面图 */}
-                <div 
-                  className="w-28 h-28 rounded-full overflow-hidden shadow-inner border-4 border-zinc-800"
-                  style={{
-                    background: currentTrack?.cover_url 
-                      ? `url(${currentTrack.cover_url}) center/cover` 
-                      : 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))'
-                  }}
-                >
-                  {!currentTrack?.cover_url && (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Music className="w-10 h-10 text-primary-foreground/70" />
-                    </div>
-                  )}
+            {/* 旋转唱片 */}
+            <motion.div
+              animate={{ rotate: playing ? 360 : 0 }}
+              transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
+              className="relative w-56 h-56 rounded-full shadow-2xl overflow-hidden"
+            >
+              {/* 封面图片铺满整个唱片 */}
+              {currentTrack?.cover_url ? (
+                <img 
+                  src={currentTrack.cover_url} 
+                  alt="封面"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                  <Music className="w-16 h-16 text-primary-foreground/70" />
                 </div>
-              </motion.div>
+              )}
+              
+              {/* 唱片纹路叠加层 */}
+              <div className="absolute inset-0 rounded-full pointer-events-none">
+                <div className="absolute inset-0 rounded-full border-4 border-black/20" />
+                <div className="absolute inset-[15%] rounded-full border border-black/10" />
+                <div className="absolute inset-[30%] rounded-full border border-black/10" />
+              </div>
               
               {/* 中心小孔 */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-zinc-900 border-2 border-zinc-700" />
-            </div>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-zinc-900 border-2 border-zinc-600 shadow-inner" />
+            </motion.div>
           </div>
 
           {/* Current Track Title */}
