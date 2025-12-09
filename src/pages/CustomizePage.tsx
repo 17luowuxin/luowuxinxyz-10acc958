@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X } from 'lucide-react';
+import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +35,17 @@ const themeOptions = [
   { id: 'dark', name: '暗夜黑', colors: ['#444444', '#666666'] },
 ];
 
+// Font options
+const fontOptions = [
+  { id: 'default', name: '默认', family: 'Nunito, sans-serif', preview: 'Aa 你好' },
+  { id: 'kuaile', name: '快乐体', family: '"ZCOOL KuaiLe", cursive', preview: 'Aa 你好' },
+  { id: 'mashan', name: '马善政楷', family: '"Ma Shan Zheng", cursive', preview: 'Aa 你好' },
+  { id: 'xiaowei', name: '小薇体', family: '"ZCOOL XiaoWei", serif', preview: 'Aa 你好' },
+  { id: 'liujian', name: '刘建毛草', family: '"Liu Jian Mao Cao", cursive', preview: 'Aa 你好' },
+  { id: 'longcang', name: '龙藏体', family: '"Long Cang", cursive', preview: 'Aa 你好' },
+];
+
+
 const CustomizePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -47,6 +58,7 @@ const CustomizePage: React.FC = () => {
   const [globalBackgroundUrl, setGlobalBackgroundUrl] = useState('');
   const [videoBackgroundUrl, setVideoBackgroundUrl] = useState('');
   const [currentTheme, setCurrentTheme] = useState('pink');
+  const [currentFont, setCurrentFont] = useState('default');
   const [uploading, setUploading] = useState(false);
   const [globalUploading, setGlobalUploading] = useState(false);
   const [videoUploading, setVideoUploading] = useState(false);
@@ -60,11 +72,17 @@ const CustomizePage: React.FC = () => {
 
   // Apply theme to document
   useEffect(() => {
-    // Remove all theme classes first
     document.documentElement.classList.remove('theme-pink', 'theme-blue', 'theme-orange', 'theme-green', 'theme-purple', 'theme-dark');
-    // Add current theme class
     document.documentElement.classList.add(`theme-${currentTheme}`);
   }, [currentTheme]);
+
+  // Apply font to document
+  useEffect(() => {
+    const font = fontOptions.find(f => f.id === currentFont);
+    if (font) {
+      document.documentElement.style.fontFamily = font.family;
+    }
+  }, [currentFont]);
 
   const fetchSettings = async () => {
     const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).maybeSingle();
@@ -77,10 +95,8 @@ const CustomizePage: React.FC = () => {
       setChatBackgroundUrl(data.chat_background_url || '');
       setGlobalBackgroundUrl((data as any).global_background_url || '');
       setVideoBackgroundUrl((data as any).video_background_url || '');
-      // Load saved theme
-      if (data.theme) {
-        setCurrentTheme(data.theme);
-      }
+      if (data.theme) setCurrentTheme(data.theme);
+      if ((data as any).font_family) setCurrentFont((data as any).font_family);
     }
   };
 
@@ -188,6 +204,7 @@ const CustomizePage: React.FC = () => {
       global_background_url: globalBackgroundUrl,
       video_background_url: videoBackgroundUrl,
       theme: currentTheme,
+      font_family: currentFont,
     } as any, { onConflict: 'user_id' });
     
     if (error) {
@@ -313,6 +330,35 @@ const CustomizePage: React.FC = () => {
                 <p className="text-sm font-medium text-center">{theme.name}</p>
                 {currentTheme === theme.id && (
                   <Check className="absolute bottom-2 right-2 w-4 h-4 text-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Font Selection */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-2">
+            <Type className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">全局字体</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">选择可爱的字体应用到全局</p>
+          
+          <div className="grid grid-cols-2 gap-3">
+            {fontOptions.map((font) => (
+              <button
+                key={font.id}
+                onClick={() => setCurrentFont(font.id)}
+                className={`relative p-4 rounded-2xl transition-all text-left ${
+                  currentFont === font.id 
+                    ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' 
+                    : 'bg-muted/50 hover:bg-muted'
+                }`}
+              >
+                <p className="text-lg mb-1" style={{ fontFamily: font.family }}>{font.preview}</p>
+                <p className="text-xs text-muted-foreground">{font.name}</p>
+                {currentFont === font.id && (
+                  <Check className="absolute top-2 right-2 w-4 h-4 text-primary" />
                 )}
               </button>
             ))}
