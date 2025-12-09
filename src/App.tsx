@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { MusicProvider } from "@/contexts/MusicContext";
 import PhoneFrame from "@/components/phone/PhoneFrame";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
@@ -36,6 +37,7 @@ const WithPhoneFrame = ({ children }: { children: React.ReactNode }) => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <MusicProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -66,6 +68,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </MusicProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
