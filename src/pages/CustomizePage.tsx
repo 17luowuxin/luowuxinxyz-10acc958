@@ -67,7 +67,7 @@ const CustomizePage: React.FC = () => {
   }, [currentTheme]);
 
   const fetchSettings = async () => {
-    const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).single();
+    const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).maybeSingle();
     if (data) {
       setBubbleColor(data.bubble_color || '#FFB5C5');
       setFriendBubbleColor(data.friend_bubble_color || '#B5D8FF');
@@ -76,6 +76,7 @@ const CustomizePage: React.FC = () => {
       setBubbleSize([(data as any).bubble_size || 16]);
       setChatBackgroundUrl(data.chat_background_url || '');
       setGlobalBackgroundUrl((data as any).global_background_url || '');
+      setVideoBackgroundUrl((data as any).video_background_url || '');
       // Load saved theme
       if (data.theme) {
         setCurrentTheme(data.theme);
@@ -171,6 +172,11 @@ const CustomizePage: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Clear session cache to force reload
+    if (user) {
+      sessionStorage.removeItem(`bg_${user.id}`);
+    }
+    
     const { error } = await supabase.from('customization').upsert({
       user_id: user?.id,
       bubble_color: bubbleColor,
@@ -180,14 +186,15 @@ const CustomizePage: React.FC = () => {
       bubble_size: bubbleSize[0],
       chat_background_url: chatBackgroundUrl,
       global_background_url: globalBackgroundUrl,
+      video_background_url: videoBackgroundUrl,
       theme: currentTheme,
-    }, { onConflict: 'user_id' });
+    } as any, { onConflict: 'user_id' });
     
     if (error) {
       console.error('Save error:', error);
       toast.error('保存失败');
     } else {
-      toast.success('美化设置已保存!');
+      toast.success('美化设置已保存！返回桌面查看效果');
     }
   };
 

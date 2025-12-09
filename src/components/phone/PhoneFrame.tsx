@@ -31,12 +31,13 @@ const PhoneFrame: React.FC<PhoneFrameProps> = ({ children }) => {
         .from('customization')
         .select('global_background_url, video_background_url')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
         .then(({ data }) => {
           if (data) {
-            sessionStorage.setItem(cacheKey, JSON.stringify(data));
-            if (data.global_background_url) setGlobalBg(data.global_background_url);
-            if (data.video_background_url) setVideoBg(data.video_background_url);
+            const typedData = data as { global_background_url?: string; video_background_url?: string };
+            sessionStorage.setItem(cacheKey, JSON.stringify(typedData));
+            if (typedData.global_background_url) setGlobalBg(typedData.global_background_url);
+            if (typedData.video_background_url) setVideoBg(typedData.video_background_url);
           }
         });
     }
