@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Globe } from 'lucide-react';
+import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +25,16 @@ const bubbleStyles = [
   { id: 'square', label: '方正' },
 ];
 
+// Theme options
+const themeOptions = [
+  { id: 'pink', name: '可爱粉', colors: ['#FF9EAE', '#FFB5D8'] },
+  { id: 'blue', name: '酷炫蓝', colors: ['#5CC8FF', '#7DD8FF'] },
+  { id: 'orange', name: '温暖橙', colors: ['#FFB347', '#FFCC80'] },
+  { id: 'green', name: '自然绿', colors: ['#77DD77', '#98FB98'] },
+  { id: 'purple', name: '神秘紫', colors: ['#C77DFF', '#E0AAFF'] },
+  { id: 'dark', name: '暗夜黑', colors: ['#444444', '#666666'] },
+];
+
 const CustomizePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -32,17 +42,29 @@ const CustomizePage: React.FC = () => {
   const [friendBubbleColor, setFriendBubbleColor] = useState('#B5D8FF');
   const [bubbleStyle, setBubbleStyle] = useState('rounded');
   const [opacity, setOpacity] = useState([1]);
-  const [bubbleSize, setBubbleSize] = useState([16]); // font size in px
+  const [bubbleSize, setBubbleSize] = useState([16]);
   const [chatBackgroundUrl, setChatBackgroundUrl] = useState('');
   const [globalBackgroundUrl, setGlobalBackgroundUrl] = useState('');
+  const [videoBackgroundUrl, setVideoBackgroundUrl] = useState('');
+  const [currentTheme, setCurrentTheme] = useState('pink');
   const [uploading, setUploading] = useState(false);
   const [globalUploading, setGlobalUploading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const globalFileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) fetchSettings();
   }, [user]);
+
+  // Apply theme to document
+  useEffect(() => {
+    // Remove all theme classes first
+    document.documentElement.classList.remove('theme-pink', 'theme-blue', 'theme-orange', 'theme-green', 'theme-purple', 'theme-dark');
+    // Add current theme class
+    document.documentElement.classList.add(`theme-${currentTheme}`);
+  }, [currentTheme]);
 
   const fetchSettings = async () => {
     const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).single();
@@ -54,6 +76,10 @@ const CustomizePage: React.FC = () => {
       setBubbleSize([(data as any).bubble_size || 16]);
       setChatBackgroundUrl(data.chat_background_url || '');
       setGlobalBackgroundUrl((data as any).global_background_url || '');
+      // Load saved theme
+      if (data.theme) {
+        setCurrentTheme(data.theme);
+      }
     }
   };
 
@@ -107,6 +133,43 @@ const CustomizePage: React.FC = () => {
     toast.success('全局背景图上传成功');
   };
 
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Check file type
+    if (!file.type.startsWith('video/')) {
+      toast.error('请选择视频文件 (MP4/WebM)');
+      return;
+    }
+
+    // Check file size (10MB limit for videos)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('视频文件需小于10MB');
+      return;
+    }
+
+    setVideoUploading(true);
+    const fileName = `${user.id}/video-bg-${Date.now()}.${file.name.split('.').pop()}`;
+    
+    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
+    if (uploadError) {
+      toast.error('上传失败: ' + uploadError.message);
+      setVideoUploading(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+    setVideoBackgroundUrl(publicUrl);
+    setVideoUploading(false);
+    toast.success('动态背景上传成功');
+  };
+
+  const handleThemeChange = (themeId: string) => {
+    setCurrentTheme(themeId);
+    toast.success(`已切换到${themeOptions.find(t => t.id === themeId)?.name}主题`);
+  };
+
   const handleSave = async () => {
     const { error } = await supabase.from('customization').upsert({
       user_id: user?.id,
@@ -117,6 +180,7 @@ const CustomizePage: React.FC = () => {
       bubble_size: bubbleSize[0],
       chat_background_url: chatBackgroundUrl,
       global_background_url: globalBackgroundUrl,
+      theme: currentTheme,
     }, { onConflict: 'user_id' });
     
     if (error) {
@@ -155,6 +219,86 @@ const CustomizePage: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-6 pb-24">
+        {/* Video Background */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-4">
+            <Film className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">动态视频背景（10秒以内）</h3>
+          </div>
+          
+          <div 
+            onClick={() => videoInputRef.current?.click()}
+            className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
+          >
+            {videoBackgroundUrl ? (
+              <div className="relative w-full h-32">
+                <video 
+                  src={videoBackgroundUrl} 
+                  className="w-full h-full object-cover rounded-xl"
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
+                  <span className="text-white text-sm">点击更换</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Film className="w-8 h-8 text-primary mb-2" />
+                <span className="text-primary font-medium">{videoUploading ? '上传中...' : '点击上传动态背景'}</span>
+                <span className="text-muted-foreground text-xs mt-1">支持 MP4/WebM，10秒以内</span>
+              </>
+            )}
+          </div>
+          <input 
+            ref={videoInputRef} 
+            type="file" 
+            accept="video/mp4,video/webm" 
+            className="hidden" 
+            onChange={handleVideoUpload} 
+          />
+        </div>
+
+        {/* Theme Colors */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-2">
+            <Palette className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">主题颜色</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">选择主题会改变整个应用的配色</p>
+          
+          <div className="grid grid-cols-3 gap-3">
+            {themeOptions.map((theme) => (
+              <button
+                key={theme.id}
+                onClick={() => handleThemeChange(theme.id)}
+                className={`relative p-4 rounded-2xl transition-all ${
+                  currentTheme === theme.id 
+                    ? 'ring-2 ring-primary ring-offset-2' 
+                    : 'bg-muted/50 hover:bg-muted'
+                }`}
+              >
+                <div className="flex justify-center gap-1 mb-2">
+                  <div 
+                    className="w-6 h-6 rounded-full" 
+                    style={{ backgroundColor: theme.colors[0] }}
+                  />
+                  <div 
+                    className="w-6 h-6 rounded-full" 
+                    style={{ backgroundColor: theme.colors[1] }}
+                  />
+                </div>
+                <p className="text-sm font-medium text-center">{theme.name}</p>
+                {currentTheme === theme.id && (
+                  <Check className="absolute bottom-2 right-2 w-4 h-4 text-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Global App Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">

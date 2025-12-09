@@ -68,6 +68,132 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
+  /* 可爱粉主题 - 默认 */
+  .theme-pink {
+    --background: 340 50% 95%;
+    --foreground: 340 30% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 340 30% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 340 30% 20%;
+    --primary: 340 75% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 280 55% 65%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 340 30% 92%;
+    --muted-foreground: 340 20% 45%;
+    --accent: 200 75% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 340 30% 88%;
+    --input: 340 30% 88%;
+    --ring: 340 75% 60%;
+  }
+
+  /* 酷炫蓝主题 */
+  .theme-blue {
+    --background: 210 50% 95%;
+    --foreground: 210 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 30% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 30% 15%;
+    --primary: 200 85% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 180 60% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 30% 92%;
+    --muted-foreground: 210 20% 45%;
+    --accent: 240 70% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 210 30% 88%;
+    --input: 210 30% 88%;
+    --ring: 200 85% 50%;
+  }
+
+  /* 温暖橙主题 */
+  .theme-orange {
+    --background: 35 50% 95%;
+    --foreground: 35 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 35 30% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 35 30% 15%;
+    --primary: 25 90% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 85% 55%;
+    --secondary-foreground: 35 30% 15%;
+    --muted: 35 30% 92%;
+    --muted-foreground: 35 20% 45%;
+    --accent: 15 85% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 35 30% 88%;
+    --input: 35 30% 88%;
+    --ring: 25 90% 55%;
+  }
+
+  /* 自然绿主题 */
+  .theme-green {
+    --background: 140 40% 95%;
+    --foreground: 140 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 140 30% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 140 30% 15%;
+    --primary: 145 65% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 160 55% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 140 30% 92%;
+    --muted-foreground: 140 20% 45%;
+    --accent: 120 60% 45%;
+    --accent-foreground: 0 0% 100%;
+    --border: 140 30% 88%;
+    --input: 140 30% 88%;
+    --ring: 145 65% 45%;
+  }
+
+  /* 神秘紫主题 */
+  .theme-purple {
+    --background: 280 40% 95%;
+    --foreground: 280 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 280 30% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 280 30% 15%;
+    --primary: 280 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 300 60% 55%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 280 30% 92%;
+    --muted-foreground: 280 20% 45%;
+    --accent: 260 70% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 280 30% 88%;
+    --input: 280 30% 88%;
+    --ring: 280 70% 55%;
+  }
+
+  /* 暗夜黑主题 */
+  .theme-dark {
+    --background: 0 0% 8%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 70%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 0 0% 50%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 40%;
+    --accent-foreground: 0 0% 95%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 70%;
+  }
+
   .dark {
     --background: 280 25% 10%;
     --foreground: 340 20% 95%;
