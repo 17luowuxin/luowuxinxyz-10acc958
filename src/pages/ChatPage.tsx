@@ -311,7 +311,12 @@ const ChatPage: React.FC = () => {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = '';
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: '' }]);
+      const assistantMsgId = Date.now() + 1;
+      setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }]);
+
+      // Use throttled updates to reduce re-renders
+      let lastUpdateTime = 0;
+      const updateInterval = 50; // Update UI every 50ms max
 
       while (true) {
         const { done, value } = await reader.read();
@@ -324,11 +329,20 @@ const ChatPage: React.FC = () => {
               const json = JSON.parse(line.slice(6));
               const delta = json.choices?.[0]?.delta?.content || '';
               assistantContent += delta;
-              setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+              
+              // Throttle UI updates
+              const now = Date.now();
+              if (now - lastUpdateTime >= updateInterval) {
+                lastUpdateTime = now;
+                setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: assistantContent } : m));
+              }
             } catch {}
           }
         }
       }
+      
+      // Final update to ensure all content is shown
+      setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: assistantContent } : m));
 
       await supabase.from('chat_messages').insert({ 
         user_id: user?.id, 
