@@ -210,8 +210,10 @@ export type Database = {
           bubble_style: string | null
           chat_background_url: string | null
           created_at: string
+          font_family: string | null
           friend_bubble_color: string | null
           global_background_url: string | null
+          group_chat_background_url: string | null
           id: string
           lock_screen_bg_url: string | null
           theme: string | null
@@ -227,8 +229,10 @@ export type Database = {
           bubble_style?: string | null
           chat_background_url?: string | null
           created_at?: string
+          font_family?: string | null
           friend_bubble_color?: string | null
           global_background_url?: string | null
+          group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
           theme?: string | null
@@ -244,8 +248,10 @@ export type Database = {
           bubble_style?: string | null
           chat_background_url?: string | null
           created_at?: string
+          font_family?: string | null
           friend_bubble_color?: string | null
           global_background_url?: string | null
+          group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
           theme?: string | null

@@ -14,7 +14,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        nunito: ['Nunito', 'sans-serif'],
+        'nunito': ['Nunito', 'sans-serif'],
+        'kuaile': ['"ZCOOL KuaiLe"', 'cursive'],
+        'mashan': ['"Ma Shan Zheng"', 'cursive'],
+        'xiaowei': ['"ZCOOL XiaoWei"', 'serif'],
+        'liujian': ['"Liu Jian Mao Cao"', 'cursive'],
+        'longcang': ['"Long Cang"', 'cursive'],
       },
       colors: {
         border: "hsl(var(--border))",
