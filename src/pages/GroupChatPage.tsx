@@ -28,6 +28,8 @@ const GroupChatPage: React.FC = () => {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [customization, setCustomization] = useState<any>({});
+  const [apiConfig, setApiConfig] = useState<any>({});
+  const [userProfile, setUserProfile] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,6 +37,8 @@ const GroupChatPage: React.FC = () => {
       fetchGroup();
       fetchMessages();
       fetchCustomization();
+      fetchApiConfig();
+      fetchUserProfile();
     }
   }, [user, groupId]);
 
@@ -81,6 +85,42 @@ const GroupChatPage: React.FC = () => {
     if (data) setCustomization(data);
   };
 
+  const fetchApiConfig = async () => {
+    const { data: apiKeys } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+    if (apiKeys && apiKeys.length > 0) {
+      const customKey = apiKeys.find(k => k.provider === 'custom');
+      const deepseekKey = apiKeys.find(k => k.provider === 'deepseek');
+      const openaiKey = apiKeys.find(k => k.provider === 'openai');
+      const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
+      const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
+      const customModel = apiKeys.find(k => k.provider === 'custom_model');
+      
+      if (customKey) {
+        setApiConfig({ 
+          provider: 'custom', 
+          apiKey: customKey.api_key,
+          customBaseUrl: customBaseUrl?.api_key,
+          customModel: customModel?.api_key
+        });
+      } else if (deepseekKey) {
+        setApiConfig({ provider: 'deepseek', apiKey: deepseekKey.api_key });
+      } else if (openaiKey) {
+        setApiConfig({ provider: 'openai', apiKey: openaiKey.api_key });
+      } else if (anthropicKey) {
+        setApiConfig({ provider: 'anthropic', apiKey: anthropicKey.api_key });
+      }
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('nickname, persona')
+      .eq('user_id', user?.id)
+      .single();
+    if (data) setUserProfile(data);
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || loading || members.length === 0) return;
     
@@ -104,17 +144,26 @@ const GroupChatPage: React.FC = () => {
     }
 
     try {
-      // 调用群聊API
-      const { data, error } = await supabase.functions.invoke('group-chat', {
-        body: {
-          messages: messages.map(m => ({
-            role: m.sender_type === 'user' ? 'user' : 'assistant',
-            content: m.sender_type === 'user' ? m.content : `${m.characterName}: ${m.content}`
-          })),
-          characters: members,
-          userMessage
-        }
-      });
+      // 调用群聊API - 传递API配置
+      const body: any = {
+        messages: messages.map(m => ({
+          role: m.sender_type === 'user' ? 'user' : 'assistant',
+          content: m.sender_type === 'user' ? m.content : `${m.characterName}: ${m.content}`
+        })),
+        characters: members,
+        userMessage,
+        userProfile
+      };
+
+      // 添加用户的API配置
+      if (apiConfig.apiKey && apiConfig.provider) {
+        body.userApiKey = apiConfig.apiKey;
+        body.provider = apiConfig.provider;
+        if (apiConfig.customBaseUrl) body.customBaseUrl = apiConfig.customBaseUrl;
+        if (apiConfig.customModel) body.customModel = apiConfig.customModel;
+      }
+
+      const { data, error } = await supabase.functions.invoke('group-chat', { body });
 
       if (error) throw error;
 
