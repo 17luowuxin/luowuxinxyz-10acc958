@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, characters, userMessage, userApiKey, provider, customBaseUrl, customModel, userProfile } = await req.json();
+    const { messages, characters, userMessage, userApiKey, provider, customBaseUrl, customModel, userProfile, mentionedCharacterIds } = await req.json();
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -72,15 +72,25 @@ serve(async (req) => {
 
     console.log("Using provider:", userApiKey ? provider : "lovable-ai");
     console.log("API URL:", apiUrl);
+    console.log("Mentioned characters:", mentionedCharacterIds);
 
     // 用户信息
     const userName = userProfile?.nickname || '用户';
     const userPersona = userProfile?.persona || '';
 
-    // 随机选择1-2个角色来回复
-    const numResponders = Math.min(characters.length, Math.random() > 0.5 ? 2 : 1);
-    const shuffled = [...characters].sort(() => Math.random() - 0.5);
-    const responders = shuffled.slice(0, numResponders);
+    // 确定回复的角色
+    let responders: any[] = [];
+    
+    // 如果有@的角色，优先让被@的角色回复
+    if (mentionedCharacterIds && mentionedCharacterIds.length > 0) {
+      responders = characters.filter((c: any) => mentionedCharacterIds.includes(c.id));
+      console.log("Using mentioned characters:", responders.map((r: any) => r.name));
+    } else {
+      // 没有@的话，随机选择1-2个角色来回复
+      const numResponders = Math.min(characters.length, Math.random() > 0.5 ? 2 : 1);
+      const shuffled = [...characters].sort(() => Math.random() - 0.5);
+      responders = shuffled.slice(0, numResponders);
+    }
 
     const responses: { characterId: string; characterName: string; content: string }[] = [];
 
