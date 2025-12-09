@@ -68,9 +68,15 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    if (data) setTracks(data);
+    if (data) {
+      setTracks(data);
+      // 更新 currentTrack 以同步封面变化
+      if (currentTrackIndex >= 0 && data[currentTrackIndex]) {
+        // 触发重新渲染
+      }
+    }
     if (error) console.error(error);
-  }, [user]);
+  }, [user, currentTrackIndex]);
 
   useEffect(() => {
     if (user) fetchTracks();

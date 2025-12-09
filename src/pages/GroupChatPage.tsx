@@ -383,8 +383,14 @@ const GroupChatPage: React.FC = () => {
     setLoading(false);
   };
 
-  const getCharacterColor = (charId?: string) => {
-    if (!charId) return customization.friend_bubble_color || '#A855F7';
+  // 使用 friend_bubble_color 作为所有角色的统一颜色
+  const getCharacterBubbleColor = () => {
+    return customization.friend_bubble_color || '#A855F7';
+  };
+
+  // 用于头像的区分色
+  const getCharacterAvatarColor = (charId?: string) => {
+    if (!charId) return '#A855F7';
     const index = members.findIndex(m => m.id === charId);
     const colors = ['#A855F7', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'];
     return colors[index % colors.length];
@@ -421,7 +427,7 @@ const GroupChatPage: React.FC = () => {
             ) : (
               <div 
                 className="w-full h-full flex items-center justify-center text-white text-xs"
-                style={{ backgroundColor: getCharacterColor(member.id) }}
+                style={{ backgroundColor: getCharacterAvatarColor(member.id) }}
               >
                 {member.name[0]}
               </div>
@@ -494,7 +500,7 @@ const GroupChatPage: React.FC = () => {
           <div key={member.id} className="flex flex-col items-center gap-1 min-w-fit">
             <div 
               className="w-10 h-10 rounded-full flex items-center justify-center text-white overflow-hidden"
-              style={{ backgroundColor: getCharacterColor(member.id) }}
+              style={{ backgroundColor: getCharacterAvatarColor(member.id) }}
             >
               {member.avatar_url ? (
                 <img src={member.avatar_url} className="w-full h-full object-cover" />
@@ -532,7 +538,7 @@ const GroupChatPage: React.FC = () => {
               {msg.sender_type === 'character' && (
                 <div 
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white mr-2 flex-shrink-0 overflow-hidden"
-                  style={{ backgroundColor: getCharacterColor(msg.character_id) }}
+                  style={{ backgroundColor: getCharacterAvatarColor(msg.character_id) }}
                 >
                   {msg.characterAvatar ? (
                     <img src={msg.characterAvatar} className="w-full h-full object-cover" />
@@ -550,7 +556,7 @@ const GroupChatPage: React.FC = () => {
                   style={{
                     backgroundColor: msg.sender_type === 'user' 
                       ? (customization.bubble_color || '#FF6B9D')
-                      : getCharacterColor(msg.character_id),
+                      : getCharacterBubbleColor(),
                     opacity: customization.bubble_opacity || 1,
                     color: '#fff',
                     fontSize: `${customization.bubble_size || 16}px`
@@ -644,7 +650,7 @@ const GroupChatPage: React.FC = () => {
                 >
                   <div 
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white overflow-hidden"
-                    style={{ backgroundColor: getCharacterColor(member.id) }}
+                    style={{ backgroundColor: getCharacterAvatarColor(member.id) }}
                   >
                     {member.avatar_url ? (
                       <img src={member.avatar_url} className="w-full h-full object-cover" />
