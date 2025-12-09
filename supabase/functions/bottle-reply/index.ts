@@ -21,8 +21,11 @@ async function getAICompletion(messages: any[], apiConfig: any) {
     'Content-Type': 'application/json',
   };
 
-  // 使用用户自定义API
+  console.log('getAICompletion called with apiConfig:', JSON.stringify(apiConfig));
+
+  // 使用用户自定义API - 优先级最高
   if (apiConfig?.apiKey && apiConfig?.provider) {
+    console.log('Using user custom API, provider:', apiConfig.provider);
     switch (apiConfig.provider) {
       case 'deepseek':
         apiUrl = 'https://api.deepseek.com/v1/chat/completions';
@@ -35,11 +38,13 @@ async function getAICompletion(messages: any[], apiConfig: any) {
         model = 'gpt-4o-mini';
         break;
       case 'custom':
-        apiUrl = apiConfig.customBaseUrl || apiUrl;
+        apiUrl = apiConfig.customBaseUrl || 'https://api.deepseek.com/v1/chat/completions';
         apiKey = apiConfig.apiKey;
-        model = apiConfig.customModel || model;
+        model = apiConfig.customModel || 'deepseek-chat';
         break;
     }
+  } else {
+    console.log('No user API config, using Lovable AI');
   }
 
   headers['Authorization'] = `Bearer ${apiKey}`;
