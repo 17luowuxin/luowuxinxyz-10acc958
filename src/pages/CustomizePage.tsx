@@ -82,10 +82,10 @@ const CustomizePage: React.FC = () => {
     if (font) {
       document.documentElement.style.fontFamily = font.family;
       document.body.style.fontFamily = font.family;
-      // Also apply to all elements
+      // Also apply to all elements, except font preview areas
       const style = document.createElement('style');
       style.id = 'global-font-style';
-      style.textContent = `* { font-family: ${font.family} !important; }`;
+      style.textContent = `*:not([data-font-preview]) { font-family: ${font.family} !important; }`;
       
       // Remove old style if exists
       const oldStyle = document.getElementById('global-font-style');
@@ -366,7 +366,7 @@ const CustomizePage: React.FC = () => {
                     : 'bg-muted/50 hover:bg-muted'
                 }`}
               >
-                <p className="text-lg mb-1" style={{ fontFamily: font.family }}>{font.preview}</p>
+                <p className="text-lg mb-1" data-font-preview style={{ fontFamily: font.family }}>{font.preview}</p>
                 <p className="text-xs text-muted-foreground">{font.name}</p>
                 {currentFont === font.id && (
                   <Check className="absolute top-2 right-2 w-4 h-4 text-primary" />

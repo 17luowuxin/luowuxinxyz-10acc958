@@ -17,10 +17,10 @@ const applyFont = (fontId: string) => {
   document.documentElement.style.fontFamily = fontFamily;
   document.body.style.fontFamily = fontFamily;
   
-  // Apply to all elements using style tag
+  // Apply to all elements using style tag, except font preview areas
   const style = document.createElement('style');
   style.id = 'global-font-style';
-  style.textContent = `* { font-family: ${fontFamily} !important; }`;
+  style.textContent = `*:not([data-font-preview]) { font-family: ${fontFamily} !important; }`;
   
   // Remove old style if exists
   const oldStyle = document.getElementById('global-font-style');
