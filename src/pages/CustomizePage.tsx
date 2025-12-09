@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check } from 'lucide-react';
+import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
@@ -228,9 +228,22 @@ const CustomizePage: React.FC = () => {
       <div className="p-4 space-y-6 pb-24">
         {/* Video Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
-          <div className="flex items-center gap-2 mb-4">
-            <Film className="w-5 h-5 text-primary" />
-            <h3 className="font-bold text-lg">动态视频背景（10秒以内）</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Film className="w-5 h-5 text-primary" />
+              <h3 className="font-bold text-lg">动态视频背景</h3>
+            </div>
+            {videoBackgroundUrl && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => { setVideoBackgroundUrl(''); toast.success('已清空动态背景'); }}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
+              >
+                <X className="w-4 h-4 mr-1" />
+                清空
+              </Button>
+            )}
           </div>
           
           <div 
@@ -255,7 +268,7 @@ const CustomizePage: React.FC = () => {
               <>
                 <Film className="w-8 h-8 text-primary mb-2" />
                 <span className="text-primary font-medium">{videoUploading ? '上传中...' : '点击上传动态背景'}</span>
-                <span className="text-muted-foreground text-xs mt-1">支持 MP4/WebM，10秒以内</span>
+                <span className="text-muted-foreground text-xs mt-1">支持 MP4/WebM，10MB以内</span>
               </>
             )}
           </div>
@@ -308,34 +321,44 @@ const CustomizePage: React.FC = () => {
 
         {/* Global App Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
-          <div className="flex items-center gap-2 mb-4">
-            <Globe className="w-5 h-5 text-primary" />
-            <h3 className="font-bold text-lg">全局美化</h3>
-          </div>
-          <p className="text-muted-foreground text-sm mb-4">上传图片作为整个应用的透明背景</p>
-          
-          <div className="space-y-4">
-            <p className="text-sm font-medium">全局背景图片</p>
-            <div 
-              onClick={() => globalFileInputRef.current?.click()}
-              className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
-            >
-              {globalBackgroundUrl ? (
-                <div className="relative w-full h-32">
-                  <img src={globalBackgroundUrl} alt="全局背景" className="w-full h-full object-cover rounded-xl" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
-                    <span className="text-white text-sm">点击更换</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <Upload className="w-8 h-8 text-primary mb-2" />
-                  <span className="text-primary text-sm">{globalUploading ? '上传中...' : '点击上传全局背景'}</span>
-                </>
-              )}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-primary" />
+              <h3 className="font-bold text-lg">全局背景图</h3>
             </div>
-            <input ref={globalFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGlobalBackgroundUpload} />
+            {globalBackgroundUrl && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => { setGlobalBackgroundUrl(''); toast.success('已清空全局背景'); }}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
+              >
+                <X className="w-4 h-4 mr-1" />
+                清空
+              </Button>
+            )}
           </div>
+          <p className="text-muted-foreground text-sm mb-4">上传图片作为背景（与动态视频二选一）</p>
+          
+          <div 
+            onClick={() => globalFileInputRef.current?.click()}
+            className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
+          >
+            {globalBackgroundUrl ? (
+              <div className="relative w-full h-32">
+                <img src={globalBackgroundUrl} alt="全局背景" className="w-full h-full object-cover rounded-xl" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
+                  <span className="text-white text-sm">点击更换</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Upload className="w-8 h-8 text-primary mb-2" />
+                <span className="text-primary text-sm">{globalUploading ? '上传中...' : '点击上传全局背景'}</span>
+              </>
+            )}
+          </div>
+          <input ref={globalFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGlobalBackgroundUpload} />
         </div>
 
         {/* Chat Background */}
