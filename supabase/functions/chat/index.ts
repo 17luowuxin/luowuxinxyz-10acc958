@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, persona, characterName, userApiKey, provider, customBaseUrl, customModel } = await req.json();
+    const { messages, persona, characterName, userApiKey, provider, customBaseUrl, customModel, userProfile } = await req.json();
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -77,8 +77,17 @@ serve(async (req) => {
     console.log("Using provider:", userApiKey ? provider : "lovable-ai");
     console.log("API URL:", apiUrl);
 
+    // 获取用户信息
+    const userName = userProfile?.nickname || '用户';
+    const userPersonaInfo = userProfile?.persona || '';
+
     const systemPrompt = `你是一个名叫"${characterName || '小助手'}"的虚拟角色。
 ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
+
+【关于你的聊天对象】
+你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
+记住要用"${userName}"称呼对方，不要随便给对方取别的名字或昵称。
+
 请严格按照上述角色人设来回复用户，保持角色的性格特点、说话方式和语气。
 回复要简洁自然，像真实朋友聊天一样，同时体现角色的独特个性。
 如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。`;

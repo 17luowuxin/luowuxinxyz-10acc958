@@ -64,20 +64,33 @@ const CameraPage: React.FC = () => {
   const [selectedFrame, setSelectedFrame] = useState('none');
   const [stickers, setStickers] = useState<StickerItem[]>([]);
   const [draggingSticker, setDraggingSticker] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
-  const startCamera = async () => {
+  const startCamera = async (facing: 'user' | 'environment' = facingMode) => {
     try {
+      // 先停止之前的相机
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } 
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } 
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setStreaming(true);
+        setFacingMode(facing);
       }
     } catch (err) {
       console.error('Camera error:', err);
       toast.error('无法访问相机');
     }
+  };
+
+  const switchCamera = () => {
+    const newFacing = facingMode === 'user' ? 'environment' : 'user';
+    startCamera(newFacing);
   };
 
   const stopCamera = () => {
@@ -382,20 +395,36 @@ const CameraPage: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="p-4 flex justify-center">
+        <div className="p-4 flex flex-col items-center gap-4">
           {!streaming ? (
-            <Button variant="candy" size="lg" onClick={startCamera}>
+            <Button variant="candy" size="lg" onClick={() => startCamera()}>
               <Camera className="w-5 h-5 mr-2" />打开相机
             </Button>
           ) : (
-            <Button 
-              variant="candy" 
-              size="lg" 
-              className="w-16 h-16 rounded-full"
-              onClick={takePhoto}
-            >
-              <Camera className="w-8 h-8" />
-            </Button>
+            <div className="flex items-center gap-6">
+              <Button 
+                variant="outline" 
+                size="icon"
+                className="w-12 h-12 rounded-full"
+                onClick={switchCamera}
+              >
+                <RotateCcw className="w-5 h-5" />
+              </Button>
+              <Button 
+                variant="candy" 
+                size="lg" 
+                className="w-16 h-16 rounded-full"
+                onClick={takePhoto}
+              >
+                <Camera className="w-8 h-8" />
+              </Button>
+              <div className="w-12 h-12" /> {/* Spacer for balance */}
+            </div>
+          )}
+          {streaming && (
+            <p className="text-sm text-muted-foreground">
+              {facingMode === 'user' ? '前置摄像头' : '后置摄像头'}
+            </p>
           )}
         </div>
       )}

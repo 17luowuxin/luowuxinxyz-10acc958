@@ -272,7 +272,8 @@ const ChatPage: React.FC = () => {
       const body: any = { 
         messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMessage], 
         characterName: character?.name, 
-        persona: character?.persona 
+        persona: character?.persona,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined
       };
       
       // Only add user API config if they have one configured
