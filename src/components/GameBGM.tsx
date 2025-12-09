@@ -7,12 +7,12 @@ interface GameBGMProps {
   isPlaying?: boolean;
 }
 
-// Free BGM URLs (royalty-free ambient music)
+// Free BGM URLs (royalty-free ambient music from freesound.org & other sources)
 const BGM_URLS: Record<string, string> = {
-  'werewolf': 'https://assets.mixkit.co/music/preview/mixkit-deep-urban-623.mp3',
-  'script-murder': 'https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3',
-  'truth-dare': 'https://assets.mixkit.co/music/preview/mixkit-hip-hop-02-738.mp3',
-  'riddle': 'https://assets.mixkit.co/music/preview/mixkit-dreaming-big-31.mp3',
+  'werewolf': 'https://cdn.pixabay.com/audio/2022/10/25/audio_46b97e1957.mp3',
+  'script-murder': 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749d484.mp3',
+  'truth-dare': 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3',
+  'riddle': 'https://cdn.pixabay.com/audio/2021/11/25/audio_91b32e02f9.mp3',
 };
 
 const GameBGM: React.FC<GameBGMProps> = ({ gameType, isPlaying = true }) => {

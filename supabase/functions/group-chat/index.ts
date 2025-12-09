@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, characters, userMessage, userApiKey, provider, customBaseUrl, customModel, userProfile, mentionedCharacterIds } = await req.json();
+    const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds } = await req.json();
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -38,9 +38,9 @@ serve(async (req) => {
         model = "claude-3-haiku-20240307";
         headers["x-api-key"] = userApiKey;
         headers["anthropic-version"] = "2023-06-01";
-      } else if (provider === 'custom' && customBaseUrl) {
+      } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
-        let finalUrl = customBaseUrl.trim();
+        let finalUrl = baseUrl.trim();
         if (!finalUrl.endsWith('/chat/completions')) {
           if (!finalUrl.endsWith('/')) finalUrl += '/';
           if (!finalUrl.includes('/v1/')) finalUrl += 'v1/';

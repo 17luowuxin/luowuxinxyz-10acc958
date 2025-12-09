@@ -137,8 +137,8 @@ const SpacePage: React.FC = () => {
             type: 'moment',
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
-            customBaseUrl: apiConfig.customBaseUrl,
-            customModel: apiConfig.customModel
+            baseUrl: apiConfig.baseUrl,
+            model: apiConfig.model
           }
         });
 
@@ -208,8 +208,8 @@ const SpacePage: React.FC = () => {
                 userPost: postContent,
                 userApiKey: apiConfig.apiKey,
                 provider: apiConfig.provider,
-                customBaseUrl: apiConfig.customBaseUrl,
-                customModel: apiConfig.customModel,
+                baseUrl: apiConfig.baseUrl,
+                model: apiConfig.model,
                 userProfile: userProfile,
                 replyCharacterId: char.id // 传递回复角色ID
               }
@@ -287,8 +287,8 @@ const SpacePage: React.FC = () => {
             userPost: content,
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
-            customBaseUrl: apiConfig.customBaseUrl,
-            customModel: apiConfig.customModel,
+            baseUrl: apiConfig.baseUrl,
+            model: apiConfig.model,
             userProfile: userProfile
           }
         });

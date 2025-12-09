@@ -5,8 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 export interface APIConfig {
   apiKey?: string;
   provider?: string;
-  customBaseUrl?: string;
-  customModel?: string;
+  baseUrl?: string;
+  model?: string;
 }
 
 export const useAPIConfig = () => {
@@ -40,8 +40,8 @@ export const useAPIConfig = () => {
           setApiConfig({
             provider: 'custom',
             apiKey: customKey.api_key,
-            customBaseUrl: baseUrl?.api_key,
-            customModel: model?.api_key,
+            baseUrl: baseUrl?.api_key,
+            model: model?.api_key,
           });
         } else if (deepseekKey) {
           setApiConfig({
