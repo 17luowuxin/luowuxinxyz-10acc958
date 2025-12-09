@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import GameBGM from '@/components/GameBGM';
 
 interface Riddle {
   index: number;
@@ -218,6 +219,9 @@ const RiddlePage: React.FC = () => {
       <div className="fixed bottom-20 left-4 text-4xl opacity-20">🎯</div>
       <div className="fixed bottom-32 right-4 text-3xl opacity-20">💡</div>
       <div className="fixed top-40 right-6 text-2xl opacity-15">✨</div>
+
+      {/* Background Music */}
+      <GameBGM gameType="riddle" isPlaying={true} />
     </div>
   );
 };

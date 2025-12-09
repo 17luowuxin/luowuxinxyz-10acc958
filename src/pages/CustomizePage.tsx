@@ -81,6 +81,17 @@ const CustomizePage: React.FC = () => {
     const font = fontOptions.find(f => f.id === currentFont);
     if (font) {
       document.documentElement.style.fontFamily = font.family;
+      document.body.style.fontFamily = font.family;
+      // Also apply to all elements
+      const style = document.createElement('style');
+      style.id = 'global-font-style';
+      style.textContent = `* { font-family: ${font.family} !important; }`;
+      
+      // Remove old style if exists
+      const oldStyle = document.getElementById('global-font-style');
+      if (oldStyle) oldStyle.remove();
+      
+      document.head.appendChild(style);
     }
   }, [currentFont]);
 

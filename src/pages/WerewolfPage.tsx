@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
+import GameBGM from '@/components/GameBGM';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1049,6 +1050,9 @@ const WerewolfPage: React.FC = () => {
 
       {/* Target Selection Dialog */}
       {renderTargetSelection()}
+
+      {/* Background Music */}
+      <GameBGM gameType="werewolf" isPlaying={gamePhase !== 'setup'} />
     </div>
   );
 };
