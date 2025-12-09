@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { character, type, userPost, userApiKey, provider, customBaseUrl, customModel } = await req.json();
+    const { character, type, userPost, userApiKey, provider, customBaseUrl, customModel, userProfile } = await req.json();
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -61,6 +61,10 @@ serve(async (req) => {
       throw new Error("API key not configured");
     }
 
+    // 获取用户信息
+    const userName = userProfile?.nickname || '用户';
+    const userPersona = userProfile?.persona || '';
+
     let prompt = "";
     
     if (type === "moment") {
@@ -82,10 +86,12 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
-用户发了一条说说："${userPost}"
+你的好友"${userName}"发了一条说说："${userPost}"
+${userPersona ? `\n关于${userName}的信息: ${userPersona}` : ''}
 
-请以这个角色的身份回复这条说说，就像朋友评论一样。要求：
-- 符合角色性格
+请以这个角色的身份回复${userName}的说说，就像朋友评论一样。要求：
+- 符合你的角色性格
+- 要称呼对方的名字"${userName}"
 - 简短亲切，像朋友聊天
 - 可以使用emoji
 - 1-2句话即可`;
@@ -93,6 +99,7 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
     console.log(`Using provider: ${userApiKey ? provider : 'lovable-ai'}`);
     console.log(`API URL: ${apiUrl}`);
+    console.log(`User: ${userName}`);
 
     const response = await fetch(apiUrl, {
       method: "POST",
