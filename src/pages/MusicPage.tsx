@@ -37,6 +37,7 @@ const MusicPage: React.FC = () => {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const [selectedTrackIdForCover, setSelectedTrackIdForCover] = useState<string | null>(null);
+  const [defaultCoverUrl, setDefaultCoverUrl] = useState<string | null>(null);
 
   const currentTrack = currentTrackIndex >= 0 ? tracks[currentTrackIndex] : null;
 
@@ -98,7 +99,12 @@ const MusicPage: React.FC = () => {
       const title = file.name.replace(/\.[^/.]+$/, '');
       const { error: insertError } = await supabase
         .from('music')
-        .insert({ title, audio_url: urlData.publicUrl, user_id: user.id });
+        .insert({ 
+          title, 
+          audio_url: urlData.publicUrl, 
+          user_id: user.id,
+          cover_url: defaultCoverUrl // 使用默认封面
+        });
       
       if (insertError) throw insertError;
       
@@ -115,7 +121,7 @@ const MusicPage: React.FC = () => {
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const trackId = selectedTrackIdForCover;
-    if (!file || !user || !trackId) return;
+    if (!file || !user) return;
     
     try {
       const fileName = `covers/${user.id}/${Date.now()}_${file.name}`;
@@ -127,15 +133,21 @@ const MusicPage: React.FC = () => {
       
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
       
-      await supabase
-        .from('music')
-        .update({ cover_url: urlData.publicUrl })
-        .eq('id', trackId);
-      
-      toast.success('封面已更新');
-      fetchTracks();
+      if (trackId) {
+        // 更新指定歌曲的封面
+        await supabase
+          .from('music')
+          .update({ cover_url: urlData.publicUrl })
+          .eq('id', trackId);
+        toast.success('封面已更新');
+        fetchTracks();
+      } else {
+        // 没有选中歌曲时，设置为默认封面
+        setDefaultCoverUrl(urlData.publicUrl);
+        toast.success('封面已设置，上传歌曲时将自动使用此封面');
+      }
     } catch (err: any) {
-      toast.error('封面上传失败');
+      toast.error('封面上传失败: ' + err.message);
     }
     if (coverInputRef.current) coverInputRef.current.value = '';
     setSelectedTrackIdForCover(null);
@@ -248,10 +260,13 @@ const MusicPage: React.FC = () => {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  const triggerCoverUpload = (trackId: string) => {
+  const triggerCoverUpload = (trackId: string | null) => {
     setSelectedTrackIdForCover(trackId);
     setTimeout(() => coverInputRef.current?.click(), 0);
   };
+
+  // 获取当前显示的封面
+  const displayCoverUrl = currentTrack?.cover_url || defaultCoverUrl;
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col">
@@ -306,18 +321,12 @@ const MusicPage: React.FC = () => {
               animate={{ rotate: playing ? 360 : 0 }}
               transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
               className="relative w-56 h-56 rounded-full shadow-2xl overflow-hidden cursor-pointer group"
-              onClick={() => {
-                if (currentTrack) {
-                  triggerCoverUpload(currentTrack.id);
-                } else {
-                  toast.info('请先选择一首歌曲');
-                }
-              }}
+              onClick={() => triggerCoverUpload(currentTrack?.id || null)}
             >
               {/* 封面图片铺满整个唱片 */}
-              {currentTrack?.cover_url ? (
+              {displayCoverUrl ? (
                 <img 
-                  src={currentTrack.cover_url} 
+                  src={displayCoverUrl} 
                   alt="封面"
                   className="w-full h-full object-cover"
                 />
@@ -331,7 +340,7 @@ const MusicPage: React.FC = () => {
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <div className="text-center text-white">
                   <Image className="w-8 h-8 mx-auto mb-2" />
-                  <span className="text-sm">{currentTrack ? '点击更换封面' : '请先选择歌曲'}</span>
+                  <span className="text-sm">点击上传封面</span>
                 </div>
               </div>
               
