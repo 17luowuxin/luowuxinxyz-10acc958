@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.riddle-game]
 verify_jwt = false
+
+[functions.bottle-reply]
+verify_jwt = false
