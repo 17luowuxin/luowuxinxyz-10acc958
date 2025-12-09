@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Moon, Sun, Users, Skull, Shield, Eye, FlaskConical, Sword, Vote, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Users, Skull, Shield, Eye, FlaskConical, Sword, Vote, Play, RotateCcw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 
 interface Character {
@@ -51,6 +52,7 @@ const ROLE_COLORS: Record<string, string> = {
 const WerewolfPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { apiConfig, isConfigured } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [gameCharacters, setGameCharacters] = useState<GameCharacter[]>([]);
   const [gamePhase, setGamePhase] = useState<'setup' | 'night' | 'day' | 'vote' | 'end'>('setup');
@@ -154,6 +156,7 @@ const WerewolfPage: React.FC = () => {
             lastAction: logs.slice(-3).map(l => `${l.speaker}: ${l.content}`).join('\n'),
           },
           targetName,
+          apiConfig,
         },
       });
 
@@ -161,6 +164,7 @@ const WerewolfPage: React.FC = () => {
       return data.reply;
     } catch (error) {
       console.error('AI response error:', error);
+      toast.error('AI响应失败，请检查API配置');
       return '...';
     }
   };
@@ -378,8 +382,14 @@ const WerewolfPage: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold">狼人杀</h1>
+        {isConfigured && (
+          <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">自定义API</span>
+        )}
+        <button onClick={() => navigate('/settings')} className="p-2 rounded-full hover:bg-white/10 ml-auto">
+          <Settings className="w-5 h-5" />
+        </button>
         {gamePhase !== 'setup' && gamePhase !== 'end' && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {gamePhase === 'night' ? <Moon className="w-5 h-5 text-blue-400" /> : <Sun className="w-5 h-5 text-yellow-400" />}
             <span>第{round}天 {gamePhase === 'night' ? '夜晚' : gamePhase === 'day' ? '白天' : '投票'}</span>
           </div>

@@ -5,18 +5,82 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface AIConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
+async function getAICompletion(
+  messages: Array<{ role: string; content: string }>,
+  config: AIConfig
+): Promise<string> {
+  const useCustomApi = config.apiKey && config.baseUrl;
+  
+  let apiUrl: string;
+  let headers: Record<string, string>;
+  let model: string;
+
+  if (useCustomApi) {
+    let baseUrl = config.baseUrl!.replace(/\/$/, '');
+    if (!baseUrl.endsWith('/chat/completions')) {
+      baseUrl = `${baseUrl}/chat/completions`;
+    }
+    apiUrl = baseUrl;
+    headers = {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    };
+    model = config.model || 'deepseek-chat';
+    console.log('Using custom API:', apiUrl, 'model:', model);
+  } else {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+    apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    headers = {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    };
+    model = "google/gemini-2.5-flash";
+    console.log('Using Lovable AI Gateway');
+  }
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 200,
+      temperature: 0.9,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("AI API error:", response.status, errorText);
+    throw new Error(`AI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "...";
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    const { action, character, scriptRole, script, gameState, question, apiConfig } = await req.json();
 
-    const { action, character, scriptRole, script, gameState, question } = await req.json();
+    const config: AIConfig = {
+      apiKey: apiConfig?.apiKey,
+      baseUrl: apiConfig?.baseUrl,
+      model: apiConfig?.model,
+    };
 
     let systemPrompt = `你正在玩剧本杀游戏。你需要完全代入角色，根据剧本背景和你的角色设定来回复。
 剧本名称：${script.title}
@@ -49,29 +113,13 @@ ${scriptRole.isMurderer ? '【重要】你是凶手，需要隐藏自己的身�
 
     console.log('Script murder prompt:', userPrompt);
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const reply = data.choices[0].message.content;
+    const reply = await getAICompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      config
+    );
 
     console.log('Script murder reply:', reply);
 
