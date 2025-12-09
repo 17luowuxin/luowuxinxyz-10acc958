@@ -1,21 +1,16 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// 神秘AI角色列表
-const mysteryCharacters = [
-  { name: '深海人鱼', persona: '你是一个住在深海的神秘人鱼，说话优雅神秘，喜欢用海洋相关的比喻，偶尔会提到自己收集的人类宝物' },
-  { name: '月光精灵', persona: '你是一个只在月光下出现的精灵，说话轻柔梦幻，喜欢讲述星星和月亮的故事' },
-  { name: '时光旅人', persona: '你是一个穿越时空的旅人，见过很多时代的风景，说话带着沧桑和智慧，偶尔会不小心透露未来的小秘密' },
-  { name: '森林守护者', persona: '你是古老森林的守护者，性格温和善良，喜欢讲述动物和植物的趣事' },
-  { name: '云端邮差', persona: '你是在云端工作的邮差，负责传递人们的心愿，说话活泼开朗，喜欢分享自己看到的美景' },
-  { name: '梦境编织者', persona: '你是编织美梦的神秘存在，说话朦胧诗意，喜欢询问对方的梦想' },
-  { name: '极光猎人', persona: '你是追寻极光的冒险家，性格热情豪爽，喜欢分享极地的奇妙见闻' },
-  { name: '古堡幽灵', persona: '你是一个友善的古堡幽灵，已经存在了几百年，说话古雅有趣，喜欢吐槽现代人的习惯' },
+// 备用神秘角色（当用户没有创建角色时使用）
+const fallbackCharacters = [
+  { name: '神秘旅人', persona: '你是一个四处漂泊的神秘旅人，见过很多风景，说话温和有智慧' },
+  { name: '海边精灵', persona: '你是住在海边的小精灵，说话可爱活泼，喜欢讲述海洋的故事' },
 ];
 
 async function getAICompletion(messages: any[], apiConfig: any) {
@@ -49,6 +44,8 @@ async function getAICompletion(messages: any[], apiConfig: any) {
 
   headers['Authorization'] = `Bearer ${apiKey}`;
 
+  console.log('Calling AI API:', apiUrl, 'Model:', model);
+
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers,
@@ -71,21 +68,50 @@ serve(async (req) => {
   }
 
   try {
-    const { content, apiConfig } = await req.json();
-    console.log('Received bottle content:', content?.substring(0, 50));
+    const { content, apiConfig, userId } = await req.json();
+    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50));
 
-    // 随机选择一个神秘角色
-    const character = mysteryCharacters[Math.floor(Math.random() * mysteryCharacters.length)];
-    console.log('Selected character:', character.name);
+    // 创建Supabase客户端
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 获取用户创建的角色
+    let character: { name: string; persona: string };
+    
+    const { data: userCharacters, error } = await supabase
+      .from('characters')
+      .select('name, persona')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error fetching characters:', error);
+    }
+
+    if (userCharacters && userCharacters.length > 0) {
+      // 随机选择用户的一个角色
+      const randomIndex = Math.floor(Math.random() * userCharacters.length);
+      const selected = userCharacters[randomIndex];
+      character = {
+        name: selected.name,
+        persona: selected.persona || `你是${selected.name}，一个友善可爱的朋友`
+      };
+      console.log('Selected user character:', character.name);
+    } else {
+      // 没有角色时使用备用角色
+      const randomIndex = Math.floor(Math.random() * fallbackCharacters.length);
+      character = fallbackCharacters[randomIndex];
+      console.log('Using fallback character:', character.name);
+    }
 
     const systemPrompt = `${character.persona}
 
-你收到了一个漂流瓶，里面写着一段话。请以你的角色身份回复这个漂流瓶。
+你收到了一个来自好友的漂流瓶，里面写着一段话。请以你的角色身份回复这个漂流瓶。
 回复要求：
-- 保持角色特色，用第一人称回复
-- 回复要温暖有趣，给发送者带来惊喜
+- 保持你的角色特色，用第一人称回复
+- 回复要温暖有趣，像朋友聊天一样自然
 - 回复长度适中，50-150字左右
-- 可以适当询问或给予祝福`;
+- 可以适当询问、安慰或给予祝福`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
