@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 
 interface Moment {
@@ -39,6 +40,7 @@ interface Comment {
 const SpacePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { apiConfig, isConfigured } = useAPIConfig();
   const [friendMoments, setFriendMoments] = useState<Moment[]>([]);
   const [myMoments, setMyMoments] = useState<Moment[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
@@ -120,7 +122,14 @@ const SpacePage: React.FC = () => {
     try {
       for (const char of selectedChars) {
         const { data, error } = await supabase.functions.invoke('generate-moment', {
-          body: { character: char, type: 'moment' }
+          body: { 
+            character: char, 
+            type: 'moment',
+            userApiKey: apiConfig.apiKey,
+            provider: apiConfig.provider,
+            customBaseUrl: apiConfig.customBaseUrl,
+            customModel: apiConfig.customModel
+          }
         });
 
         if (error) throw error;
@@ -179,7 +188,11 @@ const SpacePage: React.FC = () => {
             body: { 
               character: char, 
               type: 'reply',
-              userPost: newPostContent.trim()
+              userPost: newPostContent.trim(),
+              userApiKey: apiConfig.apiKey,
+              provider: apiConfig.provider,
+              customBaseUrl: apiConfig.customBaseUrl,
+              customModel: apiConfig.customModel
             }
           });
 
@@ -252,7 +265,11 @@ const SpacePage: React.FC = () => {
           body: { 
             character: moment.character,
             type: 'reply',
-            userPost: content
+            userPost: content,
+            userApiKey: apiConfig.apiKey,
+            provider: apiConfig.provider,
+            customBaseUrl: apiConfig.customBaseUrl,
+            customModel: apiConfig.customModel
           }
         });
 
