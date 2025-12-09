@@ -208,96 +208,91 @@ const ChatPage: React.FC = () => {
   const bubbleSize = customization.bubble_size || 16;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Fixed Header */}
-      <div className="flex-shrink-0 flex items-center p-3 border-b bg-background/95 backdrop-blur-md z-10">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0">
+    <div className="fixed inset-0 flex flex-col bg-background">
+      {/* Fixed Header - 完全固定在顶部 */}
+      <header className="h-12 flex-shrink-0 flex items-center px-3 border-b bg-background/95 backdrop-blur-md z-20">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0 w-8 h-8">
           <ChevronLeft className="w-5 h-5" />
         </Button>
-        <div className="flex items-center gap-2 ml-1 min-w-0 flex-1">
-          <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-pink-200">
-            <AvatarImage src={character?.avatar_url} />
-            <AvatarFallback className="bg-gradient-to-br from-pink-200 to-purple-200 text-gray-600 text-xs">
-              {character?.name?.charAt(0) || '?'}
-            </AvatarFallback>
-          </Avatar>
-          <span className="font-semibold text-foreground text-sm truncate">{character?.name || '加载中...'}</span>
-        </div>
-      </div>
+        <span className="font-semibold text-foreground text-sm ml-2 truncate">{character?.name || '加载中...'}</span>
+      </header>
 
-      {/* Scrollable Messages Area - 固定高度，只有这里可以滚动 */}
-      <div 
-        className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3" 
+      {/* Scrollable Messages Area - 只有这个区域可以滚动 */}
+      <main 
+        className="flex-1 overflow-y-auto overscroll-none touch-pan-y"
         style={{ 
           backgroundImage: customization.chat_background_url 
             ? `url(${customization.chat_background_url})` 
             : 'linear-gradient(to bottom, hsl(var(--background)), hsl(var(--muted)))',
           backgroundSize: 'cover',
-          backgroundPosition: 'center'
+          backgroundPosition: 'center',
+          backgroundAttachment: 'local'
         }}
       >
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-            {/* Avatar - 缩小尺寸 */}
-            <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-white shadow-sm">
-              {msg.role === 'user' ? (
-                <>
-                  <AvatarImage src={profile?.avatar_url} />
-                  <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-xs text-gray-600">
-                    {profile?.nickname?.charAt(0) || '我'}
-                  </AvatarFallback>
-                </>
-              ) : (
-                <>
-                  <AvatarImage src={character?.avatar_url} />
-                  <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs text-gray-500">
-                    {character?.name?.charAt(0) || '?'}
-                  </AvatarFallback>
-                </>
-              )}
-            </Avatar>
-            
-            {/* Bubble */}
-            <div 
-              className={getBubbleStyle(msg.role === 'user')}
-              style={{ 
-                backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
-                opacity: bubbleOpacity,
-                color: '#333',
-                fontSize: `${bubbleSize}px`,
-                lineHeight: '1.5'
-              }}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
-        
-        {loading && (
-          <div className="flex items-start gap-2 flex-row">
-            <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-white shadow-sm">
-              <AvatarImage src={character?.avatar_url} />
-              <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs">
-                {character?.name?.charAt(0) || '?'}
-              </AvatarFallback>
-            </Avatar>
-            <div 
-              className="px-3 py-2 rounded-2xl rounded-bl-md shadow-sm" 
-              style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
-            >
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        <div className="p-3 space-y-3 pb-4">
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+              {/* Avatar - 在消息底部对齐 */}
+              <Avatar className="w-7 h-7 flex-shrink-0 border border-white/50 shadow-sm">
+                {msg.role === 'user' ? (
+                  <>
+                    <AvatarImage src={profile?.avatar_url} />
+                    <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-[10px] text-gray-600">
+                      {profile?.nickname?.charAt(0) || '我'}
+                    </AvatarFallback>
+                  </>
+                ) : (
+                  <>
+                    <AvatarImage src={character?.avatar_url} />
+                    <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-[10px] text-gray-500">
+                      {character?.name?.charAt(0) || '?'}
+                    </AvatarFallback>
+                  </>
+                )}
+              </Avatar>
+              
+              {/* Bubble */}
+              <div 
+                className={getBubbleStyle(msg.role === 'user')}
+                style={{ 
+                  backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
+                  opacity: bubbleOpacity,
+                  color: '#333',
+                  fontSize: `${bubbleSize}px`,
+                  lineHeight: '1.5'
+                }}
+              >
+                {msg.content}
               </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          ))}
+          
+          {loading && (
+            <div className="flex items-end gap-2 flex-row">
+              <Avatar className="w-7 h-7 flex-shrink-0 border border-white/50 shadow-sm">
+                <AvatarImage src={character?.avatar_url} />
+                <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-[10px]">
+                  {character?.name?.charAt(0) || '?'}
+                </AvatarFallback>
+              </Avatar>
+              <div 
+                className="px-3 py-2 rounded-2xl rounded-bl-md shadow-sm" 
+                style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
+              >
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </main>
 
-      {/* Fixed Input Bar - 固定在底部 */}
-      <div className="flex-shrink-0 p-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-10">
+      {/* Fixed Input Bar - 完全固定在底部 */}
+      <footer className="h-14 flex-shrink-0 px-2 py-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-20">
         <Popover open={showEmoji} onOpenChange={setShowEmoji}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
@@ -334,7 +329,7 @@ const ChatPage: React.FC = () => {
         >
           <Send className="w-4 h-4" />
         </Button>
-      </div>
+      </footer>
     </div>
   );
 };
