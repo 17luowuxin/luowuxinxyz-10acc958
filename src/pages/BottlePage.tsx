@@ -52,11 +52,20 @@ const BottlePage: React.FC = () => {
   };
 
   const deleteBottle = async (bottleId: string) => {
+    // 先更新UI
+    setBottles(prev => prev.filter(b => b.id !== bottleId));
+    
     try {
-      await supabase.from('bottles').delete().eq('id', bottleId);
-      setBottles(prev => prev.filter(b => b.id !== bottleId));
-      toast.success('已删除');
+      const { error } = await supabase.from('bottles').delete().eq('id', bottleId);
+      if (error) {
+        // 如果删除失败，重新获取数据
+        fetchBottles();
+        toast.error('删除失败');
+      } else {
+        toast.success('已删除');
+      }
     } catch (err) {
+      fetchBottles();
       toast.error('删除失败');
     }
   };
@@ -333,12 +342,7 @@ const BottlePage: React.FC = () => {
                         {bottle.reply}
                       </p>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pt-1">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      等待回复中...
-                    </div>
-                  )}
+                  ) : null}
                 </motion.div>
               ))}
             </div>
