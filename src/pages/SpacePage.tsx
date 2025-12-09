@@ -195,7 +195,7 @@ const SpacePage: React.FC = () => {
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
       const replyChars = shuffled.slice(0, numReplies);
 
-      // 异步生成回复
+      // 异步生成回复 - 使用随机选择的角色
       (async () => {
         for (const char of replyChars) {
           try {
@@ -208,7 +208,8 @@ const SpacePage: React.FC = () => {
                 provider: apiConfig.provider,
                 customBaseUrl: apiConfig.customBaseUrl,
                 customModel: apiConfig.customModel,
-                userProfile: userProfile
+                userProfile: userProfile,
+                replyCharacterId: char.id // 传递回复角色ID
               }
             });
 
@@ -216,10 +217,9 @@ const SpacePage: React.FC = () => {
               await supabase.from('comments').insert({
                 moment_id: momentData.id,
                 user_id: user?.id,
-                content: replyData.content,
+                content: `[${char.name}] ${replyData.content}`,
                 is_character_reply: true
               });
-              // 每次有新回复就刷新列表
               fetchAllMoments();
             }
           } catch (err) {
@@ -409,21 +409,28 @@ const SpacePage: React.FC = () => {
             exit={{ height: 0, opacity: 0 }}
             className="mt-2 space-y-2 overflow-hidden"
           >
-            {moment.comments?.map((comment) => (
-              <div 
-                key={comment.id}
-                className={`text-xs p-2 rounded-lg ${
-                  comment.is_character_reply 
-                    ? 'bg-primary/10 ml-3' 
-                    : 'bg-muted'
-                }`}
-              >
-                <span className="font-medium text-muted-foreground">
-                  {comment.is_character_reply ? moment.character?.name || 'AI' : '我'}:
-                </span>
-                <p className="mt-0.5">{comment.content}</p>
-              </div>
-            ))}
+            {moment.comments?.map((comment) => {
+              // 解析评论中的角色名（格式：[角色名] 内容）
+              const charMatch = comment.content.match(/^\[(.+?)\]\s*/);
+              const charName = charMatch ? charMatch[1] : (comment.is_character_reply ? moment.character?.name || 'AI' : '我');
+              const displayContent = charMatch ? comment.content.replace(/^\[.+?\]\s*/, '') : comment.content;
+              
+              return (
+                <div 
+                  key={comment.id}
+                  className={`text-xs p-2 rounded-lg ${
+                    comment.is_character_reply 
+                      ? 'bg-primary/10 ml-3' 
+                      : 'bg-muted'
+                  }`}
+                >
+                  <span className="font-medium text-muted-foreground">
+                    {comment.is_character_reply ? charName : '我'}:
+                  </span>
+                  <p className="mt-0.5">{displayContent}</p>
+                </div>
+              );
+            })}
 
             <div className="flex gap-2 pt-1">
               <Input
