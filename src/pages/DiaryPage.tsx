@@ -52,11 +52,11 @@ const DiaryPage: React.FC = () => {
   }, [user]);
 
   const fetchEntries = async () => {
-    const { data } = await supabase
-      .from('diaries')
+    const { data } = await (supabase
+      .from('diaries' as any)
       .select('*, characters(name, avatar_url)')
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as any);
     
     if (data) {
       setEntries(data.map((d: any) => ({
@@ -90,10 +90,10 @@ const DiaryPage: React.FC = () => {
     };
 
     if (editingEntry) {
-      await supabase.from('diaries').update(diaryData).eq('id', editingEntry.id);
+      await (supabase.from('diaries' as any) as any).update(diaryData).eq('id', editingEntry.id);
       toast.success('日记已更新');
     } else {
-      await supabase.from('diaries').insert(diaryData);
+      await (supabase.from('diaries' as any) as any).insert(diaryData);
       toast.success('日记已保存');
     }
 
@@ -103,7 +103,7 @@ const DiaryPage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await supabase.from('diaries').delete().eq('id', deleteId);
+    await (supabase.from('diaries' as any) as any).delete().eq('id', deleteId);
     toast.success('日记已删除');
     setDeleteId(null);
     fetchEntries();

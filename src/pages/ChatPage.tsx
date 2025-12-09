@@ -10,15 +10,92 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-// Common emojis for quick access
-const EMOJI_LIST = [
-  '😊', '😂', '🥰', '😍', '😘', '😋', '😎', '🤗',
-  '😭', '😢', '😤', '😡', '🥺', '😳', '🤔', '😏',
-  '👍', '👎', '👏', '🙏', '💪', '✌️', '🤝', '👋',
-  '❤️', '💕', '💖', '💗', '💓', '💔', '🖤', '💜',
-  '🎉', '🎊', '🎁', '🎂', '🌟', '⭐', '✨', '🔥',
-  '🌸', '🌺', '🌹', '🌻', '🌈', '☀️', '🌙', '💫',
-];
+// Emoji categories with comprehensive emoji list
+const EMOJI_CATEGORIES = {
+  recent: { icon: '🕐', name: '最近', emojis: [] as string[] },
+  smileys: { 
+    icon: '😊', 
+    name: '表情', 
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '😉', '😊', '😇',
+      '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪',
+      '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏',
+      '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕',
+      '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎',
+      '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦',
+      '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩',
+      '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡',
+      '👹', '👺', '👻', '👽', '👾', '🤖', '😺', '😸', '😹', '😻', '😼', '😽',
+      '🙀', '😿', '😾'
+    ]
+  },
+  love: { 
+    icon: '❤️', 
+    name: '爱心', 
+    emojis: [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕',
+      '💞', '💓', '💗', '💖', '💘', '💝', '💟', '♥️', '😍', '🥰', '😘', '😻',
+      '💑', '👩‍❤️‍👨', '👨‍❤️‍👨', '👩‍❤️‍👩', '💏', '👩‍❤️‍💋‍👨', '💐', '🌹', '🥀', '💋', '💌'
+    ]
+  },
+  gestures: { 
+    icon: '👋', 
+    name: '手势', 
+    emojis: [
+      '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘',
+      '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛',
+      '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾',
+      '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀',
+      '👁️', '👅', '👄', '💋'
+    ]
+  },
+  nature: { 
+    icon: '🌸', 
+    name: '自然', 
+    emojis: [
+      '🌸', '💮', '🏵️', '🌹', '🥀', '🌺', '🌻', '🌼', '🌷', '🌱', '🪴', '🌲',
+      '🌳', '🌴', '🌵', '🌾', '🌿', '☘️', '🍀', '🍁', '🍂', '🍃', '🌍', '🌎',
+      '🌏', '🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘', '🌙', '🌚', '🌛',
+      '🌜', '☀️', '🌝', '🌞', '⭐', '🌟', '🌠', '☁️', '⛅', '⛈️', '🌤️', '🌥️',
+      '🌦️', '🌧️', '🌨️', '🌩️', '🌪️', '🌫️', '🌈', '❄️', '☃️', '⛄', '🔥', '💧',
+      '🌊', '✨', '💫'
+    ]
+  },
+  food: { 
+    icon: '🍔', 
+    name: '美食', 
+    emojis: [
+      '🍇', '🍈', '🍉', '🍊', '🍋', '🍌', '🍍', '🥭', '🍎', '🍏', '🍐', '🍑',
+      '🍒', '🍓', '🫐', '🥝', '🍅', '🫒', '🥥', '🥑', '🍆', '🥔', '🥕', '🌽',
+      '🌶️', '🫑', '🥒', '🥬', '🥦', '🧄', '🧅', '🍄', '🥜', '🌰', '🍞', '🥐',
+      '🥖', '🫓', '🥨', '🥯', '🥞', '🧇', '🧀', '🍖', '🍗', '🥩', '🥓', '🍔',
+      '🍟', '🍕', '🌭', '🥪', '🌮', '🌯', '🫔', '🥙', '🧆', '🥚', '🍳', '🥘',
+      '🍲', '🫕', '🥣', '🥗', '🍿', '🧈', '🧂', '🥫', '🍱', '🍘', '🍙', '🍚',
+      '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', '🍡', '🥟', '🥠',
+      '🥡', '🦀', '🦞', '🦐', '🦑', '🦪', '🍦', '🍧', '🍨', '🍩', '🍪', '🎂',
+      '🍰', '🧁', '🥧', '🍫', '🍬', '🍭', '🍮', '🍯', '🍼', '🥛', '☕', '🫖',
+      '🍵', '🍶', '🍾', '🍷', '🍸', '🍹', '🍺', '🍻', '🥂', '🥃', '🥤', '🧋'
+    ]
+  },
+  activities: { 
+    icon: '🎉', 
+    name: '活动', 
+    emojis: [
+      '🎃', '🎄', '🎆', '🎇', '🧨', '✨', '🎈', '🎉', '🎊', '🎋', '🎍', '🎎',
+      '🎏', '🎐', '🎑', '🧧', '🎀', '🎁', '🎗️', '🎟️', '🎫', '🎖️', '🏆', '🏅',
+      '🥇', '🥈', '🥉', '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏',
+      '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁',
+      '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌', '🎿',
+      '⛷️', '🏂', '🪂', '🏋️', '🤸', '⛹️', '🤺', '🤾', '🏌️', '🏇', '⛑️', '🏊',
+      '🤽', '🧗', '🚵', '🚴', '🎪', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹',
+      '🥁', '🪘', '🎷', '🎺', '🪗', '🎸', '🪕', '🎻', '🎲', '♟️', '🎯', '🎳',
+      '🎮', '🎰', '🧩'
+    ]
+  }
+};
+
+// Keep a simple flat list for backward compatibility
+const EMOJI_LIST = EMOJI_CATEGORIES.smileys.emojis.slice(0, 48);
 
 const ChatPage: React.FC = () => {
   const { characterId } = useParams();
@@ -32,6 +109,7 @@ const ChatPage: React.FC = () => {
   const [customization, setCustomization] = useState<any>({});
   const [apiConfig, setApiConfig] = useState<any>({});
   const [showEmoji, setShowEmoji] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState<keyof typeof EMOJI_CATEGORIES>('smileys');
   const [longPressedMsg, setLongPressedMsg] = useState<any>(null);
   const [quotedMessage, setQuotedMessage] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -469,17 +547,34 @@ const ChatPage: React.FC = () => {
               <Smile className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="start" side="top">
-            <div className="grid grid-cols-8 gap-1">
-              {EMOJI_LIST.map((emoji) => (
+          <PopoverContent className="w-72 p-0 bg-background border shadow-lg z-50" align="start" side="top">
+            {/* Category tabs */}
+            <div className="flex items-center gap-0.5 p-1 border-b overflow-x-auto no-scrollbar">
+              {Object.entries(EMOJI_CATEGORIES).filter(([key]) => key !== 'recent').map(([key, category]) => (
                 <button
-                  key={emoji}
-                  onClick={() => addEmoji(emoji)}
-                  className="w-7 h-7 flex items-center justify-center text-base hover:bg-muted rounded-lg transition-colors"
+                  key={key}
+                  onClick={() => setActiveEmojiCategory(key as keyof typeof EMOJI_CATEGORIES)}
+                  className={`w-8 h-8 flex items-center justify-center text-lg rounded-lg transition-colors flex-shrink-0 ${
+                    activeEmojiCategory === key ? 'bg-primary/20' : 'hover:bg-muted'
+                  }`}
                 >
-                  {emoji}
+                  {category.icon}
                 </button>
               ))}
+            </div>
+            {/* Emoji grid */}
+            <div className="h-48 overflow-y-auto p-2">
+              <div className="grid grid-cols-8 gap-0.5">
+                {EMOJI_CATEGORIES[activeEmojiCategory]?.emojis.map((emoji, i) => (
+                  <button
+                    key={`${emoji}-${i}`}
+                    onClick={() => addEmoji(emoji)}
+                    className="w-7 h-7 flex items-center justify-center text-lg hover:bg-muted rounded-md transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
           </PopoverContent>
         </Popover>

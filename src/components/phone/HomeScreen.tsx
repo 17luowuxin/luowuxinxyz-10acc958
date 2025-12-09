@@ -18,6 +18,9 @@ import {
   Users,
   Lock,
   X,
+  BookOpen,
+  BarChart3,
+  Hammer,
   LucideIcon,
 } from 'lucide-react';
 
@@ -41,6 +44,9 @@ const defaultApps: AppConfig[] = [
   { id: 'music', name: '音乐', icon: Music, bgColor: 'bg-[#5C6BC0]', route: '/music' },
   { id: 'games', name: '游戏', icon: Gamepad2, bgColor: 'bg-[#FFA726]', route: '/games' },
   { id: 'bottle', name: '漂流瓶', icon: Mail, bgColor: 'bg-[#AB47BC]', route: '/bottle' },
+  { id: 'diary', name: '日记', icon: BookOpen, bgColor: 'bg-[#FF7043]', route: '/diary' },
+  { id: 'stats', name: '统计', icon: BarChart3, bgColor: 'bg-[#66BB6A]', route: '/stats' },
+  { id: 'workshop', name: '工坊', icon: Hammer, bgColor: 'bg-[#7E57C2]', route: '/workshop' },
 ];
 
 const HomeScreen: React.FC = () => {
