@@ -74,7 +74,7 @@ const BottlePage: React.FC = () => {
       setInput('');
       setShowCompose(false);
 
-      // 调用AI生成回复
+      // 调用AI生成回复（传入userId以获取用户的角色）
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bottle-reply`, {
         method: 'POST',
         headers: {
@@ -83,7 +83,8 @@ const BottlePage: React.FC = () => {
         },
         body: JSON.stringify({ 
           content: input.trim(),
-          apiConfig: apiConfig?.apiKey ? apiConfig : null
+          apiConfig: apiConfig?.apiKey ? apiConfig : null,
+          userId: user?.id
         }),
       });
 
