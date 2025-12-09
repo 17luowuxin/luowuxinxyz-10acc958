@@ -38,7 +38,12 @@ async function getAICompletion(messages: any[], apiConfig: any) {
         model = 'gpt-4o-mini';
         break;
       case 'custom':
-        apiUrl = apiConfig.customBaseUrl || 'https://api.deepseek.com/v1/chat/completions';
+        // 智能补全API路径
+        let customUrl = apiConfig.customBaseUrl || 'https://api.deepseek.com/v1';
+        if (!customUrl.includes('/chat/completions')) {
+          customUrl = customUrl.replace(/\/$/, '') + '/chat/completions';
+        }
+        apiUrl = customUrl;
         apiKey = apiConfig.apiKey;
         model = apiConfig.customModel || 'deepseek-chat';
         break;
