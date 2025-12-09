@@ -306,7 +306,13 @@ const MusicPage: React.FC = () => {
               animate={{ rotate: playing ? 360 : 0 }}
               transition={{ repeat: playing ? Infinity : 0, duration: 8, ease: 'linear' }}
               className="relative w-56 h-56 rounded-full shadow-2xl overflow-hidden cursor-pointer group"
-              onClick={() => currentTrack && triggerCoverUpload(currentTrack.id)}
+              onClick={() => {
+                if (currentTrack) {
+                  triggerCoverUpload(currentTrack.id);
+                } else {
+                  toast.info('请先选择一首歌曲');
+                }
+              }}
             >
               {/* 封面图片铺满整个唱片 */}
               {currentTrack?.cover_url ? (
@@ -322,10 +328,10 @@ const MusicPage: React.FC = () => {
               )}
               
               {/* 悬停上传提示 */}
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <div className="text-center text-white">
                   <Image className="w-8 h-8 mx-auto mb-2" />
-                  <span className="text-sm">点击更换封面</span>
+                  <span className="text-sm">{currentTrack ? '点击更换封面' : '请先选择歌曲'}</span>
                 </div>
               </div>
               
