@@ -29,8 +29,16 @@ import DiaryPage from "./pages/DiaryPage";
 import StatsPage from "./pages/StatsPage";
 import WorkshopPage from "./pages/WorkshopPage";
 import NotFound from "./pages/NotFound";
+import { useGlobalSettings } from "@/hooks/useGlobalSettings";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
+
+// Component to load global settings
+const GlobalSettingsLoader = ({ children }: { children: React.ReactNode }) => {
+  useGlobalSettings();
+  return <>{children}</>;
+};
 
 // Wrapper component for pages that need global background
 const WithPhoneFrame = ({ children }: { children: React.ReactNode }) => (
@@ -40,41 +48,43 @@ const WithPhoneFrame = ({ children }: { children: React.ReactNode }) => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <MusicProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/home" element={<Index />} />
-            <Route path="/lock" element={<Index />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/album" element={<WithPhoneFrame><AlbumPage /></WithPhoneFrame>} />
-            <Route path="/profile" element={<WithPhoneFrame><ProfilePage /></WithPhoneFrame>} />
-            <Route path="/settings" element={<WithPhoneFrame><SettingsPage /></WithPhoneFrame>} />
-            <Route path="/customize" element={<WithPhoneFrame><CustomizePage /></WithPhoneFrame>} />
-            <Route path="/friends" element={<WithPhoneFrame><FriendsPage /></WithPhoneFrame>} />
-            <Route path="/chat/:characterId" element={<WithPhoneFrame><ChatPage /></WithPhoneFrame>} />
-            <Route path="/space" element={<WithPhoneFrame><SpacePage /></WithPhoneFrame>} />
-            <Route path="/games" element={<WithPhoneFrame><GamesPage /></WithPhoneFrame>} />
-            <Route path="/werewolf" element={<WithPhoneFrame><WerewolfPage /></WithPhoneFrame>} />
-            <Route path="/script-murder" element={<WithPhoneFrame><ScriptMurderPage /></WithPhoneFrame>} />
-            <Route path="/truth-dare" element={<WithPhoneFrame><TruthDarePage /></WithPhoneFrame>} />
-            <Route path="/riddle" element={<WithPhoneFrame><RiddlePage /></WithPhoneFrame>} />
-            <Route path="/group" element={<WithPhoneFrame><GroupPage /></WithPhoneFrame>} />
-            <Route path="/group-chat/:groupId" element={<WithPhoneFrame><GroupChatPage /></WithPhoneFrame>} />
-            <Route path="/music" element={<WithPhoneFrame><MusicPage /></WithPhoneFrame>} />
-            <Route path="/bottle" element={<WithPhoneFrame><BottlePage /></WithPhoneFrame>} />
-            <Route path="/camera" element={<WithPhoneFrame><CameraPage /></WithPhoneFrame>} />
-            <Route path="/diary" element={<WithPhoneFrame><DiaryPage /></WithPhoneFrame>} />
-            <Route path="/stats" element={<WithPhoneFrame><StatsPage /></WithPhoneFrame>} />
-            <Route path="/workshop" element={<WithPhoneFrame><WorkshopPage /></WithPhoneFrame>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-      </MusicProvider>
+      <GlobalSettingsLoader>
+        <MusicProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/home" element={<Index />} />
+                <Route path="/lock" element={<Index />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/album" element={<WithPhoneFrame><AlbumPage /></WithPhoneFrame>} />
+                <Route path="/profile" element={<WithPhoneFrame><ProfilePage /></WithPhoneFrame>} />
+                <Route path="/settings" element={<WithPhoneFrame><SettingsPage /></WithPhoneFrame>} />
+                <Route path="/customize" element={<WithPhoneFrame><CustomizePage /></WithPhoneFrame>} />
+                <Route path="/friends" element={<WithPhoneFrame><FriendsPage /></WithPhoneFrame>} />
+                <Route path="/chat/:characterId" element={<WithPhoneFrame><ChatPage /></WithPhoneFrame>} />
+                <Route path="/space" element={<WithPhoneFrame><SpacePage /></WithPhoneFrame>} />
+                <Route path="/games" element={<WithPhoneFrame><GamesPage /></WithPhoneFrame>} />
+                <Route path="/werewolf" element={<WithPhoneFrame><WerewolfPage /></WithPhoneFrame>} />
+                <Route path="/script-murder" element={<WithPhoneFrame><ScriptMurderPage /></WithPhoneFrame>} />
+                <Route path="/truth-dare" element={<WithPhoneFrame><TruthDarePage /></WithPhoneFrame>} />
+                <Route path="/riddle" element={<WithPhoneFrame><RiddlePage /></WithPhoneFrame>} />
+                <Route path="/group" element={<WithPhoneFrame><GroupPage /></WithPhoneFrame>} />
+                <Route path="/group-chat/:groupId" element={<WithPhoneFrame><GroupChatPage /></WithPhoneFrame>} />
+                <Route path="/music" element={<WithPhoneFrame><MusicPage /></WithPhoneFrame>} />
+                <Route path="/bottle" element={<WithPhoneFrame><BottlePage /></WithPhoneFrame>} />
+                <Route path="/camera" element={<WithPhoneFrame><CameraPage /></WithPhoneFrame>} />
+                <Route path="/diary" element={<WithPhoneFrame><DiaryPage /></WithPhoneFrame>} />
+                <Route path="/stats" element={<WithPhoneFrame><StatsPage /></WithPhoneFrame>} />
+                <Route path="/workshop" element={<WithPhoneFrame><WorkshopPage /></WithPhoneFrame>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </MusicProvider>
+      </GlobalSettingsLoader>
     </AuthProvider>
   </QueryClientProvider>
 );

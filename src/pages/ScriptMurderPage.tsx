@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 import { SCRIPTS, Script, ScriptRole } from '@/data/scripts';
+import GameBGM from '@/components/GameBGM';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -925,6 +926,9 @@ const ScriptMurderPage: React.FC = () => {
 
       {/* Vote Dialog */}
       {renderVoteDialog()}
+
+      {/* Background Music */}
+      <GameBGM gameType="script-murder" isPlaying={gamePhase !== 'select' && gamePhase !== 'assign'} />
     </div>
   );
 };
