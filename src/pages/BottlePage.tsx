@@ -75,6 +75,7 @@ const BottlePage: React.FC = () => {
       setShowCompose(false);
 
       // 调用AI生成回复（传入userId以获取用户的角色）
+      console.log('Sending bottle with apiConfig:', apiConfig, 'userId:', user?.id);
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bottle-reply`, {
         method: 'POST',
         headers: {
@@ -83,7 +84,12 @@ const BottlePage: React.FC = () => {
         },
         body: JSON.stringify({ 
           content: input.trim(),
-          apiConfig: apiConfig?.apiKey ? apiConfig : null,
+          apiConfig: apiConfig?.apiKey ? {
+            apiKey: apiConfig.apiKey,
+            provider: apiConfig.provider,
+            customBaseUrl: apiConfig.customBaseUrl,
+            customModel: apiConfig.customModel,
+          } : null,
           userId: user?.id
         }),
       });
