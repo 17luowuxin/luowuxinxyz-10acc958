@@ -208,49 +208,49 @@ const ChatPage: React.FC = () => {
   const bubbleSize = customization.bubble_size || 16;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background/80 backdrop-blur-sm">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 flex items-center p-4 border-b bg-white/80 backdrop-blur-sm">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/friends')}>
-          <ChevronLeft className="w-6 h-6" />
+      <div className="flex-shrink-0 flex items-center p-3 border-b bg-background/95 backdrop-blur-md z-10">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0">
+          <ChevronLeft className="w-5 h-5" />
         </Button>
-        <div className="flex items-center gap-3 ml-2">
-          <Avatar className="w-10 h-10 border-2 border-pink-200">
+        <div className="flex items-center gap-2 ml-1 min-w-0 flex-1">
+          <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-pink-200">
             <AvatarImage src={character?.avatar_url} />
-            <AvatarFallback className="bg-gradient-to-br from-pink-200 to-purple-200 text-gray-600">
+            <AvatarFallback className="bg-gradient-to-br from-pink-200 to-purple-200 text-gray-600 text-xs">
               {character?.name?.charAt(0) || '?'}
             </AvatarFallback>
           </Avatar>
-          <span className="font-semibold text-gray-700">{character?.name || '加载中...'}</span>
+          <span className="font-semibold text-foreground text-sm truncate">{character?.name || '加载中...'}</span>
         </div>
       </div>
 
-      {/* Scrollable Messages Area */}
+      {/* Scrollable Messages Area - 固定高度，只有这里可以滚动 */}
       <div 
-        className="flex-1 overflow-y-auto p-4 space-y-4" 
+        className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3" 
         style={{ 
           backgroundImage: customization.chat_background_url 
             ? `url(${customization.chat_background_url})` 
-            : 'linear-gradient(to bottom, #fdf2f8, #faf5ff)',
+            : 'linear-gradient(to bottom, hsl(var(--background)), hsl(var(--muted)))',
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         }}
       >
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-            {/* Avatar */}
-            <Avatar className="w-10 h-10 flex-shrink-0 border-2 border-white shadow-sm">
+          <div key={msg.id} className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+            {/* Avatar - 缩小尺寸 */}
+            <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-white shadow-sm">
               {msg.role === 'user' ? (
                 <>
                   <AvatarImage src={profile?.avatar_url} />
-                  <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-sm text-gray-600">
+                  <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-xs text-gray-600">
                     {profile?.nickname?.charAt(0) || '我'}
                   </AvatarFallback>
                 </>
               ) : (
                 <>
                   <AvatarImage src={character?.avatar_url} />
-                  <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-sm text-gray-500">
+                  <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs text-gray-500">
                     {character?.name?.charAt(0) || '?'}
                   </AvatarFallback>
                 </>
@@ -274,21 +274,21 @@ const ChatPage: React.FC = () => {
         ))}
         
         {loading && (
-          <div className="flex items-start gap-3 flex-row">
-            <Avatar className="w-10 h-10 flex-shrink-0 border-2 border-white shadow-sm">
+          <div className="flex items-start gap-2 flex-row">
+            <Avatar className="w-8 h-8 flex-shrink-0 border-2 border-white shadow-sm">
               <AvatarImage src={character?.avatar_url} />
-              <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-sm">
+              <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-xs">
                 {character?.name?.charAt(0) || '?'}
               </AvatarFallback>
             </Avatar>
             <div 
-              className="px-4 py-3 rounded-2xl rounded-bl-md shadow-sm" 
+              className="px-3 py-2 rounded-2xl rounded-bl-md shadow-sm" 
               style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
             >
               <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -296,21 +296,21 @@ const ChatPage: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Fixed Input Bar */}
-      <div className="flex-shrink-0 p-4 border-t bg-white/80 backdrop-blur-sm flex items-center gap-2">
+      {/* Fixed Input Bar - 固定在底部 */}
+      <div className="flex-shrink-0 p-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-10">
         <Popover open={showEmoji} onOpenChange={setShowEmoji}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="flex-shrink-0 text-gray-500">
-              <Smile className="w-5 h-5" />
+            <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
+              <Smile className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-2" align="start">
+          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="start" side="top">
             <div className="grid grid-cols-8 gap-1">
               {EMOJI_LIST.map((emoji) => (
                 <button
                   key={emoji}
                   onClick={() => addEmoji(emoji)}
-                  className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-100 rounded-lg transition-colors"
+                  className="w-7 h-7 flex items-center justify-center text-base hover:bg-muted rounded-lg transition-colors"
                 >
                   {emoji}
                 </button>
@@ -324,15 +324,15 @@ const ChatPage: React.FC = () => {
           onChange={(e) => setInput(e.target.value)} 
           placeholder="输入消息..." 
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()} 
-          className="flex-1 rounded-full bg-gray-100 border-0" 
+          className="flex-1 h-9 rounded-full bg-muted border-0 text-sm" 
         />
         <Button 
           size="icon" 
           onClick={sendMessage} 
           disabled={loading}
-          className="rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
+          className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
         >
-          <Send className="w-5 h-5" />
+          <Send className="w-4 h-4" />
         </Button>
       </div>
     </div>
