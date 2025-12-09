@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Send, Settings, User } from 'lucide-react';
+import { ChevronLeft, Send, Settings, User, AtSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,7 @@ interface Message {
   created_at: string;
   characterName?: string;
   characterAvatar?: string;
+  mentionedCharacters?: string[];
 }
 
 const GroupChatPage: React.FC = () => {
@@ -30,7 +31,11 @@ const GroupChatPage: React.FC = () => {
   const [customization, setCustomization] = useState<any>({});
   const [apiConfig, setApiConfig] = useState<any>({});
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user && groupId) {
@@ -121,11 +126,63 @@ const GroupChatPage: React.FC = () => {
     if (data) setUserProfile(data);
   };
 
+  // 处理输入变化，检测@符号
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const position = e.target.selectionStart || 0;
+    setInput(value);
+    setCursorPosition(position);
+
+    // 检查是否在输入@
+    const textBeforeCursor = value.slice(0, position);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (atIndex !== -1 && (atIndex === 0 || textBeforeCursor[atIndex - 1] === ' ')) {
+      const filterText = textBeforeCursor.slice(atIndex + 1);
+      if (!filterText.includes(' ')) {
+        setMentionFilter(filterText.toLowerCase());
+        setShowMentionList(true);
+        return;
+      }
+    }
+    setShowMentionList(false);
+  };
+
+  // 选择@的角色
+  const selectMention = (member: any) => {
+    const textBeforeCursor = input.slice(0, cursorPosition);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    const textAfterCursor = input.slice(cursorPosition);
+    
+    const newInput = textBeforeCursor.slice(0, atIndex) + `@${member.name} ` + textAfterCursor;
+    setInput(newInput);
+    setShowMentionList(false);
+    inputRef.current?.focus();
+  };
+
+  // 从消息中解析被@的角色
+  const parseMentions = (text: string): string[] => {
+    const mentionedIds: string[] = [];
+    members.forEach(member => {
+      if (text.includes(`@${member.name}`)) {
+        mentionedIds.push(member.id);
+      }
+    });
+    return mentionedIds;
+  };
+
+  // 过滤符合条件的成员
+  const filteredMembers = members.filter(m => 
+    m.name.toLowerCase().includes(mentionFilter)
+  );
+
   const sendMessage = async () => {
     if (!input.trim() || loading || members.length === 0) return;
     
     const userMessage = input;
+    const mentionedCharacterIds = parseMentions(userMessage);
     setInput('');
+    setShowMentionList(false);
     setLoading(true);
 
     // 添加用户消息
@@ -144,7 +201,7 @@ const GroupChatPage: React.FC = () => {
     }
 
     try {
-      // 调用群聊API - 传递API配置
+      // 调用群聊API - 传递API配置和@的角色
       const body: any = {
         messages: messages.map(m => ({
           role: m.sender_type === 'user' ? 'user' : 'assistant',
@@ -152,7 +209,8 @@ const GroupChatPage: React.FC = () => {
         })),
         characters: members,
         userMessage,
-        userProfile
+        userProfile,
+        mentionedCharacterIds // 传递被@的角色ID
       };
 
       // 添加用户的API配置
@@ -317,23 +375,75 @@ const GroupChatPage: React.FC = () => {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t bg-card flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="在群里说点什么..."
-          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-          className="flex-1"
-          disabled={loading}
-        />
-        <Button 
-          variant="candy" 
-          size="icon" 
-          onClick={sendMessage} 
-          disabled={loading || !input.trim()}
-        >
-          <Send className="w-5 h-5" />
-        </Button>
+      <div className="relative p-4 border-t bg-card">
+        {/* @提及列表 */}
+        <AnimatePresence>
+          {showMentionList && filteredMembers.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute bottom-full left-4 right-4 mb-2 bg-card border rounded-lg shadow-lg max-h-48 overflow-y-auto"
+            >
+              <div className="p-2 text-xs text-muted-foreground border-b flex items-center gap-1">
+                <AtSign className="w-3 h-3" />
+                选择要@的角色
+              </div>
+              {filteredMembers.map((member) => (
+                <button
+                  key={member.id}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors"
+                  onClick={() => selectMention(member)}
+                >
+                  <div 
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                    style={{ backgroundColor: getCharacterColor(member.id) }}
+                  >
+                    {member.avatar_url ? (
+                      <img src={member.avatar_url} className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4" />
+                    )}
+                  </div>
+                  <span className="font-medium">{member.name}</span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setInput(prev => prev + '@');
+              setShowMentionList(true);
+              setMentionFilter('');
+              inputRef.current?.focus();
+            }}
+            disabled={loading}
+          >
+            <AtSign className="w-5 h-5" />
+          </Button>
+          <Input
+            ref={inputRef}
+            value={input}
+            onChange={handleInputChange}
+            placeholder="在群里说点什么... 输入@可以指定角色回复"
+            onKeyPress={(e) => e.key === 'Enter' && !showMentionList && sendMessage()}
+            className="flex-1"
+            disabled={loading}
+          />
+          <Button 
+            variant="candy" 
+            size="icon" 
+            onClick={sendMessage} 
+            disabled={loading || !input.trim()}
+          >
+            <Send className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
