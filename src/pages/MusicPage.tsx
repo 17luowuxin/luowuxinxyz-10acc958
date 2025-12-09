@@ -45,12 +45,25 @@ const MusicPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     
+    // 限制文件大小为 50MB
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('音乐文件过大，最大支持 50MB');
+      if (audioInputRef.current) audioInputRef.current.value = '';
+      return;
+    }
+    
     setUploading(true);
+    toast.info('正在上传...', { duration: 10000, id: 'uploading' });
+    
     try {
       const fileName = `${user.id}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('music')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
       
       if (uploadError) throw uploadError;
       
@@ -68,9 +81,11 @@ const MusicPage: React.FC = () => {
       
       if (insertError) throw insertError;
       
+      toast.dismiss('uploading');
       toast.success('音乐上传成功');
       fetchTracks();
     } catch (err: any) {
+      toast.dismiss('uploading');
       toast.error('上传失败: ' + err.message);
     } finally {
       setUploading(false);
@@ -92,22 +107,30 @@ const MusicPage: React.FC = () => {
       if (uploadError) throw uploadError;
       
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
+      const publicUrl = urlData.publicUrl;
       
       if (trackId) {
-        // RLS requires user_id match for update
-        const { error: updateError } = await supabase
+        // 直接更新数据库
+        const { data: updatedData, error: updateError } = await supabase
           .from('music')
-          .update({ cover_url: urlData.publicUrl })
+          .update({ cover_url: publicUrl })
           .eq('id', trackId)
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .select()
+          .single();
         
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Update error:', updateError);
+          throw updateError;
+        }
         
-        // Refetch tracks to update UI
+        console.log('Updated track:', updatedData);
+        
+        // 刷新曲目列表
         await fetchTracks();
         toast.success('封面已更新');
       } else {
-        setDefaultCoverUrl(urlData.publicUrl);
+        setDefaultCoverUrl(publicUrl);
         toast.success('封面已设置，上传歌曲时将自动使用此封面');
       }
     } catch (err: any) {
