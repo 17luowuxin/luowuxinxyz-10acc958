@@ -42,13 +42,13 @@ async function getAICompletion(messages: any[], apiConfig: any) {
         break;
       case 'custom':
         // 智能补全API路径
-        let customUrl = apiConfig.customBaseUrl || 'https://api.deepseek.com/v1';
+        let customUrl = apiConfig.baseUrl || 'https://api.deepseek.com/v1';
         if (!customUrl.includes('/chat/completions')) {
           customUrl = customUrl.replace(/\/$/, '') + '/chat/completions';
         }
         apiUrl = customUrl;
         apiKey = apiConfig.apiKey;
-        model = apiConfig.customModel || 'deepseek-chat';
+        model = apiConfig.model || 'deepseek-chat';
         break;
     }
   } else {

@@ -102,8 +102,8 @@ const BottlePage: React.FC = () => {
           apiConfig: apiConfig?.apiKey ? {
             apiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
-            customBaseUrl: apiConfig.customBaseUrl,
-            customModel: apiConfig.customModel,
+            baseUrl: apiConfig.baseUrl,
+            model: apiConfig.model,
           } : null,
           userId: user?.id
         }),

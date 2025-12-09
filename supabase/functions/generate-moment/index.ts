@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { character, type, userPost, userApiKey, provider, customBaseUrl, customModel, userProfile } = await req.json();
+    const { character, type, userPost, userApiKey, provider, baseUrl, model: customModel, userProfile } = await req.json();
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -32,9 +32,9 @@ serve(async (req) => {
         apiUrl = "https://api.openai.com/v1/chat/completions";
         model = "gpt-4o-mini";
         headers["Authorization"] = `Bearer ${apiKey}`;
-      } else if (provider === 'custom' && customBaseUrl) {
+      } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
-        let finalUrl = customBaseUrl.trim();
+        let finalUrl = baseUrl.trim();
         if (!finalUrl.endsWith('/chat/completions')) {
           if (!finalUrl.endsWith('/')) finalUrl += '/';
           if (!finalUrl.includes('/v1/')) finalUrl += 'v1/';

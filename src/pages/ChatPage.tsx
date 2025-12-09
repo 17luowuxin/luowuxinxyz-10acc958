@@ -164,8 +164,8 @@ const ChatPage: React.FC = () => {
         setApiConfig({ 
           provider: 'custom', 
           apiKey: customKey.api_key,
-          customBaseUrl: customBaseUrl?.api_key,
-          customModel: customModel?.api_key
+          baseUrl: customBaseUrl?.api_key,
+          model: customModel?.api_key
         });
       } else if (deepseekKey) {
         setApiConfig({ provider: 'deepseek', apiKey: deepseekKey.api_key });
@@ -280,8 +280,8 @@ const ChatPage: React.FC = () => {
       if (apiConfig.apiKey && apiConfig.provider) {
         body.userApiKey = apiConfig.apiKey;
         body.provider = apiConfig.provider;
-        if (apiConfig.customBaseUrl) body.customBaseUrl = apiConfig.customBaseUrl;
-        if (apiConfig.customModel) body.customModel = apiConfig.customModel;
+        if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
+        if (apiConfig.model) body.model = apiConfig.model;
       }
       
       // Use fetch directly for streaming
