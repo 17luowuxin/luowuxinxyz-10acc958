@@ -44,6 +44,7 @@ const SpacePage: React.FC = () => {
   const [friendMoments, setFriendMoments] = useState<Moment[]>([]);
   const [myMoments, setMyMoments] = useState<Moment[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<{ nickname?: string; persona?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
@@ -59,8 +60,18 @@ const SpacePage: React.FC = () => {
     if (user) {
       fetchCharacters();
       fetchAllMoments();
+      fetchUserProfile();
     }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('nickname, persona')
+      .eq('user_id', user?.id)
+      .maybeSingle();
+    if (data) setUserProfile(data);
+  };
 
   const fetchCharacters = async () => {
     const { data } = await supabase
@@ -196,7 +207,8 @@ const SpacePage: React.FC = () => {
                 userApiKey: apiConfig.apiKey,
                 provider: apiConfig.provider,
                 customBaseUrl: apiConfig.customBaseUrl,
-                customModel: apiConfig.customModel
+                customModel: apiConfig.customModel,
+                userProfile: userProfile
               }
             });
 
@@ -274,7 +286,8 @@ const SpacePage: React.FC = () => {
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
             customBaseUrl: apiConfig.customBaseUrl,
-            customModel: apiConfig.customModel
+            customModel: apiConfig.customModel,
+            userProfile: userProfile
           }
         });
 
