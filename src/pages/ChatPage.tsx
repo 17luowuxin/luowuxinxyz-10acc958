@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -31,7 +32,11 @@ const ChatPage: React.FC = () => {
   const [customization, setCustomization] = useState<any>({});
   const [apiConfig, setApiConfig] = useState<any>({});
   const [showEmoji, setShowEmoji] = useState(false);
+  const [longPressedMsg, setLongPressedMsg] = useState<any>(null);
+  const [quotedMessage, setQuotedMessage] = useState<any>(null);
+  const [showMenu, setShowMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user && characterId) {
@@ -113,18 +118,76 @@ const ChatPage: React.FC = () => {
     setShowEmoji(false);
   };
 
+  // 清空全部聊天记录
+  const clearAllMessages = async () => {
+    try {
+      await supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id);
+      setMessages([]);
+      toast.success('已清空全部聊天记录');
+    } catch (err) {
+      toast.error('清空失败');
+    }
+  };
+
+  // 从指定消息开始删除（回溯删除）
+  const deleteFromMessage = async (msg: any) => {
+    try {
+      const msgIndex = messages.findIndex(m => m.id === msg.id);
+      if (msgIndex === -1) return;
+      
+      const messagesToDelete = messages.slice(msgIndex);
+      const idsToDelete = messagesToDelete.map(m => m.id);
+      
+      await supabase.from('chat_messages').delete().in('id', idsToDelete);
+      setMessages(prev => prev.slice(0, msgIndex));
+      setLongPressedMsg(null);
+      toast.success('已删除该消息及之后的记录');
+    } catch (err) {
+      toast.error('删除失败');
+    }
+  };
+
+  // 引用消息
+  const quoteMessage = (msg: any) => {
+    setQuotedMessage(msg);
+    setLongPressedMsg(null);
+  };
+
+  // 长按开始
+  const handleTouchStart = (msg: any) => {
+    longPressTimer.current = setTimeout(() => {
+      setLongPressedMsg(msg);
+    }, 500);
+  };
+
+  // 长按结束
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
-    const userMessage = { role: 'user', content: input };
-    setMessages(prev => [...prev, { ...userMessage, id: Date.now() }]);
+    
+    // 构建消息内容，包含引用
+    let messageContent = input;
+    if (quotedMessage) {
+      messageContent = `[引用: "${quotedMessage.content.slice(0, 50)}${quotedMessage.content.length > 50 ? '...' : ''}"]\n${input}`;
+    }
+    
+    const userMessage = { role: 'user', content: messageContent };
+    setMessages(prev => [...prev, { ...userMessage, id: Date.now(), quotedMessage }]);
     setInput('');
+    setQuotedMessage(null);
     setLoading(true);
 
     await supabase.from('chat_messages').insert({ 
       user_id: user?.id, 
       character_id: characterId, 
       role: 'user', 
-      content: input 
+      content: messageContent 
     });
 
     try {
@@ -227,14 +290,55 @@ const ChatPage: React.FC = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0 w-8 h-8">
           <ChevronLeft className="w-5 h-5" />
         </Button>
-        <span className="font-semibold text-foreground text-sm ml-2 truncate">{character?.name || '加载中...'}</span>
+        <span className="font-semibold text-foreground text-sm ml-2 truncate flex-1">{character?.name || '加载中...'}</span>
+        
+        {/* 更多菜单 */}
+        <Popover open={showMenu} onOpenChange={setShowMenu}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="w-8 h-8">
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-40 p-1" align="end">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted rounded-md transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                  清空聊天记录
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认清空？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    这将删除与该角色的所有聊天记录，此操作不可撤销。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={clearAllMessages} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    确认清空
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </PopoverContent>
+        </Popover>
       </header>
 
       {/* Scrollable Messages Area - 只有这个区域可以滚动，背景透明 */}
       <main className="flex-1 overflow-y-auto overscroll-none touch-pan-y">
         <div className="p-3 space-y-3 pb-4">
           {messages.map((msg) => (
-            <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div 
+              key={msg.id} 
+              className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+              onTouchStart={() => handleTouchStart(msg)}
+              onTouchEnd={handleTouchEnd}
+              onMouseDown={() => handleTouchStart(msg)}
+              onMouseUp={handleTouchEnd}
+              onMouseLeave={handleTouchEnd}
+            >
               {/* Avatar - 在消息底部对齐 */}
               <Avatar className="w-7 h-7 flex-shrink-0 border border-white/50 shadow-sm">
                 {msg.role === 'user' ? (
@@ -256,7 +360,7 @@ const ChatPage: React.FC = () => {
               
               {/* Bubble */}
               <div 
-                className={getBubbleStyle(msg.role === 'user')}
+                className={`${getBubbleStyle(msg.role === 'user')} relative`}
                 style={{ 
                   backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
                   opacity: bubbleOpacity,
@@ -266,6 +370,51 @@ const ChatPage: React.FC = () => {
                 }}
               >
                 {msg.content}
+                
+                {/* 长按菜单 */}
+                {longPressedMsg?.id === msg.id && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-30">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 px-2 text-xs gap-1"
+                      onClick={() => quoteMessage(msg)}
+                    >
+                      <Quote className="w-3 h-3" />
+                      引用
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive">
+                          <RotateCcw className="w-3 h-3" />
+                          回溯
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>回溯删除？</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            这将删除该消息及之后的所有消息，以便重新开始对话。
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setLongPressedMsg(null)}>取消</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteFromMessage(msg)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            确认删除
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => setLongPressedMsg(null)}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -293,6 +442,24 @@ const ChatPage: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
       </main>
+
+      {/* 引用消息提示 */}
+      {quotedMessage && (
+        <div className="px-3 py-2 bg-muted/80 border-t flex items-center gap-2">
+          <Quote className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-xs text-muted-foreground truncate flex-1">
+            引用: {quotedMessage.content.slice(0, 40)}{quotedMessage.content.length > 40 ? '...' : ''}
+          </span>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="w-6 h-6 flex-shrink-0"
+            onClick={() => setQuotedMessage(null)}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
 
       {/* Fixed Input Bar - 完全固定在底部 */}
       <footer className="h-14 flex-shrink-0 px-2 py-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-20">
