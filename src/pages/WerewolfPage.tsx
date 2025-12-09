@@ -8,7 +8,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
-import GameBGM from '@/components/GameBGM';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,12 +84,23 @@ const WerewolfPage: React.FC = () => {
   const [showTargetDialog, setShowTargetDialog] = useState(false);
   const [targetAction, setTargetAction] = useState<string>('');
   const [killedByWolfThisNight, setKilledByWolfThisNight] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<{ avatar_url: string | null } | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchCharacters();
+      fetchUserProfile();
     }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('user_id', user!.id)
+      .maybeSingle();
+    if (data) setUserProfile(data);
+  };
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,7 +157,7 @@ const WerewolfPage: React.FC = () => {
         id: 'player',
         name: '我',
         persona: '玩家',
-        avatar_url: null,
+        avatar_url: userProfile?.avatar_url || null,
         role: shuffledRoles[0],
         isAlive: true,
         isRevealed: false,
@@ -1050,9 +1060,6 @@ const WerewolfPage: React.FC = () => {
 
       {/* Target Selection Dialog */}
       {renderTargetSelection()}
-
-      {/* Background Music */}
-      <GameBGM gameType="werewolf" isPlaying={gamePhase !== 'setup'} />
     </div>
   );
 };

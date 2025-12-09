@@ -94,17 +94,21 @@ const MusicPage: React.FC = () => {
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
       
       if (trackId) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('music')
           .update({ cover_url: urlData.publicUrl })
-          .eq('id', trackId);
+          .eq('id', trackId)
+          .eq('user_id', user.id);
+        
+        if (updateError) throw updateError;
         toast.success('封面已更新');
-        fetchTracks();
+        await fetchTracks();
       } else {
         setDefaultCoverUrl(urlData.publicUrl);
         toast.success('封面已设置，上传歌曲时将自动使用此封面');
       }
     } catch (err: any) {
+      console.error('Cover upload error:', err);
       toast.error('封面上传失败: ' + err.message);
     }
     if (coverInputRef.current) coverInputRef.current.value = '';
