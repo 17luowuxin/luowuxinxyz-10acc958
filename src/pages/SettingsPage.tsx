@@ -129,7 +129,7 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50/50 to-pink-100/30">
+    <div className="min-h-screen bg-background/70 backdrop-blur-sm">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 pb-2">
         <Button 

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import PhoneFrame from "@/components/phone/PhoneFrame";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import AlbumPage from "./pages/AlbumPage";
@@ -27,6 +28,11 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Wrapper component for pages that need global background
+const WithPhoneFrame = ({ children }: { children: React.ReactNode }) => (
+  <PhoneFrame>{children}</PhoneFrame>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -39,23 +45,23 @@ const App = () => (
             <Route path="/home" element={<Index />} />
             <Route path="/lock" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/album" element={<AlbumPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/customize" element={<CustomizePage />} />
-            <Route path="/friends" element={<FriendsPage />} />
-            <Route path="/chat/:characterId" element={<ChatPage />} />
-            <Route path="/space" element={<SpacePage />} />
-            <Route path="/games" element={<GamesPage />} />
-            <Route path="/werewolf" element={<WerewolfPage />} />
-            <Route path="/script-murder" element={<ScriptMurderPage />} />
-            <Route path="/truth-dare" element={<TruthDarePage />} />
-            <Route path="/riddle" element={<RiddlePage />} />
-            <Route path="/group" element={<GroupPage />} />
-            <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
-            <Route path="/music" element={<MusicPage />} />
-            <Route path="/bottle" element={<BottlePage />} />
-            <Route path="/camera" element={<CameraPage />} />
+            <Route path="/album" element={<WithPhoneFrame><AlbumPage /></WithPhoneFrame>} />
+            <Route path="/profile" element={<WithPhoneFrame><ProfilePage /></WithPhoneFrame>} />
+            <Route path="/settings" element={<WithPhoneFrame><SettingsPage /></WithPhoneFrame>} />
+            <Route path="/customize" element={<WithPhoneFrame><CustomizePage /></WithPhoneFrame>} />
+            <Route path="/friends" element={<WithPhoneFrame><FriendsPage /></WithPhoneFrame>} />
+            <Route path="/chat/:characterId" element={<WithPhoneFrame><ChatPage /></WithPhoneFrame>} />
+            <Route path="/space" element={<WithPhoneFrame><SpacePage /></WithPhoneFrame>} />
+            <Route path="/games" element={<WithPhoneFrame><GamesPage /></WithPhoneFrame>} />
+            <Route path="/werewolf" element={<WithPhoneFrame><WerewolfPage /></WithPhoneFrame>} />
+            <Route path="/script-murder" element={<WithPhoneFrame><ScriptMurderPage /></WithPhoneFrame>} />
+            <Route path="/truth-dare" element={<WithPhoneFrame><TruthDarePage /></WithPhoneFrame>} />
+            <Route path="/riddle" element={<WithPhoneFrame><RiddlePage /></WithPhoneFrame>} />
+            <Route path="/group" element={<WithPhoneFrame><GroupPage /></WithPhoneFrame>} />
+            <Route path="/group-chat/:groupId" element={<WithPhoneFrame><GroupChatPage /></WithPhoneFrame>} />
+            <Route path="/music" element={<WithPhoneFrame><MusicPage /></WithPhoneFrame>} />
+            <Route path="/bottle" element={<WithPhoneFrame><BottlePage /></WithPhoneFrame>} />
+            <Route path="/camera" element={<WithPhoneFrame><CameraPage /></WithPhoneFrame>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

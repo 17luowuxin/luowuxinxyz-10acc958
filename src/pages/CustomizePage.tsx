@@ -140,7 +140,7 @@ const CustomizePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background/80 backdrop-blur-sm">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center">

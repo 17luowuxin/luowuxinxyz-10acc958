@@ -70,7 +70,12 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-        testUrl = baseUrl;
+        // Append /chat/completions if not already present
+        let finalUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
+        if (!finalUrl.endsWith('/chat/completions')) {
+          finalUrl = `${finalUrl}/chat/completions`;
+        }
+        testUrl = finalUrl;
         testHeaders = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
