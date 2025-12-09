@@ -83,18 +83,22 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 - 可以使用emoji
 - 不要加引号`;
     } else if (type === "reply") {
+      // 用户昵称简化处理，避免总是叫全名
+      const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
+      
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
-你的好友"${userName}"发了一条说说："${userPost}"
-${userPersona ? `\n关于${userName}的信息: ${userPersona}` : ''}
+你的好友发了一条说说："${userPost}"
+${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
-请以这个角色的身份回复${userName}的说说，就像朋友评论一样。要求：
-- 符合你的角色性格
-- 要称呼对方的名字"${userName}"
-- 简短亲切，像朋友聊天
+请以你的角色身份回复这条说说。要求：
+- 符合你的角色性格和说话方式
+- 回复要针对说说的具体内容
+- 不要每次都叫对方名字，偶尔叫"${shortName}"或用亲昵称呼如"亲"、"宝"等
+- 简短自然，像朋友评论
 - 可以使用emoji
-- 1-2句话即可`;
+- 1-2句话`;
     }
 
     console.log(`Using provider: ${userApiKey ? provider : 'lovable-ai'}`);
