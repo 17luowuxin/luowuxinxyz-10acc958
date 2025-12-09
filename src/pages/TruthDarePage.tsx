@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Heart, Zap, Users, Loader2, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Heart, Zap, Users, Loader2, RotateCcw, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 
 interface Character {
@@ -26,6 +27,7 @@ interface GameLog {
 const TruthDarePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { apiConfig, isConfigured } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
   const [gamePhase, setGamePhase] = useState<'setup' | 'playing' | 'choosing' | 'asking' | 'answering'>('setup');
@@ -62,12 +64,13 @@ const TruthDarePage: React.FC = () => {
   const getAIResponse = async (action: string, character: Character, targetCharacter: Character, gameHistory: string = '') => {
     try {
       const { data, error } = await supabase.functions.invoke('truth-dare', {
-        body: { action, character, targetCharacter, gameHistory }
+        body: { action, character, targetCharacter, gameHistory, apiConfig }
       });
       if (error) throw error;
       return data.reply;
     } catch (error) {
       console.error('AI response error:', error);
+      toast.error('AI响应失败，请检查API配置');
       return '...';
     }
   };
@@ -202,12 +205,20 @@ const TruthDarePage: React.FC = () => {
           <h1 className="text-xl font-bold ml-2 bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
             真心话大冒险
           </h1>
+          {isConfigured && (
+            <span className="ml-2 text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">自定义API</span>
+          )}
         </div>
-        {gamePhase !== 'setup' && (
-          <Button variant="outline" size="sm" onClick={resetGame}>
-            <RotateCcw className="w-4 h-4 mr-1" /> 重新开始
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} className="text-gray-500">
+            <Settings className="w-5 h-5" />
           </Button>
-        )}
+          {gamePhase !== 'setup' && (
+            <Button variant="outline" size="sm" onClick={resetGame}>
+              <RotateCcw className="w-4 h-4 mr-1" /> 重新开始
+            </Button>
+          )}
+        </div>
       </div>
 
       {gamePhase === 'setup' ? (

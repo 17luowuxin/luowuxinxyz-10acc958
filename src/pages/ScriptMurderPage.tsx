@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, Clock, Star, Play, MessageCircle, Vote, Eye, RotateCcw, Shuffle } from 'lucide-react';
+import { ArrowLeft, Users, Clock, Star, Play, MessageCircle, Vote, Eye, RotateCcw, Shuffle, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 import { SCRIPTS, Script, ScriptRole } from '@/data/scripts';
 
@@ -31,6 +32,7 @@ interface GameLog {
 const ScriptMurderPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { apiConfig, isConfigured } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedScript, setSelectedScript] = useState<Script | null>(null);
   const [players, setPlayers] = useState<GamePlayer[]>([]);
@@ -134,6 +136,7 @@ const ScriptMurderPage: React.FC = () => {
             recentSpeeches: logs.slice(-5).filter(l => l.phase === 'discuss').map(l => `${l.speaker}: ${l.content}`),
           },
           question,
+          apiConfig,
         },
       });
 
@@ -141,6 +144,7 @@ const ScriptMurderPage: React.FC = () => {
       return data.reply;
     } catch (error) {
       console.error('AI response error:', error);
+      toast.error('AI响应失败，请检查API配置');
       return '...';
     }
   };
@@ -276,8 +280,14 @@ const ScriptMurderPage: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold">剧本杀</h1>
+        {isConfigured && (
+          <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">自定义API</span>
+        )}
+        <button onClick={() => navigate('/settings')} className="p-2 rounded-full hover:bg-white/10 ml-auto">
+          <Settings className="w-5 h-5" />
+        </button>
         {selectedScript && gamePhase !== 'select' && (
-          <span className="ml-auto text-sm text-white/60">{selectedScript.title}</span>
+          <span className="text-sm text-white/60">{selectedScript.title}</span>
         )}
       </div>
 
