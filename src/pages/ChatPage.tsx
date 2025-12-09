@@ -209,6 +209,19 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
+      {/* 固定背景层 - 不随滚动移动 */}
+      <div 
+        className="absolute inset-0 -z-10"
+        style={{ 
+          backgroundImage: customization.chat_background_url 
+            ? `url(${customization.chat_background_url})` 
+            : 'linear-gradient(to bottom, hsl(var(--background)), hsl(var(--muted)))',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      />
+
       {/* Fixed Header - 完全固定在顶部 */}
       <header className="h-12 flex-shrink-0 flex items-center px-3 border-b bg-background/95 backdrop-blur-md z-20">
         <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0 w-8 h-8">
@@ -217,18 +230,8 @@ const ChatPage: React.FC = () => {
         <span className="font-semibold text-foreground text-sm ml-2 truncate">{character?.name || '加载中...'}</span>
       </header>
 
-      {/* Scrollable Messages Area - 只有这个区域可以滚动 */}
-      <main 
-        className="flex-1 overflow-y-auto overscroll-none touch-pan-y"
-        style={{ 
-          backgroundImage: customization.chat_background_url 
-            ? `url(${customization.chat_background_url})` 
-            : 'linear-gradient(to bottom, hsl(var(--background)), hsl(var(--muted)))',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'local'
-        }}
-      >
+      {/* Scrollable Messages Area - 只有这个区域可以滚动，背景透明 */}
+      <main className="flex-1 overflow-y-auto overscroll-none touch-pan-y">
         <div className="p-3 space-y-3 pb-4">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
