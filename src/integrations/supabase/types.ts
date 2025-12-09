@@ -255,6 +255,47 @@ export type Database = {
         }
         Relationships: []
       }
+      diaries: {
+        Row: {
+          character_id: string | null
+          content: string
+          created_at: string
+          id: string
+          mood: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          character_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          mood?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          mood?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diaries_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_chats: {
         Row: {
           avatar_url: string | null
@@ -457,6 +498,41 @@ export type Database = {
           },
         ]
       }
+      presets: {
+        Row: {
+          character_id: string | null
+          content: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          character_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "presets_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -483,6 +559,33 @@ export type Database = {
           nickname?: string | null
           persona?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      world_books: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_global: boolean
+          name: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name?: string
           user_id?: string
         }
         Relationships: []

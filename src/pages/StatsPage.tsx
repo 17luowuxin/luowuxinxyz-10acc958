@@ -49,10 +49,10 @@ const StatsPage: React.FC = () => {
       .eq('user_id', user?.id);
 
     // 获取日记数
-    const { count: diaryCount } = await supabase
-      .from('diaries')
+    const { count: diaryCount } = await (supabase
+      .from('diaries' as any)
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user?.id);
+      .eq('user_id', user?.id) as any);
 
     // 获取照片数
     const { count: photoCount } = await supabase

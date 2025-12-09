@@ -25,6 +25,9 @@ import WerewolfPage from "./pages/WerewolfPage";
 import ScriptMurderPage from "./pages/ScriptMurderPage";
 import TruthDarePage from "./pages/TruthDarePage";
 import RiddlePage from "./pages/RiddlePage";
+import DiaryPage from "./pages/DiaryPage";
+import StatsPage from "./pages/StatsPage";
+import WorkshopPage from "./pages/WorkshopPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,6 +67,9 @@ const App = () => (
             <Route path="/music" element={<WithPhoneFrame><MusicPage /></WithPhoneFrame>} />
             <Route path="/bottle" element={<WithPhoneFrame><BottlePage /></WithPhoneFrame>} />
             <Route path="/camera" element={<WithPhoneFrame><CameraPage /></WithPhoneFrame>} />
+            <Route path="/diary" element={<WithPhoneFrame><DiaryPage /></WithPhoneFrame>} />
+            <Route path="/stats" element={<WithPhoneFrame><StatsPage /></WithPhoneFrame>} />
+            <Route path="/workshop" element={<WithPhoneFrame><WorkshopPage /></WithPhoneFrame>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -72,11 +72,11 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchPresets = async () => {
-    const { data } = await supabase
-      .from('presets')
+    const { data } = await (supabase
+      .from('presets' as any)
       .select('*, characters(name)')
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as any);
     if (data) {
       setPresets(data.map((p: any) => ({
         ...p,
@@ -86,11 +86,11 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchWorldBooks = async () => {
-    const { data } = await supabase
-      .from('world_books')
+    const { data } = await (supabase
+      .from('world_books' as any)
       .select('*')
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as any);
     if (data) setWorldBooks(data);
   };
 
@@ -108,10 +108,10 @@ const WorkshopPage: React.FC = () => {
     };
 
     if (editingPreset) {
-      await supabase.from('presets').update(presetData).eq('id', editingPreset.id);
+      await (supabase.from('presets' as any) as any).update(presetData).eq('id', editingPreset.id);
       toast.success('预设已更新');
     } else {
-      await supabase.from('presets').insert(presetData);
+      await (supabase.from('presets' as any) as any).insert(presetData);
       toast.success('预设已创建');
     }
 
@@ -133,10 +133,10 @@ const WorkshopPage: React.FC = () => {
     };
 
     if (editingWorldBook) {
-      await supabase.from('world_books').update(worldBookData).eq('id', editingWorldBook.id);
+      await (supabase.from('world_books' as any) as any).update(worldBookData).eq('id', editingWorldBook.id);
       toast.success('世界书已更新');
     } else {
-      await supabase.from('world_books').insert(worldBookData);
+      await (supabase.from('world_books' as any) as any).insert(worldBookData);
       toast.success('世界书已创建');
     }
 
@@ -148,11 +148,11 @@ const WorkshopPage: React.FC = () => {
     if (!deleteId) return;
     
     if (deleteId.type === 'preset') {
-      await supabase.from('presets').delete().eq('id', deleteId.id);
+      await (supabase.from('presets' as any) as any).delete().eq('id', deleteId.id);
       toast.success('预设已删除');
       fetchPresets();
     } else if (deleteId.type === 'worldbook') {
-      await supabase.from('world_books').delete().eq('id', deleteId.id);
+      await (supabase.from('world_books' as any) as any).delete().eq('id', deleteId.id);
       toast.success('世界书已删除');
       fetchWorldBooks();
     }
