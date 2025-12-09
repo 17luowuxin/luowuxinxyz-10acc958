@@ -125,7 +125,7 @@ const MusicPage: React.FC = () => {
     if (!file || !user) return;
     
     try {
-      const fileName = `covers/${user.id}/${Date.now()}_${file.name}`;
+      const fileName = `${user.id}/covers/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('music')
         .upload(fileName, file);
