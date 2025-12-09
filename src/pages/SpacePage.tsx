@@ -44,7 +44,7 @@ const SpacePage: React.FC = () => {
   const [friendMoments, setFriendMoments] = useState<Moment[]>([]);
   const [myMoments, setMyMoments] = useState<Moment[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
-  const [userProfile, setUserProfile] = useState<{ nickname?: string; persona?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ nickname?: string; persona?: string; avatar_url?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
@@ -67,7 +67,7 @@ const SpacePage: React.FC = () => {
   const fetchUserProfile = async () => {
     const { data } = await supabase
       .from('profiles')
-      .select('nickname, persona')
+      .select('nickname, persona, avatar_url')
       .eq('user_id', user?.id)
       .maybeSingle();
     if (data) setUserProfile(data);
@@ -346,7 +346,11 @@ const SpacePage: React.FC = () => {
       <div className="flex items-center gap-2 mb-2">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/60 to-primary flex items-center justify-center overflow-hidden">
           {moment.is_user_post ? (
-            <User className="w-5 h-5 text-primary-foreground" />
+            userProfile?.avatar_url ? (
+              <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="我的头像" />
+            ) : (
+              <User className="w-5 h-5 text-primary-foreground" />
+            )
           ) : moment.character?.avatar_url ? (
             <img src={moment.character.avatar_url} className="w-full h-full object-cover" />
           ) : (
@@ -355,7 +359,7 @@ const SpacePage: React.FC = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate">
-            {moment.is_user_post ? '我' : moment.character?.name || '未知角色'}
+            {moment.is_user_post ? (userProfile?.nickname || '我') : moment.character?.name || '未知角色'}
           </p>
           <p className="text-xs text-muted-foreground">{formatTime(moment.created_at)}</p>
         </div>
