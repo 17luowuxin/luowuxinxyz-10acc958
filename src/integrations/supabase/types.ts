@@ -595,6 +595,7 @@ export type Database = {
       }
       world_books: {
         Row: {
+          character_id: string | null
           content: string
           created_at: string
           id: string
@@ -603,6 +604,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          character_id?: string | null
           content: string
           created_at?: string
           id?: string
@@ -611,6 +613,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          character_id?: string | null
           content?: string
           created_at?: string
           id?: string
@@ -618,7 +621,15 @@ export type Database = {
           name?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "world_books_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
