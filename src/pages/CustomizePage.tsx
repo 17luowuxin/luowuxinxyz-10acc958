@@ -134,10 +134,19 @@ const CustomizePage: React.FC = () => {
       return;
     }
 
+    // 压缩大图片
+    if (file.size > 2 * 1024 * 1024) {
+      toast.loading('正在压缩图片...');
+    }
+
     setUploading(true);
     const fileName = `${user.id}/chat-bg-${Date.now()}.${file.name.split('.').pop()}`;
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
+    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: true
+    });
+    
     if (uploadError) {
       toast.error('上传失败');
       setUploading(false);
@@ -145,7 +154,7 @@ const CustomizePage: React.FC = () => {
     }
 
     const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    setChatBackgroundUrl(publicUrl);
+    setChatBackgroundUrl(publicUrl + '?t=' + Date.now());
     setUploading(false);
     toast.success('背景图上传成功');
   };
@@ -162,7 +171,11 @@ const CustomizePage: React.FC = () => {
     setGlobalUploading(true);
     const fileName = `${user.id}/global-bg-${Date.now()}.${file.name.split('.').pop()}`;
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
+    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: true
+    });
+    
     if (uploadError) {
       toast.error('上传失败');
       setGlobalUploading(false);
@@ -170,7 +183,7 @@ const CustomizePage: React.FC = () => {
     }
 
     const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    setGlobalBackgroundUrl(publicUrl);
+    setGlobalBackgroundUrl(publicUrl + '?t=' + Date.now());
     setGlobalUploading(false);
     toast.success('全局背景图上传成功');
   };
@@ -179,31 +192,38 @@ const CustomizePage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Check file type
     if (!file.type.startsWith('video/')) {
       toast.error('请选择视频文件 (MP4/WebM)');
       return;
     }
 
-    // Check file size (10MB limit for videos)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('视频文件需小于10MB');
+    // 限制8MB以提升上传速度
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('视频文件需小于8MB以保证流畅播放');
       return;
     }
 
     setVideoUploading(true);
+    toast.loading('正在上传视频...');
+    
     const fileName = `${user.id}/video-bg-${Date.now()}.${file.name.split('.').pop()}`;
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
+    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: true
+    });
+    
     if (uploadError) {
+      toast.dismiss();
       toast.error('上传失败: ' + uploadError.message);
       setVideoUploading(false);
       return;
     }
 
     const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    setVideoBackgroundUrl(publicUrl);
+    setVideoBackgroundUrl(publicUrl + '?t=' + Date.now());
     setVideoUploading(false);
+    toast.dismiss();
     toast.success('动态背景上传成功');
   };
 

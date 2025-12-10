@@ -40,13 +40,10 @@ serve(async (req) => {
         headers["anthropic-version"] = "2023-06-01";
       } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
-        // Ensure the URL ends with /chat/completions
-        let finalUrl = baseUrl.trim();
+        // 简化URL拼接逻辑，移除末尾斜杠后追加/chat/completions
+        let finalUrl = baseUrl.trim().replace(/\/+$/, '');
         if (!finalUrl.endsWith('/chat/completions')) {
-          if (!finalUrl.endsWith('/')) finalUrl += '/';
-          if (!finalUrl.includes('/v1/')) finalUrl += 'v1/';
-          if (!finalUrl.endsWith('/')) finalUrl += 'chat/completions';
-          else finalUrl += 'chat/completions';
+          finalUrl = `${finalUrl}/chat/completions`;
         }
         apiUrl = finalUrl;
         model = customModel || "deepseek-chat";
