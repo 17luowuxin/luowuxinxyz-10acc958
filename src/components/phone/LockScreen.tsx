@@ -60,12 +60,15 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const fetchCustomization = async () => {
     const { data } = await supabase
       .from('customization')
-      .select('lock_screen_bg_url')
+      .select('lock_screen_bg_url, lock_screen_video_url')
       .eq('user_id', user!.id)
       .single();
     
     if (data?.lock_screen_bg_url) {
       setBgUrl(data.lock_screen_bg_url);
+    }
+    if ((data as any)?.lock_screen_video_url) {
+      setVideoBgUrl((data as any).lock_screen_video_url);
     }
   };
 
@@ -85,7 +88,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -134,7 +137,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file);
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
 
