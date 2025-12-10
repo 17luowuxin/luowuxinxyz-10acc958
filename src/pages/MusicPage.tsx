@@ -93,10 +93,15 @@ const MusicPage: React.FC = () => {
     }
   };
 
+  const [uploadingCover, setUploadingCover] = useState(false);
+
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const trackId = selectedTrackIdForCover;
     if (!file || !user) return;
+    
+    setUploadingCover(true);
+    toast.info('正在上传封面...', { id: 'cover-uploading', duration: 30000 });
     
     try {
       const fileName = `${user.id}/covers/${Date.now()}_${file.name}`;
@@ -110,7 +115,6 @@ const MusicPage: React.FC = () => {
       const publicUrl = urlData.publicUrl;
       
       if (trackId) {
-        // 直接更新数据库
         const { data: updatedData, error: updateError } = await supabase
           .from('music')
           .update({ cover_url: publicUrl })
@@ -124,19 +128,21 @@ const MusicPage: React.FC = () => {
           throw updateError;
         }
         
-        console.log('Updated track:', updatedData);
-        
-        // 刷新曲目列表
         await fetchTracks();
+        toast.dismiss('cover-uploading');
         toast.success('封面已更新');
       } else {
         // 保存默认封面到数据库
         await saveDefaultCover(publicUrl);
+        toast.dismiss('cover-uploading');
         toast.success('唱片封面已保存');
       }
     } catch (err: any) {
       console.error('Cover upload error:', err);
+      toast.dismiss('cover-uploading');
       toast.error('封面上传失败: ' + err.message);
+    } finally {
+      setUploadingCover(false);
     }
     if (coverInputRef.current) coverInputRef.current.value = '';
     setSelectedTrackIdForCover(null);
@@ -260,12 +266,21 @@ const MusicPage: React.FC = () => {
                 </div>
               )}
               
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                <div className="text-center text-white">
-                  <Image className="w-6 h-6 mx-auto mb-1" />
-                  <span className="text-xs">点击上传封面</span>
+              {uploadingCover ? (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                  <div className="text-center text-white">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-1" />
+                    <span className="text-xs">上传中...</span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <div className="text-center text-white">
+                    <Image className="w-6 h-6 mx-auto mb-1" />
+                    <span className="text-xs">点击上传封面</span>
+                  </div>
+                </div>
+              )}
               
               <div className="absolute inset-0 rounded-full pointer-events-none">
                 <div className="absolute inset-0 rounded-full border-2 border-black/20" />
