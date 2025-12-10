@@ -352,6 +352,34 @@ const ChatPage: React.FC = () => {
   const bubbleSize = customization.bubble_size || 16;
   const fontColor = (customization as any).font_color || '#333333';
   const friendFontColor = (customization as any).friend_font_color || '#333333';
+  
+  // 气泡框预设
+  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string }> = {
+    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5' },
+    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF' },
+    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066' },
+    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8' },
+    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF' },
+  };
+  
+  const userBubbleFrame = (customization as any).bubble_frame_url || '';
+  const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
+  
+  const getUserBubbleStyle = () => {
+    const frame = bubbleFramePresets[userBubbleFrame];
+    if (frame) {
+      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+    }
+    return { backgroundColor: userBubbleColor };
+  };
+  
+  const getFriendBubbleStyle = () => {
+    const frame = bubbleFramePresets[friendBubbleFrame];
+    if (frame) {
+      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+    }
+    return { backgroundColor: friendBubbleColor };
+  };
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
@@ -445,7 +473,7 @@ const ChatPage: React.FC = () => {
               <div 
                 className={`${getBubbleStyle(msg.role === 'user')} relative`}
                 style={{ 
-                  backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
+                  ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
                   opacity: bubbleOpacity,
                   color: msg.role === 'user' ? fontColor : friendFontColor,
                   fontSize: `${bubbleSize}px`,

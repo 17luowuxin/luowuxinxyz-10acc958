@@ -414,6 +414,34 @@ const GroupChatPage: React.FC = () => {
   const fontColor = (customization as any).font_color || '#333333';
   const friendFontColor = (customization as any).friend_font_color || '#333333';
 
+  // 气泡框预设
+  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string }> = {
+    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5' },
+    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF' },
+    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066' },
+    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8' },
+    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF' },
+  };
+  
+  const userBubbleFrame = (customization as any).bubble_frame_url || '';
+  const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
+  
+  const getUserBubbleStyle = () => {
+    const frame = bubbleFramePresets[userBubbleFrame];
+    if (frame) {
+      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+    }
+    return { backgroundColor: customization.bubble_color || '#FFB5C5' };
+  };
+  
+  const getFriendBubbleStyle = () => {
+    const frame = bubbleFramePresets[friendBubbleFrame];
+    if (frame) {
+      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+    }
+    return { backgroundColor: getCharacterBubbleColor() };
+  };
+
   // 四格头像组件
   const GroupAvatar = () => {
     const displayMembers = members.slice(0, 4);
@@ -573,9 +601,7 @@ const GroupChatPage: React.FC = () => {
                 <div
                   className={getBubbleStyle(msg.sender_type === 'user')}
                   style={{
-                    backgroundColor: msg.sender_type === 'user' 
-                      ? (customization.bubble_color || '#FFB5C5')
-                      : getCharacterBubbleColor(),
+                    ...(msg.sender_type === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
                     opacity: customization.bubble_opacity || 1,
                     color: msg.sender_type === 'user' ? fontColor : friendFontColor,
                     fontSize: `${customization.bubble_size || 16}px`,
