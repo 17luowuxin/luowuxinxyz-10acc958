@@ -75,11 +75,14 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchPresets = async () => {
-    const { data } = await (supabase
-      .from('presets' as any)
+    const { data, error } = await supabase
+      .from('presets')
       .select('*, characters(name)')
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false }) as any);
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Fetch presets error:', error);
+    }
     if (data) {
       setPresets(data.map((p: any) => ({
         ...p,
@@ -89,11 +92,14 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchWorldBooks = async () => {
-    const { data } = await (supabase
-      .from('world_books' as any)
+    const { data, error } = await supabase
+      .from('world_books')
       .select('*, characters(name)')
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false }) as any);
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Fetch world books error:', error);
+    }
     if (data) {
       setWorldBooks(data.map((wb: any) => ({
         ...wb,
@@ -108,23 +114,30 @@ const WorkshopPage: React.FC = () => {
       return;
     }
 
-    const presetData = {
-      user_id: user?.id,
-      name: presetName.trim(),
-      content: presetContent.trim(),
-      character_id: presetCharacter
-    };
+    try {
+      const presetData = {
+        user_id: user?.id,
+        name: presetName.trim(),
+        content: presetContent.trim(),
+        character_id: presetCharacter
+      };
 
-    if (editingPreset) {
-      await (supabase.from('presets' as any) as any).update(presetData).eq('id', editingPreset.id);
-      toast.success('预设已更新');
-    } else {
-      await (supabase.from('presets' as any) as any).insert(presetData);
-      toast.success('预设已创建');
+      if (editingPreset) {
+        const { error } = await supabase.from('presets').update(presetData).eq('id', editingPreset.id);
+        if (error) throw error;
+        toast.success('预设已更新');
+      } else {
+        const { error } = await supabase.from('presets').insert(presetData);
+        if (error) throw error;
+        toast.success('预设已创建');
+      }
+
+      resetPresetForm();
+      fetchPresets();
+    } catch (err: any) {
+      console.error('Save preset error:', err);
+      toast.error('保存失败: ' + (err.message || '未知错误'));
     }
-
-    resetPresetForm();
-    fetchPresets();
   };
 
   const handleSaveWorldBook = async () => {
@@ -133,37 +146,51 @@ const WorkshopPage: React.FC = () => {
       return;
     }
 
-    const worldBookData = {
-      user_id: user?.id,
-      name: worldBookName.trim(),
-      content: worldBookContent.trim(),
-      is_global: worldBookGlobal,
-      character_id: worldBookGlobal ? null : worldBookCharacter
-    };
+    try {
+      const worldBookData = {
+        user_id: user?.id,
+        name: worldBookName.trim(),
+        content: worldBookContent.trim(),
+        is_global: worldBookGlobal,
+        character_id: worldBookGlobal ? null : worldBookCharacter
+      };
 
-    if (editingWorldBook) {
-      await (supabase.from('world_books' as any) as any).update(worldBookData).eq('id', editingWorldBook.id);
-      toast.success('世界书已更新');
-    } else {
-      await (supabase.from('world_books' as any) as any).insert(worldBookData);
-      toast.success('世界书已创建');
+      if (editingWorldBook) {
+        const { error } = await supabase.from('world_books').update(worldBookData).eq('id', editingWorldBook.id);
+        if (error) throw error;
+        toast.success('世界书已更新');
+      } else {
+        const { error } = await supabase.from('world_books').insert(worldBookData);
+        if (error) throw error;
+        toast.success('世界书已创建');
+      }
+
+      resetWorldBookForm();
+      fetchWorldBooks();
+    } catch (err: any) {
+      console.error('Save world book error:', err);
+      toast.error('保存失败: ' + (err.message || '未知错误'));
     }
-
-    resetWorldBookForm();
-    fetchWorldBooks();
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     
-    if (deleteId.type === 'preset') {
-      await (supabase.from('presets' as any) as any).delete().eq('id', deleteId.id);
-      toast.success('预设已删除');
-      fetchPresets();
-    } else if (deleteId.type === 'worldbook') {
-      await (supabase.from('world_books' as any) as any).delete().eq('id', deleteId.id);
-      toast.success('世界书已删除');
-      fetchWorldBooks();
+    try {
+      if (deleteId.type === 'preset') {
+        const { error } = await supabase.from('presets').delete().eq('id', deleteId.id);
+        if (error) throw error;
+        toast.success('预设已删除');
+        fetchPresets();
+      } else if (deleteId.type === 'worldbook') {
+        const { error } = await supabase.from('world_books').delete().eq('id', deleteId.id);
+        if (error) throw error;
+        toast.success('世界书已删除');
+        fetchWorldBooks();
+      }
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      toast.error('删除失败');
     }
     
     setDeleteId(null);
