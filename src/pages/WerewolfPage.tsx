@@ -85,6 +85,11 @@ const WerewolfPage: React.FC = () => {
   const [targetAction, setTargetAction] = useState<string>('');
   const [killedByWolfThisNight, setKilledByWolfThisNight] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ avatar_url: string | null } | null>(null);
+  
+  // 新增：角色选择状态
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
+  const [playerRole, setPlayerRole] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -131,6 +136,84 @@ const WerewolfPage: React.FC = () => {
     return gameCharacters.find(c => c.isPlayer);
   };
 
+  // 打开角色选择界面
+  const openRoleSelection = (withPlayer: boolean) => {
+    const requiredCount = withPlayer ? 5 : 6;
+    if (characters.length < requiredCount) {
+      toast.error(`需要至少${requiredCount}个好友角色才能开始游戏`);
+      return;
+    }
+    setPlayerMode(withPlayer);
+    setSelectedCharacters([]);
+    setPlayerRole(null);
+    setShowRoleSelection(true);
+  };
+
+  // 切换角色选择
+  const toggleCharacterSelection = (char: Character) => {
+    setSelectedCharacters(prev => {
+      if (prev.find(c => c.id === char.id)) {
+        return prev.filter(c => c.id !== char.id);
+      }
+      const maxCount = playerMode ? 7 : 8;
+      if (prev.length >= maxCount) {
+        toast.error(`最多选择${maxCount}个角色`);
+        return prev;
+      }
+      return [...prev, char];
+    });
+  };
+
+  // 开始自定义游戏
+  const startCustomGame = () => {
+    const requiredCount = playerMode ? 5 : 6;
+    if (selectedCharacters.length < requiredCount) {
+      toast.error(`请选择至少${requiredCount}个好友角色`);
+      return;
+    }
+    
+    const totalPlayers = selectedCharacters.length + (playerMode ? 1 : 0);
+    const shuffledRoles = shuffleArray(ROLES.slice(0, totalPlayers));
+    
+    let gameChars: GameCharacter[] = selectedCharacters.map((char, index) => ({
+      ...char,
+      role: shuffledRoles[playerMode ? index + 1 : index],
+      isAlive: true,
+      isRevealed: false,
+      isPlayer: false,
+    }));
+
+    if (playerMode) {
+      const playerChar: GameCharacter = {
+        id: 'player',
+        name: '我',
+        persona: '玩家',
+        avatar_url: userProfile?.avatar_url || null,
+        role: playerRole || shuffledRoles[0],
+        isAlive: true,
+        isRevealed: false,
+        isPlayer: true,
+      };
+      gameChars = [playerChar, ...gameChars];
+    }
+
+    setGameCharacters(shuffleArray(gameChars));
+    setGamePhase('night');
+    setRound(1);
+    setLogs([]);
+    setWinner(null);
+    setWitchPotions({ heal: true, poison: true });
+    setLastGuarded(null);
+    setShowRoleSelection(false);
+
+    addLog('系统', '游戏开始！天黑请闭眼...', 'night', 1);
+    
+    if (playerMode) {
+      const player = gameChars.find(c => c.isPlayer);
+      addLog('系统', `你的身份是：${player?.role}`, 'night', 1);
+    }
+  };
+
   const startGame = (withPlayer: boolean) => {
     const requiredAICount = withPlayer ? 5 : 6;
     if (characters.length < requiredAICount) {
@@ -140,10 +223,10 @@ const WerewolfPage: React.FC = () => {
 
     setPlayerMode(withPlayer);
     const totalPlayers = Math.min(8, characters.length + (withPlayer ? 1 : 0));
-    const selectedCharacters = characters.slice(0, withPlayer ? totalPlayers - 1 : totalPlayers);
+    const selectedChars = characters.slice(0, withPlayer ? totalPlayers - 1 : totalPlayers);
     const shuffledRoles = shuffleArray(ROLES.slice(0, totalPlayers));
     
-    let gameChars: GameCharacter[] = selectedCharacters.map((char, index) => ({
+    let gameChars: GameCharacter[] = selectedChars.map((char, index) => ({
       ...char,
       role: shuffledRoles[withPlayer ? index + 1 : index],
       isAlive: true,
@@ -220,12 +303,21 @@ const WerewolfPage: React.FC = () => {
         },
       });
 
-      if (error) throw error;
-      return data.reply;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'AI连接失败');
+      }
+      
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+      
+      return data.reply || '...';
     } catch (error) {
       console.error('AI response error:', error);
-      toast.error('AI响应失败，请检查API配置');
-      return '...';
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      toast.error(`AI响应失败: ${errorMessage}`);
+      return '...（连接失败，请重试）';
     }
   };
 
@@ -827,8 +919,8 @@ const WerewolfPage: React.FC = () => {
               }`}
             >
               <Eye className="w-10 h-10 mb-4 text-purple-400" />
-              <h3 className="font-bold text-lg mb-2">观战模式</h3>
-              <p className="text-sm text-white/60">观看AI角色们进行游戏</p>
+              <h3 className="font-bold text-lg mb-2">快速观战</h3>
+              <p className="text-sm text-white/60">随机分配角色</p>
               <p className="text-xs text-white/40 mt-2">需要6-8个AI角色</p>
             </motion.div>
 
@@ -842,10 +934,23 @@ const WerewolfPage: React.FC = () => {
               }`}
             >
               <User className="w-10 h-10 mb-4 text-pink-400" />
-              <h3 className="font-bold text-lg mb-2">玩家模式</h3>
-              <p className="text-sm text-white/60">与AI角色一起参与游戏</p>
+              <h3 className="font-bold text-lg mb-2">快速参与</h3>
+              <p className="text-sm text-white/60">随机分配身份</p>
               <p className="text-xs text-white/40 mt-2">需要5-7个AI角色</p>
             </motion.div>
+          </div>
+
+          {/* 自定义选择按钮 */}
+          <div className="mb-6">
+            <Button
+              onClick={() => openRoleSelection(true)}
+              variant="outline"
+              className="w-full border-white/20 text-white hover:bg-white/10"
+              disabled={characters.length < 5}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              自定义选择好友角色参与游戏
+            </Button>
           </div>
 
           <div className="mb-6">
