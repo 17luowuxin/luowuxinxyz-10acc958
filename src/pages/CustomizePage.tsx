@@ -1,11 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X, Type } from 'lucide-react';
+import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X, Type, User, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+
+// 预设头像框
+import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
+
+// 预设气泡框
+import sanrioBubbles from '@/assets/bubble-frames/sanrio-bubbles.png';
+
+const avatarFramePresets = [
+  { id: 'none', name: '无', url: '' },
+  { id: 'dream', name: '梦幻', url: dreamFrame },
+];
+
+const bubbleFramePresets = [
+  { id: 'none', name: '无', url: '' },
+  { id: 'sanrio-pink', name: '粉色', url: sanrioBubbles, cropIndex: 0 },
+  { id: 'sanrio-blue', name: '蓝色', url: sanrioBubbles, cropIndex: 1 },
+  { id: 'sanrio-yellow', name: '黄色', url: sanrioBubbles, cropIndex: 2 },
+  { id: 'sanrio-green', name: '绿色', url: sanrioBubbles, cropIndex: 3 },
+];
 
 // Pastel macaron colors
 const macaronColors = [
@@ -78,6 +97,10 @@ const CustomizePage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const [avatarFrame, setAvatarFrame] = useState('');
+  const [friendAvatarFrame, setFriendAvatarFrame] = useState('');
+  const [bubbleFrame, setBubbleFrame] = useState('');
+  const [friendBubbleFrame, setFriendBubbleFrame] = useState('');
   useEffect(() => {
     if (user) fetchSettings();
   }, [user]);
@@ -122,6 +145,10 @@ const CustomizePage: React.FC = () => {
       if ((data as any).font_family) setCurrentFont((data as any).font_family);
       if ((data as any).font_color) setFontColor((data as any).font_color);
       if ((data as any).friend_font_color) setFriendFontColor((data as any).friend_font_color);
+      if ((data as any).avatar_frame_url) setAvatarFrame((data as any).avatar_frame_url);
+      if ((data as any).friend_avatar_frame_url) setFriendAvatarFrame((data as any).friend_avatar_frame_url);
+      if ((data as any).bubble_frame_url) setBubbleFrame((data as any).bubble_frame_url);
+      if ((data as any).friend_bubble_frame_url) setFriendBubbleFrame((data as any).friend_bubble_frame_url);
     }
   };
 
@@ -252,6 +279,10 @@ const CustomizePage: React.FC = () => {
       font_family: currentFont,
       font_color: fontColor,
       friend_font_color: friendFontColor,
+      avatar_frame_url: avatarFrame,
+      friend_avatar_frame_url: friendAvatarFrame,
+      bubble_frame_url: bubbleFrame,
+      friend_bubble_frame_url: friendBubbleFrame,
     } as any, { onConflict: 'user_id' });
     
     if (error) {
@@ -485,6 +516,153 @@ const CustomizePage: React.FC = () => {
           </div>
         </div>
 
+        {/* Avatar Frame Selection */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-4">
+            <User className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">头像框</h3>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-3">用户头像框</p>
+              <div className="flex gap-3 flex-wrap">
+                {avatarFramePresets.map(frame => (
+                  <button
+                    key={frame.id}
+                    onClick={() => setAvatarFrame(frame.url)}
+                    className={`relative w-20 h-20 rounded-xl border-2 transition-all overflow-hidden ${
+                      avatarFrame === frame.url 
+                        ? 'border-primary ring-2 ring-primary/30' 
+                        : 'border-muted hover:border-primary/50'
+                    }`}
+                  >
+                    {frame.url ? (
+                      <img src={frame.url} alt={frame.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
+                        无
+                      </div>
+                    )}
+                    {avatarFrame === frame.url && (
+                      <Check className="absolute bottom-1 right-1 w-4 h-4 text-primary bg-background rounded-full p-0.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium mb-3">角色头像框</p>
+              <div className="flex gap-3 flex-wrap">
+                {avatarFramePresets.map(frame => (
+                  <button
+                    key={frame.id}
+                    onClick={() => setFriendAvatarFrame(frame.url)}
+                    className={`relative w-20 h-20 rounded-xl border-2 transition-all overflow-hidden ${
+                      friendAvatarFrame === frame.url 
+                        ? 'border-secondary ring-2 ring-secondary/30' 
+                        : 'border-muted hover:border-secondary/50'
+                    }`}
+                  >
+                    {frame.url ? (
+                      <img src={frame.url} alt={frame.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
+                        无
+                      </div>
+                    )}
+                    {friendAvatarFrame === frame.url && (
+                      <Check className="absolute bottom-1 right-1 w-4 h-4 text-secondary bg-background rounded-full p-0.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bubble Frame Selection */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-4">
+            <MessageCircle className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">气泡框</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">选择可爱的气泡框装饰聊天</p>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-3">用户气泡框</p>
+              <div className="flex gap-3 flex-wrap">
+                {bubbleFramePresets.map(frame => (
+                  <button
+                    key={frame.id}
+                    onClick={() => setBubbleFrame(frame.id === 'none' ? '' : frame.id)}
+                    className={`relative w-20 h-16 rounded-xl border-2 transition-all overflow-hidden ${
+                      (frame.id === 'none' && !bubbleFrame) || bubbleFrame === frame.id
+                        ? 'border-primary ring-2 ring-primary/30' 
+                        : 'border-muted hover:border-primary/50'
+                    }`}
+                  >
+                    {frame.id !== 'none' ? (
+                      <div 
+                        className="w-full h-full"
+                        style={{
+                          backgroundImage: `url(${frame.url})`,
+                          backgroundSize: '400% 100%',
+                          backgroundPosition: `${(frame.cropIndex || 0) * 33.33}% 0`,
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
+                        无
+                      </div>
+                    )}
+                    {((frame.id === 'none' && !bubbleFrame) || bubbleFrame === frame.id) && (
+                      <Check className="absolute bottom-1 right-1 w-4 h-4 text-primary bg-background rounded-full p-0.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium mb-3">角色气泡框</p>
+              <div className="flex gap-3 flex-wrap">
+                {bubbleFramePresets.map(frame => (
+                  <button
+                    key={frame.id}
+                    onClick={() => setFriendBubbleFrame(frame.id === 'none' ? '' : frame.id)}
+                    className={`relative w-20 h-16 rounded-xl border-2 transition-all overflow-hidden ${
+                      (frame.id === 'none' && !friendBubbleFrame) || friendBubbleFrame === frame.id
+                        ? 'border-secondary ring-2 ring-secondary/30' 
+                        : 'border-muted hover:border-secondary/50'
+                    }`}
+                  >
+                    {frame.id !== 'none' ? (
+                      <div 
+                        className="w-full h-full"
+                        style={{
+                          backgroundImage: `url(${frame.url})`,
+                          backgroundSize: '400% 100%',
+                          backgroundPosition: `${(frame.cropIndex || 0) * 33.33}% 0`,
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
+                        无
+                      </div>
+                    )}
+                    {((frame.id === 'none' && !friendBubbleFrame) || friendBubbleFrame === frame.id) && (
+                      <Check className="absolute bottom-1 right-1 w-4 h-4 text-secondary bg-background rounded-full p-0.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* User bubble settings */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <h3 className="font-bold text-lg mb-4">用户气泡</h3>
@@ -643,13 +821,23 @@ const CustomizePage: React.FC = () => {
               >
                 你好呀~
               </div>
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-xs text-gray-600 flex-shrink-0">
-                我
+              <div className="relative w-10 h-10 flex-shrink-0">
+                {avatarFrame && (
+                  <img src={avatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10" />
+                )}
+                <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-xs text-gray-600">
+                  我
+                </div>
               </div>
             </div>
             <div className="flex justify-start items-end gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-xs text-gray-500 flex-shrink-0">
-                友
+              <div className="relative w-10 h-10 flex-shrink-0">
+                {friendAvatarFrame && (
+                  <img src={friendAvatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10" />
+                )}
+                <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-xs text-gray-500">
+                  友
+                </div>
               </div>
               <div 
                 className={getBubblePreviewClass(bubbleStyle, false)}
