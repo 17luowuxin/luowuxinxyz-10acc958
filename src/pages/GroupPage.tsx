@@ -53,30 +53,47 @@ const GroupPage: React.FC = () => {
       return;
     }
 
-    const { data: group, error } = await supabase
-      .from('group_chats')
-      .insert({ user_id: user?.id, name: groupName })
-      .select()
-      .single();
+    try {
+      const { data: group, error } = await supabase
+        .from('group_chats')
+        .insert({ user_id: user?.id, name: groupName })
+        .select()
+        .single();
 
-    if (error || !group) {
-      toast.error('创建失败');
-      return;
+      if (error) {
+        console.error('创建群聊失败:', error);
+        toast.error('创建群聊失败: ' + error.message);
+        return;
+      }
+
+      if (!group) {
+        toast.error('创建群聊失败: 未返回数据');
+        return;
+      }
+
+      // 添加群成员
+      const members = selectedCharacters.map(charId => ({
+        group_id: group.id,
+        character_id: charId
+      }));
+
+      const { error: membersError } = await supabase.from('group_members').insert(members);
+      
+      if (membersError) {
+        console.error('添加群成员失败:', membersError);
+        toast.error('添加群成员失败: ' + membersError.message);
+        return;
+      }
+
+      toast.success('群聊创建成功!');
+      setGroupName('');
+      setSelectedCharacters([]);
+      setOpen(false);
+      fetchGroups();
+    } catch (err) {
+      console.error('创建群聊异常:', err);
+      toast.error('创建群聊失败');
     }
-
-    // 添加群成员
-    const members = selectedCharacters.map(charId => ({
-      group_id: group.id,
-      character_id: charId
-    }));
-
-    await supabase.from('group_members').insert(members);
-
-    toast.success('群聊创建成功!');
-    setGroupName('');
-    setSelectedCharacters([]);
-    setOpen(false);
-    fetchGroups();
   };
 
   const toggleCharacter = (charId: string) => {
