@@ -239,6 +239,64 @@ const WorkshopPage: React.FC = () => {
     e.target.value = '';
   };
 
+  const handleImportPreset = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!data.name || !data.content) {
+        toast.error('无效的预设文件');
+        return;
+      }
+      
+      await (supabase.from('presets' as any) as any).insert({
+        user_id: user?.id,
+        name: data.name,
+        content: data.content,
+        character_id: null
+      });
+      
+      toast.success('预设已导入');
+      fetchPresets();
+    } catch (err) {
+      toast.error('导入失败，请检查文件格式');
+    }
+    
+    e.target.value = '';
+  };
+
+  const handleImportWorldBook = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!data.name || !data.content) {
+        toast.error('无效的世界书文件');
+        return;
+      }
+      
+      await (supabase.from('world_books' as any) as any).insert({
+        user_id: user?.id,
+        name: data.name,
+        content: data.content,
+        is_global: data.is_global || false
+      });
+      
+      toast.success('世界书已导入');
+      fetchWorldBooks();
+    } catch (err) {
+      toast.error('导入失败，请检查文件格式');
+    }
+    
+    e.target.value = '';
+  };
+
   const resetPresetForm = () => {
     setShowPresetDialog(false);
     setEditingPreset(null);
@@ -396,9 +454,12 @@ const WorkshopPage: React.FC = () => {
               >
                 <Plus className="w-4 h-4 mr-2" />创建新预设
               </Button>
-              <Button variant="outline" className="rounded-full">
-                <Upload className="w-4 h-4 mr-2" />导入
-              </Button>
+              <label className="block">
+                <input type="file" accept=".json" onChange={handleImportPreset} className="hidden" />
+                <Button variant="outline" className="rounded-full" asChild>
+                  <span><Upload className="w-4 h-4 mr-2" />导入</span>
+                </Button>
+              </label>
             </div>
 
             <AnimatePresence>
@@ -468,9 +529,12 @@ const WorkshopPage: React.FC = () => {
               >
                 <Plus className="w-4 h-4 mr-2" />创建世界书
               </Button>
-              <Button variant="outline" className="rounded-full">
-                <Upload className="w-4 h-4 mr-2" />导入
-              </Button>
+              <label className="block">
+                <input type="file" accept=".json" onChange={handleImportWorldBook} className="hidden" />
+                <Button variant="outline" className="rounded-full" asChild>
+                  <span><Upload className="w-4 h-4 mr-2" />导入</span>
+                </Button>
+              </label>
             </div>
 
             <AnimatePresence>

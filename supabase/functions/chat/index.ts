@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,39 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, persona, characterName, userApiKey, provider, baseUrl, model: customModel, userProfile } = await req.json();
+    const { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+    
+    // 获取预设和世界书
+    let presetsContent = '';
+    let worldBooksContent = '';
+    
+    if (userId && characterId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // 获取该角色的预设
+      const { data: presets } = await supabase
+        .from('presets')
+        .select('name, content')
+        .eq('user_id', userId)
+        .or(`character_id.eq.${characterId},character_id.is.null`);
+      
+      if (presets && presets.length > 0) {
+        presetsContent = '\n【可用预设】\n' + presets.map(p => `- ${p.name}: ${p.content}`).join('\n');
+      }
+      
+      // 获取全局世界书
+      const { data: worldBooks } = await supabase
+        .from('world_books')
+        .select('name, content')
+        .eq('user_id', userId)
+        .eq('is_global', true);
+      
+      if (worldBooks && worldBooks.length > 0) {
+        worldBooksContent = '\n【世界设定】\n' + worldBooks.map(w => `${w.name}: ${w.content}`).join('\n');
+      }
+    }
     
     let apiKey: string | undefined;
     let apiUrl: string;
@@ -40,7 +73,6 @@ serve(async (req) => {
         headers["anthropic-version"] = "2023-06-01";
       } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
-        // 简化URL拼接逻辑，移除末尾斜杠后追加/chat/completions
         let finalUrl = baseUrl.trim().replace(/\/+$/, '');
         if (!finalUrl.endsWith('/chat/completions')) {
           finalUrl = `${finalUrl}/chat/completions`;
@@ -49,14 +81,12 @@ serve(async (req) => {
         model = customModel || "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
       } else {
-        // Unknown provider, fallback to Lovable AI
         apiKey = Deno.env.get("LOVABLE_API_KEY");
         apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
         model = "google/gemini-2.5-flash";
         headers["Authorization"] = `Bearer ${apiKey}`;
       }
     } else {
-      // No user API key, use Lovable AI
       apiKey = Deno.env.get("LOVABLE_API_KEY");
       apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
       model = "google/gemini-2.5-flash";
@@ -74,12 +104,13 @@ serve(async (req) => {
     console.log("Using provider:", userApiKey ? provider : "lovable-ai");
     console.log("API URL:", apiUrl);
 
-    // 获取用户信息
     const userName = userProfile?.nickname || '用户';
     const userPersonaInfo = userProfile?.persona || '';
 
     const systemPrompt = `你是一个名叫"${characterName || '小助手'}"的虚拟角色。
 ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
+${worldBooksContent}
+${presetsContent}
 
 【关于你的聊天对象】
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}

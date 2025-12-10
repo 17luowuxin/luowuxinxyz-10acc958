@@ -398,15 +398,16 @@ const GroupChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const baseClasses = 'max-w-[75%] px-4 py-2.5 shadow-sm';
+    const size = customization.bubble_size || 14;
+    const baseClasses = `max-w-[80%] px-3 py-2 shadow-sm text-[${size}px]`;
     
     switch (style) {
       case 'cloud':
-        return `${baseClasses} rounded-3xl ${isUser ? 'rounded-br-lg' : 'rounded-bl-lg'}`;
+        return `${baseClasses} rounded-[20px] ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
       case 'square':
         return `${baseClasses} rounded-lg ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
       default:
-        return `${baseClasses} rounded-2xl ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
+        return `${baseClasses} rounded-[18px] ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
     }
   };
 
@@ -569,7 +570,7 @@ const GroupChatPage: React.FC = () => {
             >
               {/* Avatar */}
               <div 
-                className="w-7 h-7 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden border border-white/50 shadow-sm"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden shadow-sm"
                 style={{ 
                   backgroundColor: msg.sender_type === 'user' 
                     ? undefined 
