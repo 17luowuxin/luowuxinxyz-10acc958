@@ -355,13 +355,17 @@ const ChatPage: React.FC = () => {
   const fontColor = (customization as any).font_color || '#333333';
   const friendFontColor = (customization as any).friend_font_color || '#333333';
   
-  // 气泡框预设
-  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string }> = {
-    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5' },
-    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF' },
-    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066' },
-    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8' },
-    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF' },
+  // 头像框
+  const userAvatarFrame = (customization as any).avatar_frame_url || '';
+  const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
+  
+  // 气泡框预设 - 带三丽鸥装饰
+  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string; decorIcon: string }> = {
+    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
+    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
+    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
+    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
+    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
@@ -382,6 +386,9 @@ const ChatPage: React.FC = () => {
     }
     return { backgroundColor: friendBubbleColor };
   };
+  
+  const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
+  const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
@@ -452,26 +459,36 @@ const ChatPage: React.FC = () => {
               onMouseUp={handleTouchEnd}
               onMouseLeave={handleTouchEnd}
             >
-              {/* Avatar - 在消息底部对齐 */}
-              <Avatar className="w-7 h-7 flex-shrink-0 border border-white/50 shadow-sm">
-                {msg.role === 'user' ? (
-                  <>
-                    <AvatarImage src={profile?.avatar_url} />
-                    <AvatarFallback className="bg-gradient-to-br from-pink-200 to-rose-200 text-[10px] text-gray-600">
-                      {profile?.nickname?.charAt(0) || '我'}
-                    </AvatarFallback>
-                  </>
-                ) : (
-                  <>
-                    <AvatarImage src={character?.avatar_url} />
-                    <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-[10px] text-gray-500">
-                      {character?.name?.charAt(0) || '?'}
-                    </AvatarFallback>
-                  </>
+              {/* Avatar with Frame - 在消息底部对齐 */}
+              <div className="relative w-9 h-9 flex-shrink-0">
+                {msg.role === 'user' && userAvatarFrame && (
+                  <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
-              </Avatar>
+                {msg.role !== 'user' && friendAvatarFrame && (
+                  <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                )}
+                <div className={`absolute rounded-full overflow-hidden ${(msg.role === 'user' ? userAvatarFrame : friendAvatarFrame) ? 'inset-[15%]' : 'inset-0'}`}>
+                  {msg.role === 'user' ? (
+                    profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-[10px] text-gray-600">
+                        {profile?.nickname?.charAt(0) || '我'}
+                      </div>
+                    )
+                  ) : (
+                    character?.avatar_url ? (
+                      <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
+                        {character?.name?.charAt(0) || '?'}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
               
-              {/* Bubble */}
+              {/* Bubble with Sanrio Decoration */}
               <div 
                 className={`${getBubbleStyle(msg.role === 'user')} relative`}
                 style={{ 
@@ -482,6 +499,14 @@ const ChatPage: React.FC = () => {
                   lineHeight: '1.5'
                 }}
               >
+                {/* 三丽鸥装饰图标 */}
+                {msg.role === 'user' && getUserBubbleDecor() && (
+                  <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
+                )}
+                {msg.role !== 'user' && getFriendBubbleDecor() && (
+                  <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                )}
+                
                 {msg.content}
                 
                 {/* 长按菜单 */}

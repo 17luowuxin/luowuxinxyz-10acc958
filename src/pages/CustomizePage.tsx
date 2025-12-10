@@ -15,14 +15,14 @@ const avatarFramePresets = [
   { id: 'dream', name: '梦幻', url: dreamFrame },
 ];
 
-// CSS实现的可爱气泡样式
+// CSS实现的可爱气泡样式 - 带三丽鸥装饰
 const bubbleFramePresets = [
-  { id: 'none', name: '无', gradient: '', borderColor: '' },
-  { id: 'cute-pink', name: '樱花粉', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE' },
-  { id: 'cute-blue', name: '天空蓝', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorColor: '#7DD8FF' },
-  { id: 'cute-yellow', name: '柠檬黄', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D' },
-  { id: 'cute-green', name: '薄荷绿', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77' },
-  { id: 'cute-purple', name: '梦幻紫', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF' },
+  { id: 'none', name: '无', gradient: '', borderColor: '', decorColor: '', decorIcon: '' },
+  { id: 'cute-pink', name: '樱花粉', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE', decorIcon: '🎀' },
+  { id: 'cute-blue', name: '天空蓝', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorColor: '#7DD8FF', decorIcon: '☁️' },
+  { id: 'cute-yellow', name: '柠檬黄', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D', decorIcon: '⭐' },
+  { id: 'cute-green', name: '薄荷绿', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀' },
+  { id: 'cute-purple', name: '梦幻紫', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜' },
 ];
 
 // Pastel macaron colors
@@ -856,6 +856,9 @@ const CustomizePage: React.FC = () => {
                       fontSize: `${bubbleSize[0]}px` 
                     }}
                   >
+                    {userBubbleStyle?.decorIcon && (
+                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{userBubbleStyle.decorIcon}</span>
+                    )}
                     你好呀~
                   </div>
                 );
@@ -905,6 +908,9 @@ const CustomizePage: React.FC = () => {
                       fontSize: `${bubbleSize[0]}px` 
                     }}
                   >
+                    {friendBubbleStyle?.decorIcon && (
+                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{friendBubbleStyle.decorIcon}</span>
+                    )}
                     你好! 很高兴认识你 💕
                   </div>
                 );
