@@ -412,8 +412,8 @@ const GroupChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const size = customization.bubble_size || 14;
-    const baseClasses = `max-w-[80%] px-3 py-2 shadow-sm text-[${size}px]`;
+    // 确保气泡有最小宽度，防止文字竖排
+    const baseClasses = `min-w-[40px] max-w-[75%] px-3 py-2 shadow-sm`;
     
     switch (style) {
       case 'cloud':
@@ -608,10 +608,10 @@ const GroupChatPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Bubble - 紧贴头像 */}
-              <div className={`flex flex-col ${msg.sender_type === 'user' ? 'mr-2 items-end' : 'ml-2 items-start'}`}>
+              {/* Bubble - 紧贴头像，gap-1.5 */}
+              <div className={`flex flex-col max-w-[calc(100%-48px)] ${msg.sender_type === 'user' ? 'mr-1.5 items-end' : 'ml-1.5 items-start'}`}>
                 {msg.sender_type === 'character' && (
-                  <p className="text-xs text-muted-foreground mb-1">{msg.characterName}</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">{msg.characterName}</p>
                 )}
                 <div
                   className={getBubbleStyle(msg.sender_type === 'user')}
@@ -622,7 +622,10 @@ const GroupChatPage: React.FC = () => {
                     fontSize: `${customization.bubble_size || 16}px`,
                     lineHeight: '1.5',
                     wordBreak: 'break-word',
-                    whiteSpace: 'pre-wrap'
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'pre-wrap',
+                    writingMode: 'horizontal-tb',
+                    textOrientation: 'mixed'
                   }}
                 >
                   {msg.content}
