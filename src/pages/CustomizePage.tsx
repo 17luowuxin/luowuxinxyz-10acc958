@@ -10,20 +10,19 @@ import { toast } from 'sonner';
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
 
-// 预设气泡框
-import sanrioBubbles from '@/assets/bubble-frames/sanrio-bubbles.png';
-
 const avatarFramePresets = [
   { id: 'none', name: '无', url: '' },
   { id: 'dream', name: '梦幻', url: dreamFrame },
 ];
 
+// CSS实现的可爱气泡样式
 const bubbleFramePresets = [
-  { id: 'none', name: '无', url: '' },
-  { id: 'sanrio-pink', name: '粉色', url: sanrioBubbles, cropIndex: 0 },
-  { id: 'sanrio-blue', name: '蓝色', url: sanrioBubbles, cropIndex: 1 },
-  { id: 'sanrio-yellow', name: '黄色', url: sanrioBubbles, cropIndex: 2 },
-  { id: 'sanrio-green', name: '绿色', url: sanrioBubbles, cropIndex: 3 },
+  { id: 'none', name: '无', gradient: '', borderColor: '' },
+  { id: 'cute-pink', name: '樱花粉', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE' },
+  { id: 'cute-blue', name: '天空蓝', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorColor: '#7DD8FF' },
+  { id: 'cute-yellow', name: '柠檬黄', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D' },
+  { id: 'cute-green', name: '薄荷绿', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77' },
+  { id: 'cute-purple', name: '梦幻紫', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF' },
 ];
 
 // Pastel macaron colors
@@ -101,9 +100,35 @@ const CustomizePage: React.FC = () => {
   const [friendAvatarFrame, setFriendAvatarFrame] = useState('');
   const [bubbleFrame, setBubbleFrame] = useState('');
   const [friendBubbleFrame, setFriendBubbleFrame] = useState('');
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [characterPreview, setCharacterPreview] = useState<any>(null);
+
   useEffect(() => {
-    if (user) fetchSettings();
+    if (user) {
+      fetchSettings();
+      fetchUserProfile();
+      fetchFirstCharacter();
+    }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('nickname, avatar_url')
+      .eq('user_id', user?.id)
+      .single();
+    if (data) setUserProfile(data);
+  };
+
+  const fetchFirstCharacter = async () => {
+    const { data } = await supabase
+      .from('characters')
+      .select('name, avatar_url')
+      .eq('user_id', user?.id)
+      .limit(1)
+      .single();
+    if (data) setCharacterPreview(data);
+  };
 
   // Apply theme to document
   useEffect(() => {
@@ -598,7 +623,7 @@ const CustomizePage: React.FC = () => {
                   <button
                     key={frame.id}
                     onClick={() => setBubbleFrame(frame.id === 'none' ? '' : frame.id)}
-                    className={`relative w-20 h-16 rounded-xl border-2 transition-all overflow-hidden ${
+                    className={`relative w-20 h-14 rounded-xl border-2 transition-all overflow-hidden ${
                       (frame.id === 'none' && !bubbleFrame) || bubbleFrame === frame.id
                         ? 'border-primary ring-2 ring-primary/30' 
                         : 'border-muted hover:border-primary/50'
@@ -606,13 +631,14 @@ const CustomizePage: React.FC = () => {
                   >
                     {frame.id !== 'none' ? (
                       <div 
-                        className="w-full h-full"
+                        className="w-full h-full rounded-lg flex items-center justify-center text-xs"
                         style={{
-                          backgroundImage: `url(${frame.url})`,
-                          backgroundSize: '400% 100%',
-                          backgroundPosition: `${(frame.cropIndex || 0) * 33.33}% 0`,
+                          background: frame.gradient,
+                          border: `2px solid ${frame.borderColor}`,
                         }}
-                      />
+                      >
+                        <span style={{ color: frame.decorColor }}>{frame.name}</span>
+                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
                         无
@@ -633,7 +659,7 @@ const CustomizePage: React.FC = () => {
                   <button
                     key={frame.id}
                     onClick={() => setFriendBubbleFrame(frame.id === 'none' ? '' : frame.id)}
-                    className={`relative w-20 h-16 rounded-xl border-2 transition-all overflow-hidden ${
+                    className={`relative w-20 h-14 rounded-xl border-2 transition-all overflow-hidden ${
                       (frame.id === 'none' && !friendBubbleFrame) || friendBubbleFrame === frame.id
                         ? 'border-secondary ring-2 ring-secondary/30' 
                         : 'border-muted hover:border-secondary/50'
@@ -641,13 +667,14 @@ const CustomizePage: React.FC = () => {
                   >
                     {frame.id !== 'none' ? (
                       <div 
-                        className="w-full h-full"
+                        className="w-full h-full rounded-lg flex items-center justify-center text-xs"
                         style={{
-                          backgroundImage: `url(${frame.url})`,
-                          backgroundSize: '400% 100%',
-                          backgroundPosition: `${(frame.cropIndex || 0) * 33.33}% 0`,
+                          background: frame.gradient,
+                          border: `2px solid ${frame.borderColor}`,
                         }}
-                      />
+                      >
+                        <span style={{ color: frame.decorColor }}>{frame.name}</span>
+                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
                         无
@@ -814,37 +841,74 @@ const CustomizePage: React.FC = () => {
               backgroundColor: chatBackgroundUrl ? undefined : 'hsl(var(--muted))'
             }}
           >
+            {/* 用户消息预览 */}
             <div className="flex justify-end items-end gap-2">
-              <div 
-                className={getBubblePreviewClass(bubbleStyle, true)}
-                style={{ backgroundColor: bubbleColor, opacity: opacity[0], color: fontColor, fontSize: `${bubbleSize[0]}px` }}
-              >
-                你好呀~
-              </div>
+              {(() => {
+                const userBubbleStyle = bubbleFramePresets.find(f => f.id === bubbleFrame);
+                return (
+                  <div 
+                    className={`${getBubblePreviewClass(bubbleStyle, true)} relative`}
+                    style={{ 
+                      background: userBubbleStyle?.gradient || bubbleColor,
+                      border: userBubbleStyle?.borderColor ? `2px solid ${userBubbleStyle.borderColor}` : undefined,
+                      opacity: opacity[0], 
+                      color: fontColor, 
+                      fontSize: `${bubbleSize[0]}px` 
+                    }}
+                  >
+                    你好呀~
+                  </div>
+                );
+              })()}
               <div className="relative w-10 h-10 flex-shrink-0">
                 {avatarFrame && (
-                  <img src={avatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10" />
+                  <img src={avatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
-                <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-xs text-gray-600">
-                  我
+                <div className="absolute inset-[15%] rounded-full overflow-hidden flex items-center justify-center">
+                  {userProfile?.avatar_url ? (
+                    <img src={userProfile.avatar_url} alt="用户头像" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-xs text-gray-600">
+                      {userProfile?.nickname?.charAt(0) || '我'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
+            
+            {/* 角色消息预览 */}
             <div className="flex justify-start items-end gap-2">
               <div className="relative w-10 h-10 flex-shrink-0">
                 {friendAvatarFrame && (
-                  <img src={friendAvatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10" />
+                  <img src={friendAvatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
-                <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-xs text-gray-500">
-                  友
+                <div className="absolute inset-[15%] rounded-full overflow-hidden flex items-center justify-center">
+                  {characterPreview?.avatar_url ? (
+                    <img src={characterPreview.avatar_url} alt="角色头像" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-xs text-gray-500">
+                      {characterPreview?.name?.charAt(0) || '友'}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div 
-                className={getBubblePreviewClass(bubbleStyle, false)}
-                style={{ backgroundColor: friendBubbleColor, opacity: opacity[0], color: friendFontColor, fontSize: `${bubbleSize[0]}px` }}
-              >
-                你好! 很高兴认识你 💕
-              </div>
+              {(() => {
+                const friendBubbleStyle = bubbleFramePresets.find(f => f.id === friendBubbleFrame);
+                return (
+                  <div 
+                    className={`${getBubblePreviewClass(bubbleStyle, false)} relative`}
+                    style={{ 
+                      background: friendBubbleStyle?.gradient || friendBubbleColor,
+                      border: friendBubbleStyle?.borderColor ? `2px solid ${friendBubbleStyle.borderColor}` : undefined,
+                      opacity: opacity[0], 
+                      color: friendFontColor, 
+                      fontSize: `${bubbleSize[0]}px` 
+                    }}
+                  >
+                    你好! 很高兴认识你 💕
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
