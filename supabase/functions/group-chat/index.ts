@@ -137,11 +137,18 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
         ],
       };
 
+      // 添加超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
       const response = await fetch(apiUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -172,7 +179,10 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
         });
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 减少延迟时间
+      if (responders.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     }
 
     return new Response(JSON.stringify({ responses }), {
