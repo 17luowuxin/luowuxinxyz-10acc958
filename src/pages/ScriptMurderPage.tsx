@@ -41,6 +41,11 @@ interface GameLog {
   avatar?: string;
 }
 
+interface SelectedCharacterForRole {
+  role: ScriptRole;
+  character: Character | null; // null 表示用户自己扮演
+}
+
 const ScriptMurderPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -63,6 +68,11 @@ const ScriptMurderPage: React.FC = () => {
   const [showVoteDialog, setShowVoteDialog] = useState(false);
   const [selectedRole, setSelectedRole] = useState<ScriptRole | null>(null);
   const [userProfile, setUserProfile] = useState<{ avatar_url: string | null } | null>(null);
+  
+  // 新增：角色分配设置
+  const [characterAssignments, setCharacterAssignments] = useState<SelectedCharacterForRole[]>([]);
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
+  const [pickingForRole, setPickingForRole] = useState<ScriptRole | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -106,6 +116,7 @@ const ScriptMurderPage: React.FC = () => {
 
   const selectScript = (script: Script) => {
     setSelectedScript(script);
+    initializeAssignments(script);
     setGamePhase('assign');
   };
 
@@ -215,13 +226,110 @@ const ScriptMurderPage: React.FC = () => {
         },
       });
 
-      if (error) throw error;
-      return data.reply;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'AI连接失败');
+      }
+      
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+      
+      return data.reply || '...';
     } catch (error) {
       console.error('AI response error:', error);
-      toast.error('AI响应失败，请检查API配置');
-      return '...';
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      toast.error(`AI响应失败: ${errorMessage}`);
+      return '...（连接失败，请重试）';
     }
+  };
+
+  // 初始化角色分配
+  const initializeAssignments = (script: Script) => {
+    const assignments = script.roles.map(role => ({
+      role,
+      character: null as Character | null
+    }));
+    setCharacterAssignments(assignments);
+  };
+
+  // 选择好友角色扮演某个剧本角色
+  const assignCharacterToRole = (role: ScriptRole, character: Character | 'player' | null) => {
+    setCharacterAssignments(prev => prev.map(a => {
+      if (a.role.id === role.id) {
+        return { ...a, character: character === 'player' ? null : character };
+      }
+      // 如果该角色已被分配给其他人，需要移除
+      if (character !== 'player' && character !== null && a.character?.id === character.id) {
+        return { ...a, character: null };
+      }
+      return a;
+    }));
+    setShowCharacterPicker(false);
+    setPickingForRole(null);
+  };
+
+  // 开始带有自定义分配的游戏
+  const startCustomGame = () => {
+    if (!selectedScript) return;
+    
+    const playerAssignment = characterAssignments.find(a => a.character === null);
+    const aiAssignments = characterAssignments.filter(a => a.character !== null);
+    
+    // 检查是否有未分配的角色
+    const unassignedAIRoles = characterAssignments.filter(a => a.character === null && (!playerAssignment || a.role.id !== playerAssignment.role.id));
+    
+    if (unassignedAIRoles.length > 0) {
+      toast.error('请为所有角色分配好友');
+      return;
+    }
+    
+    let gamePlayers: GamePlayer[] = [];
+    
+    // 添加玩家
+    if (playerAssignment) {
+      gamePlayers.push({
+        character: {
+          id: 'player',
+          name: '我',
+          persona: '玩家',
+          avatar_url: userProfile?.avatar_url || null,
+        },
+        role: playerAssignment.role,
+        isPlayer: true,
+      });
+    }
+    
+    // 添加AI角色
+    aiAssignments.forEach(a => {
+      if (a.character) {
+        gamePlayers.push({
+          character: a.character,
+          role: a.role,
+          isPlayer: false,
+        });
+      }
+    });
+    
+    setPlayerMode(!!playerAssignment);
+    setPlayers(shuffleArray(gamePlayers));
+    setLogs([]);
+    setVotes({});
+    setDiscussionRound(1);
+    
+    addLog('系统', `剧本《${selectedScript.title}》开始！`, 'system');
+    addLog('系统', selectedScript.story, 'story');
+    
+    if (playerAssignment) {
+      addLog('系统', `你扮演的角色是：${playerAssignment.role.name}`, 'system');
+      addLog('系统', `角色背景：${playerAssignment.role.background}`, 'system');
+      addLog('系统', `你的秘密：${playerAssignment.role.secret}`, 'secret');
+      if (playerAssignment.role.isMurderer) {
+        addLog('系统', '⚠️ 你是凶手！需要隐藏自己的身份，转移其他人的注意力。', 'secret');
+      }
+    }
+    
+    setGamePhase('intro');
   };
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -683,11 +791,11 @@ const ScriptMurderPage: React.FC = () => {
             <p className="text-white/60 mt-2">{selectedScript.background}</p>
           </div>
 
-          {/* 游戏模式选择 */}
+          {/* 快速开始按钮 */}
           <div className="grid grid-cols-2 gap-4">
             <motion.div
               whileHover={{ scale: 1.02 }}
-              onClick={() => assignRoles(false)}
+              onClick={() => characters.length >= selectedScript.roles.length && assignRoles(false)}
               className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${
                 characters.length >= selectedScript.roles.length 
                   ? 'bg-white/10 border-white/20 hover:border-purple-500' 
@@ -695,77 +803,203 @@ const ScriptMurderPage: React.FC = () => {
               }`}
             >
               <Eye className="w-8 h-8 mb-2 text-purple-400" />
-              <h3 className="font-bold mb-1">观战模式</h3>
-              <p className="text-xs text-white/60">观看AI进行游戏</p>
+              <h3 className="font-bold mb-1">快速观战</h3>
+              <p className="text-xs text-white/60">随机分配角色</p>
             </motion.div>
 
             <motion.div
               whileHover={{ scale: 1.02 }}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                characters.length >= selectedScript.roles.length - 1
-                  ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50' 
+              onClick={() => {
+                if (characterAssignments.every(a => a.character !== null || characterAssignments.find(x => x.character === null))) {
+                  startCustomGame();
+                }
+              }}
+              className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${
+                characterAssignments.filter(a => a.character !== null).length >= selectedScript.roles.length - 1
+                  ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 hover:border-purple-400' 
                   : 'bg-white/5 border-white/10 opacity-50'
               }`}
             >
-              <User className="w-8 h-8 mb-2 text-pink-400" />
-              <h3 className="font-bold mb-1">玩家模式</h3>
-              <p className="text-xs text-white/60">选择角色参与</p>
+              <Play className="w-8 h-8 mb-2 text-pink-400" />
+              <h3 className="font-bold mb-1">开始游戏</h3>
+              <p className="text-xs text-white/60">使用下方分配</p>
             </motion.div>
           </div>
 
-          {/* 角色选择（玩家模式） */}
-          {characters.length >= selectedScript.roles.length - 1 && (
-            <div className="bg-white/10 rounded-xl p-4">
-              <h3 className="font-semibold mb-3">选择你要扮演的角色</h3>
-              <div className="space-y-2">
-                {selectedScript.roles.map(role => (
-                  <motion.div 
-                    key={role.id} 
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => setSelectedRole(role)}
-                    className="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center text-lg">
-                      {role.gender === 'male' ? '👨' : role.gender === 'female' ? '👩' : '🧑'}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium">{role.name}</div>
-                      <div className="text-xs text-white/50">{role.occupation} · {role.age}</div>
-                    </div>
-                    <div className="text-purple-400">
-                      <User className="w-5 h-5" />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* 角色分配区域 */}
           <div className="bg-white/10 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">可用AI角色 ({characters.length}人)</h3>
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              为每个角色选择扮演者
+            </h3>
+            <p className="text-xs text-white/50 mb-4">点击"我来扮演"参与游戏，或选择好友角色由AI扮演</p>
+            
+            <div className="space-y-3">
+              {characterAssignments.map(assignment => {
+                const isPlayerRole = assignment.character === null && characterAssignments.filter(a => a.character === null).length === 1;
+                const assignedChar = assignment.character;
+                
+                return (
+                  <div 
+                    key={assignment.role.id} 
+                    className="flex items-center gap-3 p-3 bg-white/5 rounded-lg"
+                  >
+                    {/* 剧本角色信息 */}
+                    <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center text-lg flex-shrink-0">
+                      {assignment.role.gender === 'male' ? '👨' : assignment.role.gender === 'female' ? '👩' : '🧑'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{assignment.role.name}</div>
+                      <div className="text-xs text-white/50 truncate">{assignment.role.occupation}</div>
+                    </div>
+                    
+                    {/* 扮演者选择 */}
+                    <div className="flex items-center gap-2">
+                      {isPlayerRole ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-pink-500/20 rounded-full border border-pink-500/50">
+                          <User className="w-4 h-4 text-pink-400" />
+                          <span className="text-sm text-pink-300">我来扮演</span>
+                        </div>
+                      ) : assignedChar ? (
+                        <div 
+                          onClick={() => { setPickingForRole(assignment.role); setShowCharacterPicker(true); }}
+                          className="flex items-center gap-2 px-2 py-1 bg-white/10 rounded-full cursor-pointer hover:bg-white/20"
+                        >
+                          <div className="w-6 h-6 rounded-full overflow-hidden bg-gradient-to-br from-candy-pink to-candy-purple">
+                            {assignedChar.avatar_url ? (
+                              <img src={assignedChar.avatar_url} alt={assignedChar.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs">👤</div>
+                            )}
+                          </div>
+                          <span className="text-sm">{assignedChar.name}</span>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setPickingForRole(assignment.role); setShowCharacterPicker(true); }}
+                          className="border-white/20 text-white/70 hover:bg-white/10"
+                        >
+                          选择好友
+                        </Button>
+                      )}
+                      
+                      {/* 我来扮演按钮 */}
+                      {!isPlayerRole && (
+                        <Button
+                          size="sm"
+                          variant={assignment.character === null ? "default" : "ghost"}
+                          onClick={() => {
+                            // 先清除其他角色的"我来扮演"状态
+                            setCharacterAssignments(prev => prev.map(a => {
+                              if (a.role.id === assignment.role.id) {
+                                return { ...a, character: null };
+                              }
+                              // 如果其他角色被设为玩家扮演，需要重新分配
+                              if (a.character === null) {
+                                const availableChar = characters.find(c => 
+                                  !prev.some(p => p.character?.id === c.id && p.role.id !== assignment.role.id)
+                                );
+                                return { ...a, character: availableChar || null };
+                              }
+                              return a;
+                            }));
+                          }}
+                          className="text-xs px-2"
+                        >
+                          <User className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 可用好友列表 */}
+          <div className="bg-white/10 rounded-xl p-4">
+            <h3 className="font-semibold mb-3">可用好友角色 ({characters.length}人)</h3>
             <div className="flex flex-wrap gap-2">
-              {characters.slice(0, 8).map(char => (
-                <div key={char.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-candy-pink to-candy-purple overflow-hidden">
+              {characters.map(char => {
+                const isAssigned = characterAssignments.some(a => a.character?.id === char.id);
+                return (
+                  <div 
+                    key={char.id} 
+                    className={`flex items-center gap-2 p-2 rounded-lg transition-opacity ${
+                      isAssigned ? 'bg-green-500/20 opacity-60' : 'bg-white/5'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-candy-pink to-candy-purple overflow-hidden">
+                      {char.avatar_url ? (
+                        <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">👤</div>
+                      )}
+                    </div>
+                    <span className="text-sm">{char.name}</span>
+                    {isAssigned && <span className="text-xs text-green-400">✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {characters.length < selectedScript.roles.length - 1 && (
+            <p className="text-center text-red-400 text-sm">
+              需要至少{selectedScript.roles.length - 1}个好友角色，当前只有{characters.length}个
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 好友选择对话框 */}
+      <AlertDialog open={showCharacterPicker} onOpenChange={setShowCharacterPicker}>
+        <AlertDialogContent className="bg-slate-900 border-white/10 max-h-[80vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              为"{pickingForRole?.name}"选择扮演者
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60">
+              选择一个好友角色来扮演这个剧本角色
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid grid-cols-2 gap-3 my-4">
+            {characters.map(char => {
+              const isAssigned = characterAssignments.some(a => a.character?.id === char.id && a.role.id !== pickingForRole?.id);
+              return (
+                <Button
+                  key={char.id}
+                  onClick={() => pickingForRole && assignCharacterToRole(pickingForRole, char)}
+                  disabled={isAssigned}
+                  variant="outline"
+                  className={`h-auto flex items-center gap-2 p-3 ${
+                    isAssigned ? 'opacity-40' : 'border-white/20 text-white hover:bg-white/10'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-candy-pink to-candy-purple flex-shrink-0">
                     {char.avatar_url ? (
                       <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">👤</div>
                     )}
                   </div>
-                  <span className="text-sm">{char.name}</span>
-                </div>
-              ))}
-            </div>
+                  <div className="text-left">
+                    <div className="font-medium">{char.name}</div>
+                    <div className="text-xs text-white/50 truncate max-w-[80px]">{char.persona || '普通人'}</div>
+                  </div>
+                </Button>
+              );
+            })}
           </div>
-
-          {characters.length < selectedScript.roles.length - 1 && (
-            <p className="text-center text-red-400 text-sm">
-              需要至少{selectedScript.roles.length - 1}个AI角色，当前只有{characters.length}个
-            </p>
-          )}
-        </div>
-      )}
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-white/10 text-white border-white/20">
+              取消
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Game Phase */}
       {(gamePhase === 'intro' || gamePhase === 'discuss' || gamePhase === 'vote' || gamePhase === 'reveal') && (

@@ -47,25 +47,44 @@ async function getAICompletion(
     console.log('Using Lovable AI Gateway');
   }
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 200,
-      temperature: 0.9,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("AI API error:", response.status, errorText);
-    throw new Error(`AI API error: ${response.status}`);
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 200,
+        temperature: 0.9,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI API error:", response.status, errorText);
+      if (response.status === 429) {
+        throw new Error("请求太频繁，请稍后再试");
+      } else if (response.status === 402) {
+        throw new Error("AI额度不足，请充值");
+      }
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "...";
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error("请求超时，请重试");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "...";
 }
 
 interface Character {
