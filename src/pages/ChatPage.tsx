@@ -179,7 +179,7 @@ const ChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const baseClasses = 'max-w-[75%] px-4 py-2.5 shadow-sm';
+    const baseClasses = 'max-w-[75%] min-w-[60px] px-4 py-2.5 shadow-sm whitespace-pre-wrap break-words';
     
     switch (style) {
       case 'cloud':
