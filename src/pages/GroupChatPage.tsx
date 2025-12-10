@@ -177,7 +177,7 @@ const GroupChatPage: React.FC = () => {
   const fetchUserProfile = async () => {
     const { data } = await supabase
       .from('profiles')
-      .select('nickname, persona')
+      .select('nickname, persona, avatar_url')
       .eq('user_id', user?.id)
       .single();
     if (data) setUserProfile(data);
@@ -398,7 +398,7 @@ const GroupChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const baseClasses = 'max-w-[70%] px-4 py-2 shadow-sm';
+    const baseClasses = 'max-w-[75%] px-4 py-2.5 shadow-sm';
     
     switch (style) {
       case 'cloud':
@@ -532,26 +532,41 @@ const GroupChatPage: React.FC = () => {
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex items-end gap-2 ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex items-end gap-2 ${msg.sender_type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
               onTouchStart={() => handleTouchStart(msg)}
               onTouchEnd={handleTouchEnd}
               onMouseDown={() => handleTouchStart(msg)}
               onMouseUp={handleTouchEnd}
               onMouseLeave={handleTouchEnd}
             >
-              {msg.sender_type === 'character' && (
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden"
-                  style={{ backgroundColor: getCharacterAvatarColor(msg.character_id) }}
-                >
-                  {msg.characterAvatar ? (
-                    <img src={msg.characterAvatar} className="w-full h-full object-cover" />
+              {/* Avatar */}
+              <div 
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden border border-white/50 shadow-sm"
+                style={{ 
+                  backgroundColor: msg.sender_type === 'user' 
+                    ? undefined 
+                    : getCharacterAvatarColor(msg.character_id) 
+                }}
+              >
+                {msg.sender_type === 'user' ? (
+                  userProfile?.avatar_url ? (
+                    <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="用户头像" />
                   ) : (
-                    <User className="w-4 h-4" />
-                  )}
-                </div>
-              )}
-              <div className="max-w-[70%]">
+                    <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-[10px] text-gray-600">
+                      {userProfile?.nickname?.charAt(0) || '我'}
+                    </div>
+                  )
+                ) : (
+                  msg.characterAvatar ? (
+                    <img src={msg.characterAvatar} className="w-full h-full object-cover" alt={msg.characterName} />
+                  ) : (
+                    <User className="w-3.5 h-3.5" />
+                  )
+                )}
+              </div>
+
+              {/* Bubble */}
+              <div className="flex flex-col">
                 {msg.sender_type === 'character' && (
                   <p className="text-xs text-muted-foreground mb-1 ml-1">{msg.characterName}</p>
                 )}
@@ -559,27 +574,17 @@ const GroupChatPage: React.FC = () => {
                   className={getBubbleStyle(msg.sender_type === 'user')}
                   style={{
                     backgroundColor: msg.sender_type === 'user' 
-                      ? (customization.bubble_color || '#FF6B9D')
+                      ? (customization.bubble_color || '#FFB5C5')
                       : getCharacterBubbleColor(),
                     opacity: customization.bubble_opacity || 1,
                     color: msg.sender_type === 'user' ? fontColor : friendFontColor,
-                    fontSize: `${customization.bubble_size || 16}px`
+                    fontSize: `${customization.bubble_size || 16}px`,
+                    lineHeight: '1.5'
                   }}
                 >
                   {msg.content}
                 </div>
               </div>
-              {msg.sender_type === 'user' && (
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden bg-gradient-to-br from-pink-300 to-rose-400"
-                >
-                  {userProfile?.avatar_url ? (
-                    <img src={userProfile.avatar_url} className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-4 h-4" />
-                  )}
-                </div>
-              )}
             </motion.div>
           ))}
         </AnimatePresence>
