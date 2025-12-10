@@ -272,6 +272,8 @@ const ChatPage: React.FC = () => {
       const body: any = { 
         messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMessage], 
         characterName: character?.name, 
+        characterId: characterId,
+        userId: user?.id,
         persona: character?.persona,
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined
       };
