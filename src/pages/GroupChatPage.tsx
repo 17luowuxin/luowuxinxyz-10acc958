@@ -532,7 +532,7 @@ const GroupChatPage: React.FC = () => {
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex items-end gap-2 ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}
               onTouchStart={() => handleTouchStart(msg)}
               onTouchEnd={handleTouchEnd}
               onMouseDown={() => handleTouchStart(msg)}
@@ -541,7 +541,7 @@ const GroupChatPage: React.FC = () => {
             >
               {msg.sender_type === 'character' && (
                 <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white mr-2 flex-shrink-0 overflow-hidden"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden"
                   style={{ backgroundColor: getCharacterAvatarColor(msg.character_id) }}
                 >
                   {msg.characterAvatar ? (
@@ -571,9 +571,13 @@ const GroupChatPage: React.FC = () => {
               </div>
               {msg.sender_type === 'user' && (
                 <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white ml-2 flex-shrink-0 overflow-hidden bg-gradient-to-br from-pink-300 to-rose-400"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden bg-gradient-to-br from-pink-300 to-rose-400"
                 >
-                  <User className="w-4 h-4" />
+                  {userProfile?.avatar_url ? (
+                    <img src={userProfile.avatar_url} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-4 h-4" />
+                  )}
                 </div>
               )}
             </motion.div>
