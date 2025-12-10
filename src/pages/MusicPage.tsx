@@ -41,6 +41,8 @@ const MusicPage: React.FC = () => {
   const [selectedTrackIdForCover, setSelectedTrackIdForCover] = useState<string | null>(null);
   const [showTrackList, setShowTrackList] = useState(false);
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -54,18 +56,44 @@ const MusicPage: React.FC = () => {
     }
     
     setUploading(true);
-    toast.info('正在上传...', { duration: 10000, id: 'uploading' });
+    setUploadProgress(0);
     
     try {
       const fileName = `${user.id}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('music')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
       
-      if (uploadError) throw uploadError;
+      // 使用 XMLHttpRequest 来获取上传进度
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        });
+        
+        xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+        
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        xhr.open('POST', `${supabaseUrl}/storage/v1/object/music/${fileName}`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.setRequestHeader('x-upsert', 'false');
+        xhr.send(file);
+      });
       
       const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
       
@@ -81,19 +109,45 @@ const MusicPage: React.FC = () => {
       
       if (insertError) throw insertError;
       
-      toast.dismiss('uploading');
       toast.success('音乐上传成功');
       fetchTracks();
     } catch (err: any) {
-      toast.dismiss('uploading');
       toast.error('上传失败: ' + err.message);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
       if (audioInputRef.current) audioInputRef.current.value = '';
     }
   };
 
   const [uploadingCover, setUploadingCover] = useState(false);
+
+  // 压缩图片函数
+  const compressImage = (file: File, maxWidth = 800, quality = 0.8): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('压缩失败')),
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,13 +155,16 @@ const MusicPage: React.FC = () => {
     if (!file || !user) return;
     
     setUploadingCover(true);
-    toast.info('正在上传封面...', { id: 'cover-uploading', duration: 30000 });
     
     try {
-      const fileName = `${user.id}/covers/${Date.now()}_${file.name}`;
+      // 压缩图片
+      const compressedBlob = await compressImage(file);
+      const compressedFile = new File([compressedBlob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+      
+      const fileName = `${user.id}/covers/${Date.now()}_${compressedFile.name}`;
       const { error: uploadError } = await supabase.storage
         .from('music')
-        .upload(fileName, file);
+        .upload(fileName, compressedFile);
       
       if (uploadError) throw uploadError;
       
@@ -115,31 +172,22 @@ const MusicPage: React.FC = () => {
       const publicUrl = urlData.publicUrl;
       
       if (trackId) {
-        const { data: updatedData, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from('music')
           .update({ cover_url: publicUrl })
           .eq('id', trackId)
-          .eq('user_id', user.id)
-          .select()
-          .single();
+          .eq('user_id', user.id);
         
-        if (updateError) {
-          console.error('Update error:', updateError);
-          throw updateError;
-        }
+        if (updateError) throw updateError;
         
         await fetchTracks();
-        toast.dismiss('cover-uploading');
         toast.success('封面已更新');
       } else {
-        // 保存默认封面到数据库
         await saveDefaultCover(publicUrl);
-        toast.dismiss('cover-uploading');
         toast.success('唱片封面已保存');
       }
     } catch (err: any) {
       console.error('Cover upload error:', err);
-      toast.dismiss('cover-uploading');
       toast.error('封面上传失败: ' + err.message);
     } finally {
       setUploadingCover(false);
@@ -224,9 +272,12 @@ const MusicPage: React.FC = () => {
             className="hidden"
           />
           <Button variant="ghost" size="icon" disabled={uploading} asChild>
-            <span>
+            <span className="relative">
               {uploading ? (
-                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center gap-1">
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs text-primary">{uploadProgress}%</span>
+                </div>
               ) : (
                 <Upload className="w-5 h-5" />
               )}

@@ -151,12 +151,59 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [loopMode, currentTrackIndex, tracks.length]);
 
+  // Wake lock for background playback
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && playing) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          console.log('Wake lock released');
+        });
+      } catch (err) {
+        console.log('Wake lock failed:', err);
+      }
+    }
+  }, [playing]);
+
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  // Manage wake lock based on playing state
+  useEffect(() => {
+    if (playing) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+    return () => releaseWakeLock();
+  }, [playing, requestWakeLock, releaseWakeLock]);
+
+  // Re-acquire wake lock when page becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && playing) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [playing, requestWakeLock]);
+
   // Update audio source when track changes
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
     
+    // Preload audio for smoother playback
+    audio.preload = 'auto';
     audio.src = currentTrack.audio_url;
+    
     if (playing) {
       audio.play().catch(console.error);
     }
@@ -172,10 +219,19 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ] : []
       });
 
-      navigator.mediaSession.setActionHandler('play', () => togglePlay());
-      navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+      navigator.mediaSession.setActionHandler('play', () => {
+        audioRef.current?.play();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        audioRef.current?.pause();
+      });
       navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
       navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined && audioRef.current) {
+          audioRef.current.currentTime = details.seekTime;
+        }
+      });
     }
   }, [currentTrack?.id]);
 
@@ -253,8 +309,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }}
     >
       {children}
-      {/* 全局音频元素 - 后台播放 */}
-      <audio ref={audioRef} />
+      {/* 全局音频元素 - 后台播放，启用预加载 */}
+      <audio ref={audioRef} preload="auto" />
     </MusicContext.Provider>
   );
 };
