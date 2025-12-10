@@ -410,6 +410,10 @@ const GroupChatPage: React.FC = () => {
     }
   };
 
+  // 字体颜色
+  const fontColor = (customization as any).font_color || '#333333';
+  const friendFontColor = (customization as any).friend_font_color || '#333333';
+
   // 四格头像组件
   const GroupAvatar = () => {
     const displayMembers = members.slice(0, 4);
@@ -558,13 +562,20 @@ const GroupChatPage: React.FC = () => {
                       ? (customization.bubble_color || '#FF6B9D')
                       : getCharacterBubbleColor(),
                     opacity: customization.bubble_opacity || 1,
-                    color: '#fff',
+                    color: msg.sender_type === 'user' ? fontColor : friendFontColor,
                     fontSize: `${customization.bubble_size || 16}px`
                   }}
                 >
                   {msg.content}
                 </div>
               </div>
+              {msg.sender_type === 'user' && (
+                <div 
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white ml-2 flex-shrink-0 overflow-hidden bg-gradient-to-br from-pink-300 to-rose-400"
+                >
+                  <User className="w-4 h-4" />
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
