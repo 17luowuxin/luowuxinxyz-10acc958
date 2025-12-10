@@ -350,6 +350,8 @@ const ChatPage: React.FC = () => {
   const friendBubbleColor = customization.friend_bubble_color || '#B5D8FF';
   const bubbleOpacity = customization.bubble_opacity ?? 0.95;
   const bubbleSize = customization.bubble_size || 16;
+  const fontColor = (customization as any).font_color || '#333333';
+  const friendFontColor = (customization as any).friend_font_color || '#333333';
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
@@ -445,7 +447,7 @@ const ChatPage: React.FC = () => {
                 style={{ 
                   backgroundColor: msg.role === 'user' ? userBubbleColor : friendBubbleColor, 
                   opacity: bubbleOpacity,
-                  color: '#333',
+                  color: msg.role === 'user' ? fontColor : friendFontColor,
                   fontSize: `${bubbleSize}px`,
                   lineHeight: '1.5'
                 }}

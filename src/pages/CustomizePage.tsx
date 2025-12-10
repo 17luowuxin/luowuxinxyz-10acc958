@@ -45,6 +45,17 @@ const fontOptions = [
   { id: 'longcang', name: '龙藏体', family: '"Long Cang", cursive', preview: 'Aa 你好' },
 ];
 
+// 字体颜色选项
+const fontColors = [
+  '#333333', // 深灰
+  '#FFFFFF', // 白色
+  '#FFB5C5', // 粉色
+  '#B5D8FF', // 蓝色
+  '#000000', // 黑色
+  '#FF6B6B', // 红色
+  '#4ECDC4', // 青色
+  '#FFE66D', // 黄色
+];
 
 const CustomizePage: React.FC = () => {
   const navigate = useNavigate();
@@ -59,13 +70,14 @@ const CustomizePage: React.FC = () => {
   const [videoBackgroundUrl, setVideoBackgroundUrl] = useState('');
   const [currentTheme, setCurrentTheme] = useState('pink');
   const [currentFont, setCurrentFont] = useState('default');
+  const [fontColor, setFontColor] = useState('#333333');
+  const [friendFontColor, setFriendFontColor] = useState('#333333');
   const [uploading, setUploading] = useState(false);
   const [globalUploading, setGlobalUploading] = useState(false);
   const [videoUploading, setVideoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     if (user) fetchSettings();
   }, [user]);
@@ -108,6 +120,8 @@ const CustomizePage: React.FC = () => {
       setVideoBackgroundUrl((data as any).video_background_url || '');
       if (data.theme) setCurrentTheme(data.theme);
       if ((data as any).font_family) setCurrentFont((data as any).font_family);
+      if ((data as any).font_color) setFontColor((data as any).font_color);
+      if ((data as any).friend_font_color) setFriendFontColor((data as any).friend_font_color);
     }
   };
 
@@ -216,6 +230,8 @@ const CustomizePage: React.FC = () => {
       video_background_url: videoBackgroundUrl,
       theme: currentTheme,
       font_family: currentFont,
+      font_color: fontColor,
+      friend_font_color: friendFontColor,
     } as any, { onConflict: 'user_id' });
     
     if (error) {
@@ -490,6 +506,22 @@ const CustomizePage: React.FC = () => {
             </div>
 
             <div>
+              <p className="text-sm font-medium mb-3">字体颜色</p>
+              <div className="flex gap-2 flex-wrap">
+                {fontColors.map(c => (
+                  <button 
+                    key={c} 
+                    onClick={() => setFontColor(c)} 
+                    className={`w-10 h-10 rounded-full border-4 transition-transform hover:scale-110 ${
+                      fontColor === c ? 'border-primary scale-110' : 'border-transparent'
+                    }`} 
+                    style={{ backgroundColor: c, border: c === '#FFFFFF' ? '2px solid #ddd' : undefined }} 
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
               <p className="text-sm font-medium mb-3">透明度 {Math.round(opacity[0] * 100)}%</p>
               <Slider 
                 value={opacity} 
@@ -554,6 +586,22 @@ const CustomizePage: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            <div>
+              <p className="text-sm font-medium mb-3">字体颜色</p>
+              <div className="flex gap-2 flex-wrap">
+                {fontColors.map(c => (
+                  <button 
+                    key={c} 
+                    onClick={() => setFriendFontColor(c)} 
+                    className={`w-10 h-10 rounded-full border-4 transition-transform hover:scale-110 ${
+                      friendFontColor === c ? 'border-secondary scale-110' : 'border-transparent'
+                    }`} 
+                    style={{ backgroundColor: c, border: c === '#FFFFFF' ? '2px solid #ddd' : undefined }} 
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -571,7 +619,7 @@ const CustomizePage: React.FC = () => {
             <div className="flex justify-end items-end gap-2">
               <div 
                 className={getBubblePreviewClass(bubbleStyle, true)}
-                style={{ backgroundColor: bubbleColor, opacity: opacity[0], color: '#333', fontSize: `${bubbleSize[0]}px` }}
+                style={{ backgroundColor: bubbleColor, opacity: opacity[0], color: fontColor, fontSize: `${bubbleSize[0]}px` }}
               >
                 你好呀~
               </div>
@@ -585,7 +633,7 @@ const CustomizePage: React.FC = () => {
               </div>
               <div 
                 className={getBubblePreviewClass(bubbleStyle, false)}
-                style={{ backgroundColor: friendBubbleColor, opacity: opacity[0], color: '#333', fontSize: `${bubbleSize[0]}px` }}
+                style={{ backgroundColor: friendBubbleColor, opacity: opacity[0], color: friendFontColor, fontSize: `${bubbleSize[0]}px` }}
               >
                 你好! 很高兴认识你 💕
               </div>

@@ -78,22 +78,22 @@ serve(async (req) => {
     const userName = userProfile?.nickname || '用户';
     const userPersona = userProfile?.persona || '';
 
-    // 确定回复的角色
+    // 确定回复的角色 - 每个角色独立回复，不会一个角色扮演多人
     let responders: any[] = [];
     
-    // 如果有@的角色，优先让被@的角色回复
+    // 如果有@的角色，只让被@的角色回复
     if (mentionedCharacterIds && mentionedCharacterIds.length > 0) {
       responders = characters.filter((c: any) => mentionedCharacterIds.includes(c.id));
       console.log("Using mentioned characters:", responders.map((r: any) => r.name));
     } else {
-      // 没有@的话，随机选择1-2个角色来回复
-      const numResponders = Math.min(characters.length, Math.random() > 0.5 ? 2 : 1);
+      // 没有@的话，随机选择1个角色来回复（避免多角色混乱）
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
-      responders = shuffled.slice(0, numResponders);
+      responders = shuffled.slice(0, 1);
     }
 
     const responses: { characterId: string; characterName: string; content: string }[] = [];
 
+    // 每个角色单独调用API，确保每个回复都是独立的
     for (const character of responders) {
       const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
       
@@ -102,20 +102,28 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
 群聊成员: ${userName}(用户)${otherCharacters ? `、${otherCharacters}` : ''}
 
-【重要规则】
-1. 你只扮演${character.name}，直接用第一人称回复，不要加角色名前缀
-2. 回复要简短自然，像真实微信群聊一样，一般1-2句话
-3. 可以用括号表达动作或情绪，如(笑)(无语)(拍桌子)，但不要编号
-4. 不要回复其他角色的话，只回复用户"${userName}"
-5. 根据人设保持角色性格特点
-${userPersona ? `6. 关于用户${userName}: ${userPersona}` : ''}
+【核心规则 - 必须严格遵守】
+1. 你只能扮演"${character.name}"这一个角色，绝对不能扮演其他角色或模拟其他人的回复
+2. 直接用第一人称回复，不要在回复开头加任何角色名、编号或前缀
+3. 只回复一段话，不要分多段或模拟对话
+4. 回复要简短自然，像真实微信群聊，一般1-3句话
+5. 可以用括号表达动作或情绪，如(笑)(无语)
+6. 保持"${character.name}"的性格特点
 
-错误示例: "角色名: 1（表情）内容" 
-正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"`;
+【禁止行为】
+- 禁止写出其他角色的回复
+- 禁止使用"角色名:"的格式
+- 禁止模拟多人对话
+- 禁止添加编号如"1." "2."
+
+${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
+
+正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"
+错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"`;
 
       const requestBody = provider === 'anthropic' && userApiKey ? {
         model,
-        max_tokens: 256,
+        max_tokens: 150,
         messages: [
           ...messages.slice(-10),
           { role: "user", content: `${userName}: ${userMessage}` }
@@ -123,7 +131,7 @@ ${userPersona ? `6. 关于用户${userName}: ${userPersona}` : ''}
         system: systemPrompt,
       } : {
         model,
-        max_tokens: 256,
+        max_tokens: 150,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages.slice(-10),
