@@ -204,7 +204,9 @@ export type Database = {
       customization: {
         Row: {
           app_icons: Json | null
+          avatar_frame_url: string | null
           bubble_color: string | null
+          bubble_frame_url: string | null
           bubble_opacity: number | null
           bubble_size: number | null
           bubble_style: string | null
@@ -212,7 +214,9 @@ export type Database = {
           created_at: string
           font_color: string | null
           font_family: string | null
+          friend_avatar_frame_url: string | null
           friend_bubble_color: string | null
+          friend_bubble_frame_url: string | null
           friend_font_color: string | null
           global_background_url: string | null
           group_chat_background_url: string | null
@@ -227,7 +231,9 @@ export type Database = {
         }
         Insert: {
           app_icons?: Json | null
+          avatar_frame_url?: string | null
           bubble_color?: string | null
+          bubble_frame_url?: string | null
           bubble_opacity?: number | null
           bubble_size?: number | null
           bubble_style?: string | null
@@ -235,7 +241,9 @@ export type Database = {
           created_at?: string
           font_color?: string | null
           font_family?: string | null
+          friend_avatar_frame_url?: string | null
           friend_bubble_color?: string | null
+          friend_bubble_frame_url?: string | null
           friend_font_color?: string | null
           global_background_url?: string | null
           group_chat_background_url?: string | null
@@ -250,7 +258,9 @@ export type Database = {
         }
         Update: {
           app_icons?: Json | null
+          avatar_frame_url?: string | null
           bubble_color?: string | null
+          bubble_frame_url?: string | null
           bubble_opacity?: number | null
           bubble_size?: number | null
           bubble_style?: string | null
@@ -258,7 +268,9 @@ export type Database = {
           created_at?: string
           font_color?: string | null
           font_family?: string | null
+          friend_avatar_frame_url?: string | null
           friend_bubble_color?: string | null
+          friend_bubble_frame_url?: string | null
           friend_font_color?: string | null
           global_background_url?: string | null
           group_chat_background_url?: string | null
