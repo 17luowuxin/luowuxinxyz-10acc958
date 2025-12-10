@@ -109,16 +109,30 @@ const GroupChatPage: React.FC = () => {
   }, [messages]);
 
   const fetchGroup = async () => {
-    const { data } = await supabase
-      .from('group_chats')
-      .select('*, group_members(character_id, characters(id, name, avatar_url, persona))')
-      .eq('id', groupId)
-      .single();
-    
-    if (data) {
-      setGroup(data);
-      const chars = data.group_members?.map((m: any) => m.characters).filter(Boolean) || [];
-      setMembers(chars);
+    try {
+      const { data, error } = await supabase
+        .from('group_chats')
+        .select('*, group_members(character_id, characters(id, name, avatar_url, persona))')
+        .eq('id', groupId)
+        .maybeSingle();
+      
+      if (error) {
+        console.error('获取群聊失败:', error);
+        toast.error('加载群聊失败');
+        return;
+      }
+      
+      if (data) {
+        setGroup(data);
+        const chars = data.group_members?.map((m: any) => m.characters).filter(Boolean) || [];
+        setMembers(chars);
+      } else {
+        toast.error('群聊不存在');
+        navigate('/group');
+      }
+    } catch (err) {
+      console.error('获取群聊异常:', err);
+      toast.error('加载群聊失败');
     }
   };
 
@@ -561,7 +575,7 @@ const GroupChatPage: React.FC = () => {
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex items-end gap-2 ${msg.sender_type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+              className={`flex ${msg.sender_type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
               onTouchStart={() => handleTouchStart(msg)}
               onTouchEnd={handleTouchEnd}
               onMouseDown={() => handleTouchStart(msg)}
@@ -594,10 +608,10 @@ const GroupChatPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Bubble */}
-              <div className="flex flex-col">
+              {/* Bubble - 紧贴头像 */}
+              <div className={`flex flex-col ${msg.sender_type === 'user' ? 'mr-2 items-end' : 'ml-2 items-start'}`}>
                 {msg.sender_type === 'character' && (
-                  <p className="text-xs text-muted-foreground mb-1 ml-1">{msg.characterName}</p>
+                  <p className="text-xs text-muted-foreground mb-1">{msg.characterName}</p>
                 )}
                 <div
                   className={getBubbleStyle(msg.sender_type === 'user')}
@@ -606,7 +620,9 @@ const GroupChatPage: React.FC = () => {
                     opacity: customization.bubble_opacity || 1,
                     color: msg.sender_type === 'user' ? fontColor : friendFontColor,
                     fontSize: `${customization.bubble_size || 16}px`,
-                    lineHeight: '1.5'
+                    lineHeight: '1.5',
+                    wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap'
                   }}
                 >
                   {msg.content}
