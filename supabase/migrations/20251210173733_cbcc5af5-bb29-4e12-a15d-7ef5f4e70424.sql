@@ -1,0 +1,2 @@
+-- Add character_id column to world_books table for character-specific world books
+ALTER TABLE public.world_books ADD COLUMN IF NOT EXISTS character_id uuid REFERENCES public.characters(id) ON DELETE SET NULL;

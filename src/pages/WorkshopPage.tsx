@@ -26,6 +26,8 @@ interface WorldBook {
   name: string;
   content: string;
   is_global: boolean;
+  character_id?: string;
+  character_name?: string;
   created_at: string;
 }
 
@@ -53,6 +55,7 @@ const WorkshopPage: React.FC = () => {
   const [worldBookName, setWorldBookName] = useState('');
   const [worldBookContent, setWorldBookContent] = useState('');
   const [worldBookGlobal, setWorldBookGlobal] = useState(false);
+  const [worldBookCharacter, setWorldBookCharacter] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -88,10 +91,15 @@ const WorkshopPage: React.FC = () => {
   const fetchWorldBooks = async () => {
     const { data } = await (supabase
       .from('world_books' as any)
-      .select('*')
+      .select('*, characters(name)')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false }) as any);
-    if (data) setWorldBooks(data);
+    if (data) {
+      setWorldBooks(data.map((wb: any) => ({
+        ...wb,
+        character_name: wb.characters?.name
+      })));
+    }
   };
 
   const handleSavePreset = async () => {
@@ -129,7 +137,8 @@ const WorkshopPage: React.FC = () => {
       user_id: user?.id,
       name: worldBookName.trim(),
       content: worldBookContent.trim(),
-      is_global: worldBookGlobal
+      is_global: worldBookGlobal,
+      character_id: worldBookGlobal ? null : worldBookCharacter
     };
 
     if (editingWorldBook) {
@@ -239,64 +248,6 @@ const WorkshopPage: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleImportPreset = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      
-      if (!data.name || !data.content) {
-        toast.error('无效的预设文件');
-        return;
-      }
-      
-      await (supabase.from('presets' as any) as any).insert({
-        user_id: user?.id,
-        name: data.name,
-        content: data.content,
-        character_id: null
-      });
-      
-      toast.success('预设已导入');
-      fetchPresets();
-    } catch (err) {
-      toast.error('导入失败，请检查文件格式');
-    }
-    
-    e.target.value = '';
-  };
-
-  const handleImportWorldBook = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      
-      if (!data.name || !data.content) {
-        toast.error('无效的世界书文件');
-        return;
-      }
-      
-      await (supabase.from('world_books' as any) as any).insert({
-        user_id: user?.id,
-        name: data.name,
-        content: data.content,
-        is_global: data.is_global || false
-      });
-      
-      toast.success('世界书已导入');
-      fetchWorldBooks();
-    } catch (err) {
-      toast.error('导入失败，请检查文件格式');
-    }
-    
-    e.target.value = '';
-  };
-
   const resetPresetForm = () => {
     setShowPresetDialog(false);
     setEditingPreset(null);
@@ -311,6 +262,7 @@ const WorkshopPage: React.FC = () => {
     setWorldBookName('');
     setWorldBookContent('');
     setWorldBookGlobal(false);
+    setWorldBookCharacter(null);
   };
 
   const openEditPreset = (preset: Preset) => {
@@ -326,6 +278,7 @@ const WorkshopPage: React.FC = () => {
     setWorldBookName(wb.name);
     setWorldBookContent(wb.content);
     setWorldBookGlobal(wb.is_global);
+    setWorldBookCharacter(wb.character_id || null);
     setShowWorldBookDialog(true);
   };
 
@@ -446,21 +399,13 @@ const WorkshopPage: React.FC = () => {
 
           {/* Presets Tab */}
           <TabsContent value="presets" className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                className="flex-1 rounded-full"
-                onClick={() => setShowPresetDialog(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />创建新预设
-              </Button>
-              <label className="block">
-                <input type="file" accept=".json" onChange={handleImportPreset} className="hidden" />
-                <Button variant="outline" className="rounded-full" asChild>
-                  <span><Upload className="w-4 h-4 mr-2" />导入</span>
-                </Button>
-              </label>
-            </div>
+            <Button 
+              variant="outline" 
+              className="w-full rounded-full"
+              onClick={() => setShowPresetDialog(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />创建新预设
+            </Button>
 
             <AnimatePresence>
               {filteredPresets.map((preset, i) => (
@@ -521,21 +466,13 @@ const WorkshopPage: React.FC = () => {
 
           {/* World Books Tab */}
           <TabsContent value="worldbooks" className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                className="flex-1 rounded-full"
-                onClick={() => setShowWorldBookDialog(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />创建世界书
-              </Button>
-              <label className="block">
-                <input type="file" accept=".json" onChange={handleImportWorldBook} className="hidden" />
-                <Button variant="outline" className="rounded-full" asChild>
-                  <span><Upload className="w-4 h-4 mr-2" />导入</span>
-                </Button>
-              </label>
-            </div>
+            <Button 
+              variant="outline" 
+              className="w-full rounded-full"
+              onClick={() => setShowWorldBookDialog(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />创建世界书
+            </Button>
 
             <AnimatePresence>
               {filteredWorldBooks.map((wb, i) => (
@@ -555,10 +492,15 @@ const WorkshopPage: React.FC = () => {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-bold truncate">{wb.name}</h3>
                         {wb.is_global && (
                           <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">全局</span>
+                        )}
+                        {wb.character_name && !wb.is_global && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                            <Users className="w-3 h-3" />{wb.character_name}
+                          </span>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-3 mt-1">{wb.content}</p>
@@ -671,11 +613,34 @@ const WorkshopPage: React.FC = () => {
               <input
                 type="checkbox"
                 checked={worldBookGlobal}
-                onChange={(e) => setWorldBookGlobal(e.target.checked)}
+                onChange={(e) => {
+                  setWorldBookGlobal(e.target.checked);
+                  if (e.target.checked) setWorldBookCharacter(null);
+                }}
                 className="w-4 h-4 rounded"
               />
               <span className="text-sm">全局应用（对所有角色生效）</span>
             </label>
+            {!worldBookGlobal && characters.length > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">关联角色（可选）</p>
+                <div className="flex flex-wrap gap-2">
+                  {characters.map((char) => (
+                    <button
+                      key={char.id}
+                      className={`px-3 py-1 rounded-full text-sm ${
+                        worldBookCharacter === char.id 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-muted'
+                      }`}
+                      onClick={() => setWorldBookCharacter(worldBookCharacter === char.id ? null : char.id)}
+                    >
+                      {char.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={resetWorldBookForm}>取消</Button>
               <Button variant="candy" className="flex-1" onClick={handleSaveWorldBook}>保存</Button>
