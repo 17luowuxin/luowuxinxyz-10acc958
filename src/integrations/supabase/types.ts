@@ -218,6 +218,7 @@ export type Database = {
           group_chat_background_url: string | null
           id: string
           lock_screen_bg_url: string | null
+          lock_screen_video_url: string | null
           music_cover_url: string | null
           theme: string | null
           updated_at: string
@@ -240,6 +241,7 @@ export type Database = {
           group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
+          lock_screen_video_url?: string | null
           music_cover_url?: string | null
           theme?: string | null
           updated_at?: string
@@ -262,6 +264,7 @@ export type Database = {
           group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
+          lock_screen_video_url?: string | null
           music_cover_url?: string | null
           theme?: string | null
           updated_at?: string
