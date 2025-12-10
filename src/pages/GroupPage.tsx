@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Users, MessageCircle, User } from 'lucide-react';
+import { ChevronLeft, Plus, Users, MessageCircle, User, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +19,8 @@ const GroupPage: React.FC = () => {
   const [groupName, setGroupName] = useState('');
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -53,6 +56,7 @@ const GroupPage: React.FC = () => {
       return;
     }
 
+    setCreating(true);
     try {
       const { data: group, error } = await supabase
         .from('group_chats')
@@ -93,6 +97,34 @@ const GroupPage: React.FC = () => {
     } catch (err) {
       console.error('创建群聊异常:', err);
       toast.error('创建群聊失败');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteGroup = async (groupId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleting(groupId);
+    try {
+      // 先删除群成员
+      await supabase.from('group_members').delete().eq('group_id', groupId);
+      // 删除群消息
+      await supabase.from('group_messages').delete().eq('group_id', groupId);
+      // 删除群聊
+      const { error } = await supabase.from('group_chats').delete().eq('id', groupId);
+      
+      if (error) {
+        toast.error('删除失败: ' + error.message);
+        return;
+      }
+      
+      toast.success('群聊已删除');
+      fetchGroups();
+    } catch (err) {
+      console.error('删除群聊异常:', err);
+      toast.error('删除失败');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -164,9 +196,16 @@ const GroupPage: React.FC = () => {
                 variant="candy" 
                 className="w-full" 
                 onClick={createGroup}
-                disabled={characters.length < 2}
+                disabled={creating || selectedCharacters.length < 2 || !groupName.trim()}
               >
-                创建群聊 ({selectedCharacters.length}人)
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    创建中...
+                  </>
+                ) : (
+                  `创建群聊 (${selectedCharacters.length}人)`
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -219,7 +258,37 @@ const GroupPage: React.FC = () => {
                       {memberChars.map((m: any) => m.name).join('、') || '暂无成员'}
                     </p>
                   </div>
-                  <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {deleting === group.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>删除群聊</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          确定要删除"{group.name}"吗？所有聊天记录将被清除，此操作无法撤销。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={(e) => deleteGroup(group.id, e)}>
+                          删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </motion.div>
             );
