@@ -45,10 +45,10 @@ const MusicPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     
-    // 限制文件大小为 50MB
-    const maxSize = 50 * 1024 * 1024;
+    // 限制文件大小为 200MB
+    const maxSize = 200 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error('音乐文件过大，最大支持 50MB');
+      toast.error('音乐文件过大，最大支持 200MB');
       if (audioInputRef.current) audioInputRef.current.value = '';
       return;
     }

@@ -23,7 +23,6 @@ interface MusicContextType {
   duration: number;
   defaultCoverUrl: string | null;
   setTracks: (tracks: MusicTrack[]) => void;
-  setCurrentTrackIndex: (index: number) => void;
   setPlaying: (playing: boolean) => void;
   setLoopMode: (mode: LoopMode) => void;
   setDefaultCoverUrl: (url: string | null) => void;
@@ -50,7 +49,7 @@ export const useMusicPlayer = () => {
 export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(-1);
+  const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<LoopMode>('none');
   const [currentTime, setCurrentTime] = useState(0);
@@ -58,7 +57,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [defaultCoverUrl, setDefaultCoverUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const currentTrack = currentTrackIndex >= 0 ? tracks[currentTrackIndex] : null;
+  // 根据 currentTrackId 找到当前歌曲，这样即使 tracks 更新后也能获取最新的封面
+  const currentTrack = currentTrackId ? tracks.find(t => t.id === currentTrackId) || null : null;
+  const currentTrackIndex = currentTrackId ? tracks.findIndex(t => t.id === currentTrackId) : -1;
 
   // Fetch tracks
   const fetchTracks = useCallback(async () => {
@@ -70,13 +71,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .order('created_at', { ascending: false });
     if (data) {
       setTracks(data);
-      // 更新 currentTrack 以同步封面变化
-      if (currentTrackIndex >= 0 && data[currentTrackIndex]) {
-        // 触发重新渲染
-      }
     }
     if (error) console.error(error);
-  }, [user, currentTrackIndex]);
+  }, [user]);
 
   useEffect(() => {
     if (user) fetchTracks();
@@ -151,13 +148,16 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [currentTrack?.id]);
 
   const playTrack = useCallback((index: number) => {
-    setCurrentTrackIndex(index);
-    setPlaying(true);
-    setCurrentTime(0);
-    setTimeout(() => {
-      audioRef.current?.play().catch(console.error);
-    }, 100);
-  }, []);
+    const track = tracks[index];
+    if (track) {
+      setCurrentTrackId(track.id);
+      setPlaying(true);
+      setCurrentTime(0);
+      setTimeout(() => {
+        audioRef.current?.play().catch(console.error);
+      }, 100);
+    }
+  }, [tracks]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -206,7 +206,6 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         duration,
         defaultCoverUrl,
         setTracks,
-        setCurrentTrackIndex,
         setPlaying,
         setLoopMode,
         setDefaultCoverUrl,
