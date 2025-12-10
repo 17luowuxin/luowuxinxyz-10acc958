@@ -460,7 +460,7 @@ const ChatPage: React.FC = () => {
               onMouseLeave={handleTouchEnd}
             >
               {/* Avatar with Frame - 在消息底部对齐 */}
-              <div className="relative w-9 h-9 flex-shrink-0">
+              <div className="relative w-10 h-10 flex-shrink-0">
                 {msg.role === 'user' && userAvatarFrame && (
                   <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
