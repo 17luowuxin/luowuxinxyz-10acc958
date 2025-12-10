@@ -11,6 +11,11 @@ interface MusicTrack {
   created_at: string;
 }
 
+interface Customization {
+  music_cover_url?: string | null;
+  [key: string]: any;
+}
+
 type LoopMode = 'none' | 'single' | 'all';
 
 interface MusicContextType {
@@ -26,6 +31,7 @@ interface MusicContextType {
   setPlaying: (playing: boolean) => void;
   setLoopMode: (mode: LoopMode) => void;
   setDefaultCoverUrl: (url: string | null) => void;
+  saveDefaultCover: (url: string) => Promise<void>;
   playTrack: (index: number) => void;
   togglePlay: () => void;
   prevTrack: () => void;
@@ -75,9 +81,35 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (error) console.error(error);
   }, [user]);
 
+  // 加载默认封面
+  const loadDefaultCover = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('customization')
+      .select('music_cover_url')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (data && (data as Customization).music_cover_url) {
+      setDefaultCoverUrl((data as Customization).music_cover_url);
+    }
+  }, [user]);
+
+  // 保存默认封面到数据库
+  const saveDefaultCover = useCallback(async (url: string) => {
+    if (!user) return;
+    await supabase
+      .from('customization')
+      .update({ music_cover_url: url } as any)
+      .eq('user_id', user.id);
+    setDefaultCoverUrl(url);
+  }, [user]);
+
   useEffect(() => {
-    if (user) fetchTracks();
-  }, [user, fetchTracks]);
+    if (user) {
+      fetchTracks();
+      loadDefaultCover();
+    }
+  }, [user, fetchTracks, loadDefaultCover]);
 
   // Audio event listeners
   useEffect(() => {
@@ -209,6 +241,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setPlaying,
         setLoopMode,
         setDefaultCoverUrl,
+        saveDefaultCover,
         playTrack,
         togglePlay,
         prevTrack,

@@ -21,7 +21,7 @@ const MusicPage: React.FC = () => {
     currentTime,
     duration,
     defaultCoverUrl,
-    setDefaultCoverUrl,
+    saveDefaultCover,
     playTrack,
     togglePlay,
     prevTrack,
@@ -130,8 +130,9 @@ const MusicPage: React.FC = () => {
         await fetchTracks();
         toast.success('封面已更新');
       } else {
-        setDefaultCoverUrl(publicUrl);
-        toast.success('封面已设置，上传歌曲时将自动使用此封面');
+        // 保存默认封面到数据库
+        await saveDefaultCover(publicUrl);
+        toast.success('唱片封面已保存');
       }
     } catch (err: any) {
       console.error('Cover upload error:', err);
