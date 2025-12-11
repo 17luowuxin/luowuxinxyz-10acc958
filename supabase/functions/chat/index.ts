@@ -121,8 +121,9 @@ ${presetsContent}
 如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。`;
 
     let requestBody: Record<string, unknown>;
+    const isAnthropic = provider === 'anthropic' && userApiKey;
     
-    if (provider === 'anthropic' && userApiKey) {
+    if (isAnthropic) {
       requestBody = {
         model,
         max_tokens: 1024,
@@ -144,6 +145,7 @@ ${presetsContent}
     }
 
     console.log("Sending request to AI...");
+    console.log("Request model:", model);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -167,16 +169,61 @@ ${presetsContent}
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (response.status === 401) {
+        return new Response(JSON.stringify({ error: "API密钥无效，请检查配置" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       
-      return new Response(JSON.stringify({ error: "AI服务暂时不可用: " + errorText }), {
+      return new Response(JSON.stringify({ error: "AI服务错误: " + errorText.slice(0, 200) }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("AI response received, streaming...");
+    const contentType = response.headers.get('content-type') || '';
+    console.log("Response content-type:", contentType);
 
-    return new Response(response.body, {
+    // 检查是否是流式响应
+    if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+      console.log("AI response received, streaming...");
+      return new Response(response.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // 非流式响应 - 直接解析JSON
+    const jsonResponse = await response.json();
+    console.log("Non-streaming response received");
+    
+    // 提取内容
+    let content = '';
+    if (jsonResponse.choices?.[0]?.message?.content) {
+      content = jsonResponse.choices[0].message.content;
+    } else if (jsonResponse.choices?.[0]?.text) {
+      content = jsonResponse.choices[0].text;
+    } else if (jsonResponse.content) {
+      content = jsonResponse.content;
+    } else if (jsonResponse.result) {
+      content = jsonResponse.result;
+    } else if (jsonResponse.output) {
+      content = jsonResponse.output;
+    } else if (typeof jsonResponse === 'string') {
+      content = jsonResponse;
+    }
+
+    if (!content) {
+      console.error("Could not extract content from response:", JSON.stringify(jsonResponse).slice(0, 500));
+      return new Response(JSON.stringify({ error: "无法解析AI响应" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 包装成SSE格式返回给前端
+    const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`;
+    return new Response(sseData, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error: unknown) {
