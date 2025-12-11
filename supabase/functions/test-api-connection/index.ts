@@ -71,7 +71,7 @@ serve(async (req) => {
           });
         }
         // Append /chat/completions if not already present
-        let finalUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
+        let finalUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slash
         if (!finalUrl.endsWith('/chat/completions')) {
           finalUrl = `${finalUrl}/chat/completions`;
         }
@@ -82,8 +82,9 @@ serve(async (req) => {
         };
         testBody = JSON.stringify({
           model: model || 'gpt-3.5-turbo',
-          max_tokens: 5,
-          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Say hi' }],
+          stream: false,
         });
         break;
 
@@ -97,6 +98,7 @@ serve(async (req) => {
     }
 
     console.log('Testing URL:', testUrl);
+    console.log('Testing model:', model);
     
     const response = await fetch(testUrl, {
       method: 'POST',
@@ -108,20 +110,52 @@ serve(async (req) => {
     console.log('Response status:', response.status);
     console.log('Response body:', responseText.substring(0, 500));
 
+    // 检查是否有有效响应
     if (response.ok) {
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: '连接成功' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // 尝试解析响应验证格式
+      try {
+        const json = JSON.parse(responseText);
+        // 检查是否有choices或其他有效内容
+        if (json.choices || json.content || json.result || json.output || json.response) {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            message: '连接成功，API响应正常' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        // 如果有error字段
+        if (json.error) {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: json.error.message || json.error || '未知错误' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        // 其他情况也认为成功
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: '连接成功' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch {
+        // 非JSON响应但状态码OK
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: '连接成功' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     } else {
       let errorMessage = '连接失败';
       try {
         const errorData = JSON.parse(responseText);
-        errorMessage = errorData.error?.message || errorData.message || '连接失败';
+        errorMessage = errorData.error?.message || errorData.message || errorData.error || `HTTP ${response.status}`;
       } catch {
-        errorMessage = responseText.substring(0, 200) || '连接失败';
+        errorMessage = responseText.substring(0, 200) || `HTTP ${response.status}`;
       }
       
       return new Response(JSON.stringify({ 
