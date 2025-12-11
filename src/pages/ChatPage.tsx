@@ -310,67 +310,86 @@ const ChatPage: React.FC = () => {
         return;
       }
       
-      // Read entire stream first, then show complete message (no typing effect)
+      const contentType = resp.headers.get('content-type') || '';
+      let assistantContent = '';
+      
+      // 尝试检测响应格式
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
-      let assistantContent = '';
-      let textBuffer = '';
-
+      let fullText = '';
+      
+      // 先读取所有数据
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-        
-        // 逐行处理SSE数据
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
-          
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') continue;
-          
-          try {
-            const json = JSON.parse(jsonStr);
-            // 支持多种API响应格式
-            const delta = json.choices?.[0]?.delta?.content 
-              || json.choices?.[0]?.message?.content 
-              || json.content 
-              || '';
-            assistantContent += delta;
-          } catch {
-            // 部分JSON可能跨chunk，放回buffer
-            textBuffer = line + '\n' + textBuffer;
-            break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode(); // flush remaining
+      
+      console.log('Raw response preview:', fullText.slice(0, 300));
+      
+      // 尝试多种解析方式
+      // 1. 首先检查是否是纯JSON响应
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          // 检查是否是错误响应
+          if (json.error) {
+            toast.error(json.error);
+            setLoading(false);
+            return;
+          }
+          // 尝试多种格式提取内容
+          assistantContent = json.choices?.[0]?.message?.content 
+            || json.choices?.[0]?.delta?.content
+            || json.choices?.[0]?.text
+            || json.content
+            || json.result
+            || json.output
+            || json.response
+            || json.text
+            || json.answer
+            || (typeof json === 'string' ? json : '');
+        } catch {
+          // 不是JSON，可能是纯文本
+          if (fullText.trim() && !fullText.includes('<!DOCTYPE')) {
+            assistantContent = fullText.trim();
           }
         }
       }
       
-      // 处理剩余buffer
-      if (textBuffer.trim()) {
-        for (let raw of textBuffer.split('\n')) {
-          if (!raw || !raw.startsWith('data: ')) continue;
-          const jsonStr = raw.slice(6).trim();
-          if (jsonStr === '[DONE]') continue;
-          try {
-            const json = JSON.parse(jsonStr);
-            const delta = json.choices?.[0]?.delta?.content 
-              || json.choices?.[0]?.message?.content 
-              || json.content 
-              || '';
-            assistantContent += delta;
-          } catch {}
+      // 2. SSE格式解析
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (!line || line.startsWith(':')) continue;
+          
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta = json.choices?.[0]?.delta?.content 
+                || json.choices?.[0]?.message?.content
+                || json.choices?.[0]?.text
+                || json.content
+                || json.delta?.content
+                || '';
+              if (delta) assistantContent += delta;
+            } catch {
+              // 忽略解析错误
+            }
+          }
         }
       }
       
-      // 如果内容为空，显示错误
+      // 如果内容为空，显示详细错误
       if (!assistantContent.trim()) {
-        console.error('Empty response from API');
-        toast.error('AI返回为空，请检查API配置或重试');
+        console.error('Empty response. Raw data:', fullText.slice(0, 500));
+        toast.error('AI返回为空，请检查API配置是否正确');
         setLoading(false);
         return;
       }
