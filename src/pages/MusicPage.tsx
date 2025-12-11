@@ -17,6 +17,7 @@ const MusicPage: React.FC = () => {
     currentTrack,
     currentTrackIndex,
     playing,
+    isLoading,
     loopMode,
     currentTime,
     duration,
@@ -392,7 +393,13 @@ const MusicPage: React.FC = () => {
               onClick={togglePlay}
               disabled={!currentTrack}
             >
-              {playing ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 ml-1" />}
+              {isLoading ? (
+                <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
+              ) : playing ? (
+                <Pause className="w-8 h-8" />
+              ) : (
+                <Play className="w-8 h-8 ml-1" />
+              )}
             </Button>
             
             <Button variant="ghost" size="icon" onClick={nextTrack} className="w-12 h-12">

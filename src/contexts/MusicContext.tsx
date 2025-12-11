@@ -23,6 +23,7 @@ interface MusicContextType {
   currentTrack: MusicTrack | null;
   currentTrackIndex: number;
   playing: boolean;
+  isLoading: boolean;
   loopMode: LoopMode;
   currentTime: number;
   duration: number;
@@ -57,6 +58,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [loopMode, setLoopMode] = useState<LoopMode>('none');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -117,9 +119,21 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!audio) return;
 
     const updateTime = () => setCurrentTime(audio.currentTime);
-    const updateDuration = () => setDuration(audio.duration || 0);
-    const handlePlay = () => setPlaying(true);
+    const updateDuration = () => {
+      setDuration(audio.duration || 0);
+      setIsLoading(false);
+    };
+    const handlePlay = () => {
+      setPlaying(true);
+      setIsLoading(false);
+    };
     const handlePause = () => setPlaying(false);
+    const handleWaiting = () => setIsLoading(true);
+    const handleCanPlay = () => setIsLoading(false);
+    const handleError = () => {
+      setIsLoading(false);
+      console.error('Audio playback error');
+    };
     const handleEnded = () => {
       if (loopMode === 'single') {
         audio.currentTime = 0;
@@ -139,6 +153,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     audio.addEventListener('durationchange', updateDuration);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('error', handleError);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
@@ -147,6 +164,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       audio.removeEventListener('durationchange', updateDuration);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('error', handleError);
       audio.removeEventListener('ended', handleEnded);
     };
   }, [loopMode, currentTrackIndex, tracks.length]);
@@ -238,11 +258,15 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const playTrack = useCallback((index: number) => {
     const track = tracks[index];
     if (track) {
+      setIsLoading(true);
       setCurrentTrackId(track.id);
       setPlaying(true);
       setCurrentTime(0);
       setTimeout(() => {
-        audioRef.current?.play().catch(console.error);
+        audioRef.current?.play().catch((err) => {
+          console.error('Play failed:', err);
+          setIsLoading(false);
+        });
       }, 100);
     }
   }, [tracks]);
@@ -289,6 +313,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         currentTrack,
         currentTrackIndex,
         playing,
+        isLoading,
         loopMode,
         currentTime,
         duration,

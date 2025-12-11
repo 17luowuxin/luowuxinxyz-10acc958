@@ -314,21 +314,65 @@ const ChatPage: React.FC = () => {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = '';
+      let textBuffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-            try {
-              const json = JSON.parse(line.slice(6));
-              const delta = json.choices?.[0]?.delta?.content || '';
-              assistantContent += delta;
-            } catch {}
+        textBuffer += decoder.decode(value, { stream: true });
+        
+        // 逐行处理SSE数据
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+          
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+          
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
+          
+          try {
+            const json = JSON.parse(jsonStr);
+            // 支持多种API响应格式
+            const delta = json.choices?.[0]?.delta?.content 
+              || json.choices?.[0]?.message?.content 
+              || json.content 
+              || '';
+            assistantContent += delta;
+          } catch {
+            // 部分JSON可能跨chunk，放回buffer
+            textBuffer = line + '\n' + textBuffer;
+            break;
           }
         }
+      }
+      
+      // 处理剩余buffer
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split('\n')) {
+          if (!raw || !raw.startsWith('data: ')) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
+          try {
+            const json = JSON.parse(jsonStr);
+            const delta = json.choices?.[0]?.delta?.content 
+              || json.choices?.[0]?.message?.content 
+              || json.content 
+              || '';
+            assistantContent += delta;
+          } catch {}
+        }
+      }
+      
+      // 如果内容为空，显示错误
+      if (!assistantContent.trim()) {
+        console.error('Empty response from API');
+        toast.error('AI返回为空，请检查API配置或重试');
+        setLoading(false);
+        return;
       }
       
       // Show complete message at once (no streaming effect)
