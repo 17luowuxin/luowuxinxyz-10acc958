@@ -16,63 +16,93 @@ const anonymousPersonas = [
   { persona: '你是一个乐观的小太阳，总是能看到事情积极的一面' },
 ];
 
-async function getAICompletion(messages: any[], apiConfig: any) {
-  let apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-  let apiKey = Deno.env.get('LOVABLE_API_KEY') || '';
-  let model = 'google/gemini-2.5-flash';
-  const headers: Record<string, string> = {
+interface AIConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  provider?: string;
+}
+
+async function getAICompletion(messages: any[], config: AIConfig) {
+  let apiUrl: string;
+  let headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+  let model: string;
 
-  console.log('getAICompletion called with apiConfig:', JSON.stringify(apiConfig));
+  console.log('getAICompletion called with config:', JSON.stringify(config));
 
-  // 使用用户自定义API - 优先级最高
-  if (apiConfig?.apiKey && apiConfig?.provider) {
-    console.log('Using user custom API, provider:', apiConfig.provider);
-    switch (apiConfig.provider) {
-      case 'deepseek':
-        apiUrl = 'https://api.deepseek.com/v1/chat/completions';
-        apiKey = apiConfig.apiKey;
-        model = 'deepseek-chat';
-        break;
-      case 'openai':
-        apiUrl = 'https://api.openai.com/v1/chat/completions';
-        apiKey = apiConfig.apiKey;
-        model = 'gpt-4o-mini';
-        break;
-      case 'custom':
-        // 智能补全API路径
-        let customUrl = apiConfig.baseUrl || 'https://api.deepseek.com/v1';
-        if (!customUrl.includes('/chat/completions')) {
-          customUrl = customUrl.replace(/\/$/, '') + '/chat/completions';
-        }
-        apiUrl = customUrl;
-        apiKey = apiConfig.apiKey;
-        model = apiConfig.model || 'deepseek-chat';
-        break;
+  // 使用用户自定义API
+  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+    let baseUrl = config.baseUrl.replace(/\/+$/, '');
+    if (!baseUrl.endsWith('/chat/completions')) {
+      baseUrl = `${baseUrl}/chat/completions`;
     }
+    apiUrl = baseUrl;
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = config.model || 'deepseek-chat';
+    console.log('Using custom API:', apiUrl, 'model:', model);
+  } else if (config.apiKey && config.provider === 'deepseek') {
+    apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'deepseek-chat';
+    console.log('Using DeepSeek API');
+  } else if (config.apiKey && config.provider === 'openai') {
+    apiUrl = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'gpt-4o-mini';
+    console.log('Using OpenAI API');
   } else {
-    console.log('No user API config, using Lovable AI');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
+    }
+    apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${LOVABLE_API_KEY}`;
+    model = 'google/gemini-2.5-flash';
+    console.log('Using Lovable AI Gateway');
   }
-
-  headers['Authorization'] = `Bearer ${apiKey}`;
 
   console.log('Calling AI API:', apiUrl, 'Model:', model);
 
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ model, messages, max_tokens: 500 }),
+    body: JSON.stringify({ model, messages, max_tokens: 500, stream: false }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
     console.error('AI API Error:', response.status, errorText);
+    if (response.status === 429) {
+      throw new Error("请求太频繁，请稍后再试");
+    } else if (response.status === 402) {
+      throw new Error("AI额度不足，请充值");
+    }
     throw new Error(`AI API error: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '...';
+  
+  // 兼容多种响应格式
+  let content = '';
+  if (data.choices?.[0]?.message?.content) {
+    content = data.choices[0].message.content;
+  } else if (data.choices?.[0]?.text) {
+    content = data.choices[0].text;
+  } else if (data.content) {
+    content = data.content;
+  } else if (data.result) {
+    content = data.result;
+  } else if (data.output) {
+    content = data.output;
+  } else if (data.response) {
+    content = data.response;
+  } else if (typeof data === 'string') {
+    content = data;
+  }
+  
+  return content || '...';
 }
 
 serve(async (req) => {
@@ -129,7 +159,14 @@ ${userPersona ? `关于${userName}的一些信息: ${userPersona}` : ''}
       { role: 'user', content: `漂流瓶内容：${content}` }
     ];
 
-    const reply = await getAICompletion(messages, apiConfig);
+    const config: AIConfig = {
+      apiKey: apiConfig?.apiKey,
+      baseUrl: apiConfig?.baseUrl,
+      model: apiConfig?.model,
+      provider: apiConfig?.provider,
+    };
+
+    const reply = await getAICompletion(messages, config);
     console.log('Generated anonymous reply');
 
     // 漂流瓶回复是匿名的，character返回"神秘人"

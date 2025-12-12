@@ -5,6 +5,107 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface AIConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  provider?: string;
+}
+
+async function getAICompletion(
+  messages: Array<{ role: string; content: string }>,
+  config: AIConfig,
+  maxTokens: number = 150
+): Promise<string> {
+  let apiUrl: string;
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  let model: string;
+
+  // 使用用户自定义API
+  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+    let baseUrl = config.baseUrl.replace(/\/+$/, '');
+    if (!baseUrl.endsWith('/chat/completions')) {
+      baseUrl = `${baseUrl}/chat/completions`;
+    }
+    apiUrl = baseUrl;
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = config.model || 'deepseek-chat';
+    console.log('Using custom API:', apiUrl, 'model:', model);
+  } else if (config.apiKey && config.provider === 'deepseek') {
+    apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'deepseek-chat';
+    console.log('Using DeepSeek API');
+  } else if (config.apiKey && config.provider === 'openai') {
+    apiUrl = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'gpt-4o-mini';
+    console.log('Using OpenAI API');
+  } else {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+    apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    headers['Authorization'] = `Bearer ${LOVABLE_API_KEY}`;
+    model = "google/gemini-2.5-flash";
+    console.log('Using Lovable AI Gateway');
+  }
+
+  // 添加超时控制
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      stream: false,
+    }),
+    signal: controller.signal,
+  });
+
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("AI API error:", response.status, errorText);
+    if (response.status === 429) {
+      throw new Error("请求太频繁，请稍后再试");
+    } else if (response.status === 402) {
+      throw new Error("AI额度不足，请充值");
+    }
+    throw new Error(`AI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  // 兼容多种响应格式
+  let content = '';
+  if (data.choices?.[0]?.message?.content) {
+    content = data.choices[0].message.content;
+  } else if (data.choices?.[0]?.text) {
+    content = data.choices[0].text;
+  } else if (data.content) {
+    content = data.content;
+  } else if (data.result) {
+    content = data.result;
+  } else if (data.output) {
+    content = data.output;
+  } else if (data.response) {
+    content = data.response;
+  } else if (typeof data === 'string') {
+    content = data;
+  }
+  
+  return content || '...';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,63 +114,14 @@ serve(async (req) => {
   try {
     const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds } = await req.json();
     
-    let apiKey: string | undefined;
-    let apiUrl: string;
-    let model: string;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+    const config: AIConfig = {
+      apiKey: userApiKey,
+      baseUrl: baseUrl,
+      model: customModel,
+      provider: provider,
     };
-    
-    // Priority: user's custom API key > Lovable AI
-    if (userApiKey && provider) {
-      if (provider === 'deepseek') {
-        apiKey = userApiKey;
-        apiUrl = "https://api.deepseek.com/v1/chat/completions";
-        model = "deepseek-chat";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else if (provider === 'openai') {
-        apiKey = userApiKey;
-        apiUrl = "https://api.openai.com/v1/chat/completions";
-        model = "gpt-4o-mini";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else if (provider === 'anthropic') {
-        apiKey = userApiKey;
-        apiUrl = "https://api.anthropic.com/v1/messages";
-        model = "claude-3-haiku-20240307";
-        headers["x-api-key"] = userApiKey;
-        headers["anthropic-version"] = "2023-06-01";
-      } else if (provider === 'custom' && baseUrl) {
-        apiKey = userApiKey;
-        // 简化URL拼接逻辑
-        let finalUrl = baseUrl.trim().replace(/\/+$/, '');
-        if (!finalUrl.endsWith('/chat/completions')) {
-          finalUrl = `${finalUrl}/chat/completions`;
-        }
-        apiUrl = finalUrl;
-        model = customModel || "deepseek-chat";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else {
-        apiKey = Deno.env.get("LOVABLE_API_KEY");
-        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-        model = "google/gemini-2.5-flash";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      }
-    } else {
-      apiKey = Deno.env.get("LOVABLE_API_KEY");
-      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-      model = "google/gemini-2.5-flash";
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "API密钥未配置" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     console.log("Using provider:", userApiKey ? provider : "lovable-ai");
-    console.log("API URL:", apiUrl);
     console.log("Mentioned characters:", mentionedCharacterIds);
 
     // 用户信息
@@ -119,64 +171,30 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
 正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"
 错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"`;
 
-      const requestBody = provider === 'anthropic' && userApiKey ? {
-        model,
-        max_tokens: 150,
-        messages: [
-          ...messages.slice(-10),
-          { role: "user", content: `${userName}: ${userMessage}` }
-        ],
-        system: systemPrompt,
-      } : {
-        model,
-        max_tokens: 150,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages.slice(-10),
-          { role: "user", content: `${userName}: ${userMessage}` }
-        ],
-      };
-
-      // 添加超时控制
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI API error:", response.status, errorText);
-        continue;
-      }
-
-      const data = await response.json();
-      let content = '';
-      
-      if (provider === 'anthropic' && userApiKey) {
-        content = data.content?.[0]?.text || '';
-      } else {
-        content = data.choices?.[0]?.message?.content || '';
-      }
-      
-      // 清理回复内容，移除可能的角色名前缀和编号
-      if (content) {
-        // 移除开头的角色名:、数字编号等
-        content = content.replace(/^[^:：]*[:：]\s*/g, '');
-        content = content.replace(/^\d+[\.\s、]*/, '');
-        content = content.trim();
+      try {
+        let content = await getAICompletion(
+          [
+            { role: "system", content: systemPrompt },
+            ...messages.slice(-10),
+            { role: "user", content: `${userName}: ${userMessage}` }
+          ],
+          config
+        );
         
-        responses.push({
-          characterId: character.id,
-          characterName: character.name,
-          content
-        });
+        // 清理回复内容，移除可能的角色名前缀和编号
+        if (content) {
+          content = content.replace(/^[^:：]*[:：]\s*/g, '');
+          content = content.replace(/^\d+[\.\s、]*/, '');
+          content = content.trim();
+          
+          responses.push({
+            characterId: character.id,
+            characterName: character.name,
+            content
+          });
+        }
+      } catch (error) {
+        console.error(`Error getting response for ${character.name}:`, error);
       }
 
       // 减少延迟时间

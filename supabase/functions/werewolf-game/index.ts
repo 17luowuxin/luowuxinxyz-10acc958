@@ -9,40 +9,46 @@ interface AIConfig {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  provider?: string;
 }
 
 async function getAICompletion(
   messages: Array<{ role: string; content: string }>,
   config: AIConfig
 ): Promise<string> {
-  const useCustomApi = config.apiKey && config.baseUrl;
-  
   let apiUrl: string;
-  let headers: Record<string, string>;
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
   let model: string;
 
-  if (useCustomApi) {
-    let baseUrl = config.baseUrl!.replace(/\/$/, '');
+  // 使用用户自定义API
+  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+    let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
       baseUrl = `${baseUrl}/chat/completions`;
     }
     apiUrl = baseUrl;
-    headers = {
-      'Authorization': `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    };
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
     model = config.model || 'deepseek-chat';
     console.log('Using custom API:', apiUrl, 'model:', model);
+  } else if (config.apiKey && config.provider === 'deepseek') {
+    apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'deepseek-chat';
+    console.log('Using DeepSeek API');
+  } else if (config.apiKey && config.provider === 'openai') {
+    apiUrl = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'gpt-4o-mini';
+    console.log('Using OpenAI API');
   } else {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
     apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    headers = {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    };
+    headers['Authorization'] = `Bearer ${LOVABLE_API_KEY}`;
     model = "google/gemini-2.5-flash";
     console.log('Using Lovable AI Gateway');
   }
@@ -58,7 +64,7 @@ async function getAICompletion(
         model,
         messages,
         max_tokens: 200,
-        temperature: 0.9,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -77,7 +83,26 @@ async function getAICompletion(
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || "...";
+    
+    // 兼容多种响应格式
+    let content = '';
+    if (data.choices?.[0]?.message?.content) {
+      content = data.choices[0].message.content;
+    } else if (data.choices?.[0]?.text) {
+      content = data.choices[0].text;
+    } else if (data.content) {
+      content = data.content;
+    } else if (data.result) {
+      content = data.result;
+    } else if (data.output) {
+      content = data.output;
+    } else if (data.response) {
+      content = data.response;
+    } else if (typeof data === 'string') {
+      content = data;
+    }
+    
+    return content || "...";
   } catch (error) {
     clearTimeout(timeout);
     if (error instanceof Error && error.name === 'AbortError') {
@@ -114,6 +139,7 @@ serve(async (req) => {
       apiKey: apiConfig?.apiKey,
       baseUrl: apiConfig?.baseUrl,
       model: apiConfig?.model,
+      provider: apiConfig?.provider,
     };
 
     let prompt = '';
