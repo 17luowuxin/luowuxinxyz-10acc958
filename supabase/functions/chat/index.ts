@@ -53,9 +53,13 @@ serve(async (req) => {
       "Content-Type": "application/json",
     };
     
-    // Check if using default API
+    // Check user's API settings from database
     let useDefaultApi = false;
-    let defaultModel = 'deepseek-chat';
+    let hasCustomApiConfig = false;
+    let savedCustomKey = '';
+    let savedBaseUrl = '';
+    let savedModel = '';
+    
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -68,34 +72,79 @@ serve(async (req) => {
       
       if (apiSettings) {
         const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
+        const customKeySetting = apiSettings.find(s => s.provider === 'custom');
+        const baseUrlSetting = apiSettings.find(s => s.provider === 'custom_base_url');
+        const modelSetting = apiSettings.find(s => s.provider === 'custom_model');
+        
         if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
           useDefaultApi = true;
         }
-        const defaultModelSetting = apiSettings.find(s => s.provider === 'default_model');
-        if (defaultModelSetting) {
-          defaultModel = defaultModelSetting.api_key;
+        if (customKeySetting) {
+          savedCustomKey = customKeySetting.api_key;
+          hasCustomApiConfig = true;
+        }
+        if (baseUrlSetting) {
+          savedBaseUrl = baseUrlSetting.api_key;
+        }
+        if (modelSetting) {
+          savedModel = modelSetting.api_key;
         }
       }
     }
     
-    // Priority: default API > user's custom API key > Lovable AI
-    if (useDefaultApi) {
-      // Use the default DeepSeek API key stored in secrets (more reliable)
+    // 优先级：用户自定义API > 默认API（仅当用户明确选择时）
+    // 如果用户配置了自定义API，必须使用用户的，不自动fallback
+    
+    if (hasCustomApiConfig && !useDefaultApi) {
+      // 用户配置了自定义API且没有选择使用默认API，使用用户的配置
+      const finalApiKey = userApiKey || savedCustomKey;
+      const finalBaseUrl = baseUrl || savedBaseUrl;
+      const finalModel = customModel || savedModel || 'deepseek-chat';
+      
+      if (!finalApiKey) {
+        console.error("User has custom API config but no API key");
+        return new Response(JSON.stringify({ error: "请先在设置中配置API密钥" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      apiKey = finalApiKey;
+      let finalUrl = finalBaseUrl.trim().replace(/\/+$/, '');
+      
+      // 智能处理URL格式
+      if (finalUrl.endsWith('/chat/completions')) {
+        apiUrl = finalUrl;
+      } else if (finalUrl.endsWith('/v1')) {
+        apiUrl = `${finalUrl}/chat/completions`;
+      } else if (finalUrl.includes('/v1/')) {
+        apiUrl = finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
+      } else {
+        apiUrl = `${finalUrl}/v1/chat/completions`;
+      }
+      
+      model = finalModel;
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      console.log("Using user's custom API:", apiUrl);
+      console.log("Model:", model);
+      
+    } else if (useDefaultApi) {
+      // 用户明确选择使用默认API
       apiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
       if (apiKey) {
         apiUrl = "https://api.deepseek.com/v1/chat/completions";
         model = "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
-        console.log("Using default DeepSeek API");
+        console.log("Using default DeepSeek API (user selected)");
       } else {
-        // Fallback to Lovable AI
-        apiKey = Deno.env.get("LOVABLE_API_KEY");
-        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-        model = "google/gemini-2.5-flash";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-        console.log("Using Lovable AI as fallback");
+        // 默认API不可用时提示用户
+        return new Response(JSON.stringify({ error: "默认API暂不可用，请配置自定义API" }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     } else if (userApiKey && provider) {
+      // 前端传来的临时配置
       if (provider === 'deepseek') {
         apiKey = userApiKey;
         apiUrl = "https://api.deepseek.com/v1/chat/completions";
@@ -116,33 +165,31 @@ serve(async (req) => {
         apiKey = userApiKey;
         let finalUrl = baseUrl.trim().replace(/\/+$/, '');
         
-        // 智能处理URL格式
         if (finalUrl.endsWith('/chat/completions')) {
-          // 已经是完整路径
           apiUrl = finalUrl;
         } else if (finalUrl.endsWith('/v1')) {
-          // 以/v1结尾，添加/chat/completions
           apiUrl = `${finalUrl}/chat/completions`;
         } else if (finalUrl.includes('/v1/')) {
-          // 包含/v1/但不完整，替换到正确路径
           apiUrl = finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
         } else {
-          // 尝试添加/v1/chat/completions
           apiUrl = `${finalUrl}/v1/chat/completions`;
         }
         
         model = customModel || "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
-        console.log("Custom API final URL:", apiUrl);
+        console.log("Using custom API from request:", apiUrl);
       } else {
-        apiKey = Deno.env.get("LOVABLE_API_KEY");
-        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-        model = "google/gemini-2.5-flash";
-        headers["Authorization"] = `Bearer ${apiKey}`;
+        return new Response(JSON.stringify({ error: "请先在设置中配置API" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     } else {
-      apiKey = Deno.env.get("LOVABLE_API_KEY");
-      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      // 没有任何配置，提示用户去设置
+      return new Response(JSON.stringify({ error: "请先在设置中配置API密钥" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
       model = "google/gemini-2.5-flash";
       headers["Authorization"] = `Bearer ${apiKey}`;
     }
