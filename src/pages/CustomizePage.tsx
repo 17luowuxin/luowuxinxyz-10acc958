@@ -75,6 +75,16 @@ const fontColors = [
   '#FFE66D', // 黄色
 ];
 
+// 全局文字大小选项
+const textSizeOptions = [
+  { id: 12, label: '小' },
+  { id: 14, label: '较小' },
+  { id: 16, label: '标准' },
+  { id: 18, label: '较大' },
+  { id: 20, label: '大' },
+  { id: 24, label: '超大' },
+];
+
 const CustomizePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -102,6 +112,8 @@ const CustomizePage: React.FC = () => {
   const [friendBubbleFrame, setFriendBubbleFrame] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [characterPreview, setCharacterPreview] = useState<any>(null);
+  const [globalTextColor, setGlobalTextColor] = useState('#333333');
+  const [globalTextSize, setGlobalTextSize] = useState(16);
 
   useEffect(() => {
     if (user) {
@@ -174,6 +186,8 @@ const CustomizePage: React.FC = () => {
       if ((data as any).friend_avatar_frame_url) setFriendAvatarFrame((data as any).friend_avatar_frame_url);
       if ((data as any).bubble_frame_url) setBubbleFrame((data as any).bubble_frame_url);
       if ((data as any).friend_bubble_frame_url) setFriendBubbleFrame((data as any).friend_bubble_frame_url);
+      if ((data as any).global_text_color) setGlobalTextColor((data as any).global_text_color);
+      if ((data as any).global_text_size) setGlobalTextSize((data as any).global_text_size);
     }
   };
 
@@ -308,6 +322,8 @@ const CustomizePage: React.FC = () => {
       friend_avatar_frame_url: friendAvatarFrame,
       bubble_frame_url: bubbleFrame,
       friend_bubble_frame_url: friendBubbleFrame,
+      global_text_color: globalTextColor,
+      global_text_size: globalTextSize,
     } as any, { onConflict: 'user_id' });
     
     if (error) {
@@ -465,6 +481,66 @@ const CustomizePage: React.FC = () => {
                 )}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Global Text Color & Size */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-2">
+            <Palette className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">桌面文字设置</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">设置全局文字颜色和大小，应用到整个应用</p>
+          
+          <div className="space-y-4">
+            {/* Text Color */}
+            <div>
+              <p className="text-sm font-medium mb-3">文字颜色</p>
+              <div className="flex gap-2 flex-wrap">
+                {fontColors.map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setGlobalTextColor(color)}
+                    className={`w-10 h-10 rounded-xl border-2 transition-all ${
+                      globalTextColor === color ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-muted'
+                    }`}
+                    style={{ backgroundColor: color }}
+                  >
+                    {globalTextColor === color && (
+                      <Check className="w-4 h-4 mx-auto" style={{ color: color === '#FFFFFF' || color === '#FFE66D' ? '#333' : '#fff' }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Text Size */}
+            <div>
+              <p className="text-sm font-medium mb-3">文字大小</p>
+              <div className="flex gap-2 flex-wrap">
+                {textSizeOptions.map((size) => (
+                  <button
+                    key={size.id}
+                    onClick={() => setGlobalTextSize(size.id)}
+                    className={`px-4 py-2 rounded-xl border-2 transition-all ${
+                      globalTextSize === size.id 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-muted bg-muted/50 hover:border-primary/50'
+                    }`}
+                  >
+                    <span style={{ fontSize: `${size.id}px` }}>{size.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="mt-4 p-4 rounded-2xl bg-muted/30 border border-primary/10">
+              <p className="text-sm text-muted-foreground mb-2">预览效果：</p>
+              <p style={{ color: globalTextColor, fontSize: `${globalTextSize}px` }}>
+                这是预览文字 Hello World 你好世界
+              </p>
+            </div>
           </div>
         </div>
 
