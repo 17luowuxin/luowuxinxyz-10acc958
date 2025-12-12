@@ -1,6 +1,22 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// 智能构建API URL
+function buildApiUrl(baseUrl: string): string {
+  let finalUrl = baseUrl.trim().replace(/\/+$/, '');
+  
+  if (finalUrl.endsWith('/chat/completions')) {
+    return finalUrl;
+  } else if (finalUrl.endsWith('/v1')) {
+    return `${finalUrl}/chat/completions`;
+  } else if (finalUrl.includes('/v1/')) {
+    return finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
+  } else {
+    // 尝试添加/v1/chat/completions
+    return `${finalUrl}/v1/chat/completions`;
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -70,12 +86,9 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-        // Append /chat/completions if not already present
-        let finalUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slash
-        if (!finalUrl.endsWith('/chat/completions')) {
-          finalUrl = `${finalUrl}/chat/completions`;
-        }
-        testUrl = finalUrl;
+        // 使用智能URL构建函数
+        testUrl = buildApiUrl(baseUrl);
+        console.log('Built API URL:', testUrl, 'from base:', baseUrl);
         testHeaders = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
