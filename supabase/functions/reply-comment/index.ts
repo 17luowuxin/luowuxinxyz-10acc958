@@ -54,14 +54,20 @@ async function getAICompletion(
   let model: string;
 
   if (config.useDefaultApi) {
-    const defaultKey = Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
+    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
     if (defaultKey) {
-      apiUrl = 'https://tensdaq-api.x-aio.com/chat/completions';
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
       headers['Authorization'] = `Bearer ${defaultKey}`;
-      model = config.defaultModel || 'deepseek-chat';
-      console.log('Using default Tensdaq API with model:', model);
+      model = 'deepseek-chat';
+      console.log('Using default DeepSeek API');
     } else {
-      throw new Error("默认API未配置");
+      // Fallback to Lovable AI
+      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!lovableKey) throw new Error("API未配置");
+      apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${lovableKey}`;
+      model = 'google/gemini-2.5-flash';
+      console.log('Using Lovable AI as fallback');
     }
   } else if (config.apiKey && (config.provider === 'custom' && config.baseUrl)) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
