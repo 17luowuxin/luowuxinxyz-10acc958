@@ -404,13 +404,16 @@ const SettingsPage: React.FC = () => {
                     placeholder="deepseek-chat"
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
-                    onFocus={() => availableModels.length > 0 && setShowModelDropdown(true)}
+                    onClick={() => availableModels.length > 0 && setShowModelDropdown(true)}
                     className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
                   />
                   {availableModels.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setShowModelDropdown(!showModelDropdown)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setShowModelDropdown(!showModelDropdown);
+                      }}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
@@ -420,16 +423,17 @@ const SettingsPage: React.FC = () => {
                 
                 {/* Model Dropdown */}
                 {showModelDropdown && availableModels.length > 0 && (
-                  <div className="relative z-[100]">
-                    <div className="absolute w-full mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
+                  <div className="absolute left-0 right-0 z-[9999] mt-1">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-60 overflow-y-auto">
                       {availableModels.map((model, index) => (
                         <button
                           key={index}
                           type="button"
-                          onClick={(e) => {
+                          onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            selectModel(model);
+                            setCustomModel(model);
+                            setShowModelDropdown(false);
                           }}
                           className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
                             model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
