@@ -138,7 +138,8 @@ const SpacePage: React.FC = () => {
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
             baseUrl: apiConfig.baseUrl,
-            model: apiConfig.model
+            model: apiConfig.model,
+            userId: user?.id
           }
         });
 
@@ -211,7 +212,8 @@ const SpacePage: React.FC = () => {
                 baseUrl: apiConfig.baseUrl,
                 model: apiConfig.model,
                 userProfile: userProfile,
-                replyCharacterId: char.id // 传递回复角色ID
+                replyCharacterId: char.id,
+                userId: user?.id
               }
             });
 
@@ -289,7 +291,8 @@ const SpacePage: React.FC = () => {
             provider: apiConfig.provider,
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
-            userProfile: userProfile
+            userProfile: userProfile,
+            userId: user?.id
           }
         });
 

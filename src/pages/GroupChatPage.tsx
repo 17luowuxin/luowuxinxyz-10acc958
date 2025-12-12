@@ -355,6 +355,7 @@ const GroupChatPage: React.FC = () => {
         mentionedCharacterIds
       };
 
+      body.userId = user?.id;
       if (apiConfig.apiKey && apiConfig.provider) {
         body.userApiKey = apiConfig.apiKey;
         body.provider = apiConfig.provider;
