@@ -83,23 +83,11 @@ async function getAICompletion(
       model = 'deepseek-chat';
       console.log('Using default DeepSeek API');
     } else {
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-      if (!lovableKey) throw new Error("API未配置");
-      apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-      headers['Authorization'] = `Bearer ${lovableKey}`;
-      model = 'google/gemini-2.5-flash';
-      console.log('Using Lovable AI as fallback');
+      throw new Error("默认API暂不可用，请配置自定义API");
     }
   } else {
-    // 没有任何配置时使用 Lovable AI
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-    apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    headers['Authorization'] = `Bearer ${LOVABLE_API_KEY}`;
-    model = "google/gemini-2.5-flash";
-    console.log('Using Lovable AI Gateway');
+    // 没有任何配置，提示用户
+    throw new Error("请先在设置中配置API密钥");
   }
 
   const controller = new AbortController();
