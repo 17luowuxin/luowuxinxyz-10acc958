@@ -1,0 +1,185 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { apiKey, baseUrl } = await req.json();
+
+    if (!apiKey || !baseUrl) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: '请提供API密钥和Base URL' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 构建models端点URL
+    let modelsUrl = baseUrl.replace(/\/+$/, ''); // 移除末尾斜杠
+    
+    // 如果URL以/chat/completions结尾，替换为/models
+    if (modelsUrl.endsWith('/chat/completions')) {
+      modelsUrl = modelsUrl.replace('/chat/completions', '/models');
+    } else if (modelsUrl.endsWith('/v1')) {
+      modelsUrl = `${modelsUrl}/models`;
+    } else if (!modelsUrl.endsWith('/models')) {
+      // 尝试添加/models
+      modelsUrl = `${modelsUrl}/models`;
+    }
+
+    console.log('Fetching models from:', modelsUrl);
+
+    const response = await fetch(modelsUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const responseText = await response.text();
+    console.log('Response status:', response.status);
+    console.log('Response:', responseText.substring(0, 1000));
+
+    if (!response.ok) {
+      // 尝试其他常见的models端点格式
+      const alternativeUrls = [
+        baseUrl.replace(/\/+$/, '') + '/models',
+        baseUrl.replace(/\/+$/, '').replace('/v1', '') + '/v1/models',
+        baseUrl.replace(/\/+$/, '').replace('/chat/completions', '') + '/models',
+      ];
+
+      for (const altUrl of alternativeUrls) {
+        if (altUrl === modelsUrl) continue;
+        
+        console.log('Trying alternative URL:', altUrl);
+        try {
+          const altResponse = await fetch(altUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (altResponse.ok) {
+            const altText = await altResponse.text();
+            const altData = JSON.parse(altText);
+            const models = extractModels(altData);
+            if (models.length > 0) {
+              return new Response(JSON.stringify({ 
+                success: true, 
+                models 
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+          }
+        } catch (e) {
+          console.log('Alternative URL failed:', altUrl, e);
+        }
+      }
+
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `无法获取模型列表: HTTP ${response.status}` 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    try {
+      const data = JSON.parse(responseText);
+      const models = extractModels(data);
+      
+      if (models.length === 0) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: '未找到可用模型' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        models 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: '解析模型列表失败' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: error instanceof Error ? error.message : '未知错误' 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+function extractModels(data: any): string[] {
+  const models: string[] = [];
+  
+  // OpenAI格式: { data: [{ id: "model-name" }] }
+  if (data.data && Array.isArray(data.data)) {
+    for (const model of data.data) {
+      if (model.id) {
+        models.push(model.id);
+      }
+    }
+  }
+  
+  // 其他格式: { models: ["model1", "model2"] }
+  if (data.models && Array.isArray(data.models)) {
+    for (const model of data.models) {
+      if (typeof model === 'string') {
+        models.push(model);
+      } else if (model.id) {
+        models.push(model.id);
+      } else if (model.name) {
+        models.push(model.name);
+      }
+    }
+  }
+  
+  // 直接数组格式: ["model1", "model2"]
+  if (Array.isArray(data)) {
+    for (const model of data) {
+      if (typeof model === 'string') {
+        models.push(model);
+      } else if (model.id) {
+        models.push(model.id);
+      } else if (model.name) {
+        models.push(model.name);
+      }
+    }
+  }
+
+  // 排序，优先显示常用模型
+  return models.sort((a, b) => {
+    const priorityKeywords = ['chat', 'gpt', 'claude', 'deepseek', 'qwen', 'glm'];
+    const aHasPriority = priorityKeywords.some(k => a.toLowerCase().includes(k));
+    const bHasPriority = priorityKeywords.some(k => b.toLowerCase().includes(k));
+    if (aHasPriority && !bHasPriority) return -1;
+    if (!aHasPriority && bHasPriority) return 1;
+    return a.localeCompare(b);
+  });
+}

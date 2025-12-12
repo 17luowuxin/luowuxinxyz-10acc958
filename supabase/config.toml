@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.bottle-reply]
 verify_jwt = false
+
+[functions.fetch-models]
+verify_jwt = false

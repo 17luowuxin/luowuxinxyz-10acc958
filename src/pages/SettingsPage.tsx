@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, X, Loader2, Globe, Eye, EyeOff, TestTube } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,9 @@ const SettingsPage: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -34,6 +37,40 @@ const SettingsPage: React.FC = () => {
       }
       if (baseUrl) setCustomBaseUrl(baseUrl.api_key);
       if (model) setCustomModel(model.api_key);
+    }
+  };
+
+  const fetchModels = async () => {
+    if (!apiKey || !customBaseUrl) {
+      toast.error('请先输入API密钥和Base URL');
+      return;
+    }
+
+    setFetchingModels(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-models', {
+        body: {
+          apiKey: apiKey,
+          baseUrl: customBaseUrl,
+        },
+      });
+
+      if (error) {
+        toast.error(`获取模型失败: ${error.message}`);
+        return;
+      }
+
+      if (data.success && data.models) {
+        setAvailableModels(data.models);
+        setShowModelDropdown(true);
+        toast.success(`获取到 ${data.models.length} 个模型`);
+      } else {
+        toast.error(data.error || '获取模型失败');
+      }
+    } catch (error) {
+      toast.error('获取模型列表失败');
+    } finally {
+      setFetchingModels(false);
     }
   };
 
@@ -128,6 +165,11 @@ const SettingsPage: React.FC = () => {
     navigate('/auth');
   };
 
+  const selectModel = (model: string) => {
+    setCustomModel(model);
+    setShowModelDropdown(false);
+  };
+
   return (
     <div className="min-h-screen bg-background/70 backdrop-blur-sm">
       {/* Header */}
@@ -208,17 +250,65 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Model Name */}
+            {/* Model Name with Fetch Button */}
             <div>
-              <label className="text-sm font-medium text-purple-600 mb-2 block">
-                Model Name
-              </label>
-              <Input
-                placeholder="deepseek-chat"
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-purple-600">
+                  Model Name
+                </label>
+                <button
+                  onClick={fetchModels}
+                  disabled={fetchingModels || !apiKey || !customBaseUrl}
+                  className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {fetchingModels ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  自动获取模型
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  placeholder="deepseek-chat"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  onFocus={() => availableModels.length > 0 && setShowModelDropdown(true)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
+                />
+                {availableModels.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+                
+                {/* Model Dropdown */}
+                {showModelDropdown && availableModels.length > 0 && (
+                  <div className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
+                    {availableModels.map((model, index) => (
+                      <button
+                        key={index}
+                        onClick={() => selectModel(model)}
+                        className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
+                          model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
+                        } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
+                      >
+                        {model}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {availableModels.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1.5">
+                  已获取 {availableModels.length} 个可用模型，点击输入框选择
+                </p>
+              )}
             </div>
 
             {/* Test Button */}
@@ -256,6 +346,14 @@ const SettingsPage: React.FC = () => {
           退出登录
         </Button>
       </div>
+      
+      {/* Click outside to close dropdown */}
+      {showModelDropdown && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowModelDropdown(false)}
+        />
+      )}
     </div>
   );
 };
