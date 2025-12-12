@@ -39,16 +39,28 @@ const SettingsPage: React.FC = () => {
       const useDefault = data.find(k => k.provider === 'use_default_api');
       const defaultModelSetting = data.find(k => k.provider === 'default_model');
       
+      // 总是加载保存的自定义API配置
+      if (customKey) {
+        setApiKey(customKey.api_key);
+      }
+      if (baseUrl) {
+        setCustomBaseUrl(baseUrl.api_key);
+      }
+      if (model) {
+        setCustomModel(model.api_key);
+      }
+      if (defaultModelSetting) {
+        setDefaultModel(defaultModelSetting.api_key);
+      }
+      
+      // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
         setUsingDefaultApi(true);
         setIsConfigured(true);
       } else if (customKey) {
-        setApiKey(customKey.api_key);
+        setUsingDefaultApi(false);
         setIsConfigured(true);
       }
-      if (baseUrl) setCustomBaseUrl(baseUrl.api_key);
-      if (model) setCustomModel(model.api_key);
-      if (defaultModelSetting) setDefaultModel(defaultModelSetting.api_key);
     }
   };
 
