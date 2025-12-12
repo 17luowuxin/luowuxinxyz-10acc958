@@ -28,7 +28,7 @@ interface GameLog {
 const TruthDarePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, isConfigured } = useAPIConfig();
+  const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
   const [gamePhase, setGamePhase] = useState<'setup' | 'playing' | 'choosing' | 'asking' | 'answering'>('setup');
@@ -77,6 +77,15 @@ const TruthDarePage: React.FC = () => {
   };
 
   const startGame = () => {
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
+    
     const gamePlayers = characters.filter(c => selectedCharacters.includes(c.id));
     if (gamePlayers.length < 3) {
       toast.error('至少需要3个角色才能开始游戏');

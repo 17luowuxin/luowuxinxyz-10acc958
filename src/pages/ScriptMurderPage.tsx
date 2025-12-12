@@ -49,7 +49,7 @@ interface SelectedCharacterForRole {
 const ScriptMurderPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, isConfigured } = useAPIConfig();
+  const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedScript, setSelectedScript] = useState<Script | null>(null);
   const [players, setPlayers] = useState<GamePlayer[]>([]);
@@ -115,6 +115,15 @@ const ScriptMurderPage: React.FC = () => {
   };
 
   const selectScript = (script: Script) => {
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
+    
     setSelectedScript(script);
     initializeAssignments(script);
     setGamePhase('assign');

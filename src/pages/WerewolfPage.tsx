@@ -64,7 +64,7 @@ const ROLE_COLORS: Record<string, string> = {
 const WerewolfPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, isConfigured } = useAPIConfig();
+  const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [gameCharacters, setGameCharacters] = useState<GameCharacter[]>([]);
   const [gamePhase, setGamePhase] = useState<'setup' | 'night' | 'day' | 'vote' | 'end'>('setup');
@@ -138,6 +138,15 @@ const WerewolfPage: React.FC = () => {
 
   // 打开角色选择界面
   const openRoleSelection = (withPlayer: boolean) => {
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
+    
     const requiredCount = withPlayer ? 5 : 6;
     if (characters.length < requiredCount) {
       toast.error(`需要至少${requiredCount}个好友角色才能开始游戏`);
