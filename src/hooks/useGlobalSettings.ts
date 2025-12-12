@@ -32,17 +32,44 @@ const applyFont = (fontId: string) => {
   localStorage.setItem('selectedFont', fontId);
 };
 
+const applyGlobalTextColor = (color: string) => {
+  const style = document.getElementById('global-text-color-style') || document.createElement('style');
+  style.id = 'global-text-color-style';
+  style.textContent = `
+    body, .global-text-color { color: ${color} !important; }
+  `;
+  if (!document.getElementById('global-text-color-style')) {
+    document.head.appendChild(style);
+  }
+  localStorage.setItem('globalTextColor', color);
+};
+
+const applyGlobalTextSize = (size: number) => {
+  const style = document.getElementById('global-text-size-style') || document.createElement('style');
+  style.id = 'global-text-size-style';
+  style.textContent = `
+    body { font-size: ${size}px !important; }
+  `;
+  if (!document.getElementById('global-text-size-style')) {
+    document.head.appendChild(style);
+  }
+  localStorage.setItem('globalTextSize', String(size));
+};
+
 export const useGlobalSettings = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Apply saved font from localStorage on mount (before user loads)
+  // Apply saved settings from localStorage on mount (before user loads)
   useEffect(() => {
     const savedFont = localStorage.getItem('selectedFont');
-    if (savedFont) {
-      applyFont(savedFont);
-    }
+    const savedTextColor = localStorage.getItem('globalTextColor');
+    const savedTextSize = localStorage.getItem('globalTextSize');
+    
+    if (savedFont) applyFont(savedFont);
+    if (savedTextColor) applyGlobalTextColor(savedTextColor);
+    if (savedTextSize) applyGlobalTextSize(Number(savedTextSize));
   }, []);
 
   const loadSettings = useCallback(async () => {
@@ -64,6 +91,14 @@ export const useGlobalSettings = () => {
         // Apply font globally
         const fontId = (data as any).font_family || 'default';
         applyFont(fontId);
+        
+        // Apply global text color
+        const textColor = (data as any).global_text_color || '#333333';
+        applyGlobalTextColor(textColor);
+        
+        // Apply global text size
+        const textSize = (data as any).global_text_size || 16;
+        applyGlobalTextSize(textSize);
         
         // Apply theme
         if (data.theme) {

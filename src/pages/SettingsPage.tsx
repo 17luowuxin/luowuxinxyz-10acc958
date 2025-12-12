@@ -478,6 +478,74 @@ const SettingsPage: React.FC = () => {
           )}
         </div>
 
+        {/* Reset All Settings Button */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-orange-100/50">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-yellow-100 flex items-center justify-center">
+              <span className="text-lg">🔄</span>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-800">恢复默认设置</h2>
+              <p className="text-xs text-gray-500">一键恢复所有美化和API设置为默认值</p>
+            </div>
+          </div>
+          
+          <button
+            onClick={async () => {
+              if (!user) return;
+              if (!window.confirm('确定要恢复所有设置为默认值吗？此操作不可撤销。')) return;
+              
+              // Reset customization
+              await supabase.from('customization').update({
+                bubble_color: '#FFB5C5',
+                friend_bubble_color: '#B5D8FF',
+                bubble_style: 'rounded',
+                bubble_opacity: 1,
+                bubble_size: 16,
+                chat_background_url: null,
+                global_background_url: null,
+                video_background_url: null,
+                theme: 'pink',
+                font_family: 'default',
+                font_color: '#333333',
+                friend_font_color: '#333333',
+                global_text_color: '#333333',
+                global_text_size: 16,
+                avatar_frame_url: null,
+                friend_avatar_frame_url: null,
+                bubble_frame_url: null,
+                friend_bubble_frame_url: null,
+              } as any).eq('user_id', user.id);
+              
+              // Reset API settings
+              await supabase.from('api_keys').delete().eq('user_id', user.id);
+              
+              // Clear localStorage
+              localStorage.removeItem('selectedFont');
+              localStorage.removeItem('globalTextColor');
+              localStorage.removeItem('globalTextSize');
+              
+              // Remove applied styles
+              document.getElementById('global-font-style')?.remove();
+              document.getElementById('global-text-color-style')?.remove();
+              document.getElementById('global-text-size-style')?.remove();
+              
+              // Reset theme
+              document.documentElement.classList.remove('theme-pink', 'theme-blue', 'theme-orange', 'theme-green', 'theme-purple', 'theme-dark');
+              document.documentElement.classList.add('theme-pink');
+              
+              toast.success('已恢复所有默认设置');
+              
+              // Reload page to apply changes
+              setTimeout(() => window.location.reload(), 500);
+            }}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-400 to-yellow-400 text-white font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+          >
+            <RefreshCw className="w-4 h-4" />
+            一键恢复默认设置
+          </button>
+        </div>
+
         {/* Logout Button */}
         <Button 
           variant="outline" 

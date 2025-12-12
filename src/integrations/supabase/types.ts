@@ -219,6 +219,8 @@ export type Database = {
           friend_bubble_frame_url: string | null
           friend_font_color: string | null
           global_background_url: string | null
+          global_text_color: string | null
+          global_text_size: number | null
           group_chat_background_url: string | null
           id: string
           lock_screen_bg_url: string | null
@@ -246,6 +248,8 @@ export type Database = {
           friend_bubble_frame_url?: string | null
           friend_font_color?: string | null
           global_background_url?: string | null
+          global_text_color?: string | null
+          global_text_size?: number | null
           group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
@@ -273,6 +277,8 @@ export type Database = {
           friend_bubble_frame_url?: string | null
           friend_font_color?: string | null
           global_background_url?: string | null
+          global_text_color?: string | null
+          global_text_size?: number | null
           group_chat_background_url?: string | null
           id?: string
           lock_screen_bg_url?: string | null
