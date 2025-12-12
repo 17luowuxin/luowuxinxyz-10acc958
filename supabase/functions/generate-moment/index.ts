@@ -53,24 +53,8 @@ async function getAICompletion(
   };
   let model: string;
 
-  // 优先使用默认API
-  if (config.useDefaultApi) {
-    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
-    if (defaultKey) {
-      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
-      headers['Authorization'] = `Bearer ${defaultKey}`;
-      model = 'deepseek-chat';
-      console.log('Using default DeepSeek API');
-    } else {
-      // Fallback to Lovable AI
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-      if (!lovableKey) throw new Error("API未配置");
-      apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-      headers['Authorization'] = `Bearer ${lovableKey}`;
-      model = 'google/gemini-2.5-flash';
-      console.log('Using Lovable AI as fallback');
-    }
-  } else if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+  // 【关键修复】优先检查用户传递的自定义API配置
+  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
       baseUrl = `${baseUrl}/chat/completions`;
@@ -89,7 +73,24 @@ async function getAICompletion(
     headers['Authorization'] = `Bearer ${config.apiKey}`;
     model = 'gpt-4o-mini';
     console.log('Using OpenAI API');
+  } else if (config.useDefaultApi) {
+    // 只有在用户没有配置自定义API时才检查默认API设置
+    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+    if (defaultKey) {
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${defaultKey}`;
+      model = 'deepseek-chat';
+      console.log('Using default DeepSeek API');
+    } else {
+      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!lovableKey) throw new Error("API未配置");
+      apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${lovableKey}`;
+      model = 'google/gemini-2.5-flash';
+      console.log('Using Lovable AI as fallback');
+    }
   } else {
+    // 没有任何配置时使用 Lovable AI
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
@@ -202,7 +203,10 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 - 1-2句话`;
     }
 
-    console.log(`Using provider: ${apiSetting.useDefault ? 'default-api' : (userApiKey ? provider : 'lovable-ai')}`);
+    // 日志：显示实际使用的API
+    const usingCustom = userApiKey && (provider === 'custom' || provider === 'deepseek' || provider === 'openai');
+    console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl });
+    console.log(`Using provider: ${usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : 'lovable-ai')}`);
     console.log(`User: ${userName}`);
 
     const content = await getAICompletion(
