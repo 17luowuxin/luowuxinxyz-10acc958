@@ -146,12 +146,32 @@ ${presetsContent}
 
     console.log("Sending request to AI...");
     console.log("Request model:", model);
+    console.log("API URL:", apiUrl);
 
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-    });
+    // 添加超时控制
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+
+    let response: Response;
+    try {
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error("Fetch error:", fetchError);
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return new Response(JSON.stringify({ error: "请求超时，请重试" }), {
+          status: 504,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw fetchError;
+    }
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -184,42 +204,76 @@ ${presetsContent}
 
     const contentType = response.headers.get('content-type') || '';
     console.log("Response content-type:", contentType);
+    console.log("Response status:", response.status);
 
     // 检查是否是流式响应
-    if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
-      console.log("AI response received, streaming...");
+    if (contentType.includes('text/event-stream')) {
+      console.log("AI response received, streaming SSE...");
       return new Response(response.body, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
       });
     }
 
-    // 非流式响应 - 直接解析JSON
-    const jsonResponse = await response.json();
-    console.log("Non-streaming response received");
-    
-    // 提取内容
+    // 非SSE响应 - 读取并解析
+    const responseText = await response.text();
+    console.log("Response text (first 500 chars):", responseText.slice(0, 500));
+
+    // 尝试解析为JSON
     let content = '';
-    if (jsonResponse.choices?.[0]?.message?.content) {
-      content = jsonResponse.choices[0].message.content;
-    } else if (jsonResponse.choices?.[0]?.text) {
-      content = jsonResponse.choices[0].text;
-    } else if (jsonResponse.content) {
-      content = jsonResponse.content;
-    } else if (jsonResponse.result) {
-      content = jsonResponse.result;
-    } else if (jsonResponse.output) {
-      content = jsonResponse.output;
-    } else if (typeof jsonResponse === 'string') {
-      content = jsonResponse;
+    try {
+      const jsonResponse = JSON.parse(responseText);
+      
+      // 尝试多种格式提取内容
+      if (jsonResponse.choices?.[0]?.message?.content) {
+        content = jsonResponse.choices[0].message.content;
+      } else if (jsonResponse.choices?.[0]?.delta?.content) {
+        content = jsonResponse.choices[0].delta.content;
+      } else if (jsonResponse.choices?.[0]?.text) {
+        content = jsonResponse.choices[0].text;
+      } else if (jsonResponse.content?.[0]?.text) {
+        // Claude格式
+        content = jsonResponse.content[0].text;
+      } else if (jsonResponse.content) {
+        content = typeof jsonResponse.content === 'string' ? jsonResponse.content : JSON.stringify(jsonResponse.content);
+      } else if (jsonResponse.result) {
+        content = typeof jsonResponse.result === 'string' ? jsonResponse.result : JSON.stringify(jsonResponse.result);
+      } else if (jsonResponse.output?.text) {
+        content = jsonResponse.output.text;
+      } else if (jsonResponse.output) {
+        content = typeof jsonResponse.output === 'string' ? jsonResponse.output : JSON.stringify(jsonResponse.output);
+      } else if (jsonResponse.response) {
+        content = typeof jsonResponse.response === 'string' ? jsonResponse.response : JSON.stringify(jsonResponse.response);
+      } else if (jsonResponse.data?.choices?.[0]?.message?.content) {
+        content = jsonResponse.data.choices[0].message.content;
+      } else if (jsonResponse.message) {
+        content = typeof jsonResponse.message === 'string' ? jsonResponse.message : JSON.stringify(jsonResponse.message);
+      } else if (typeof jsonResponse === 'string') {
+        content = jsonResponse;
+      }
+
+      if (!content && jsonResponse.error) {
+        console.error("API returned error:", jsonResponse.error);
+        const errorMsg = typeof jsonResponse.error === 'string' ? jsonResponse.error : (jsonResponse.error.message || JSON.stringify(jsonResponse.error));
+        return new Response(JSON.stringify({ error: `API错误: ${errorMsg}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } catch (parseError) {
+      console.log("Response is not JSON, treating as plain text");
+      // 如果不是JSON，可能是纯文本或其他格式
+      content = responseText;
     }
 
     if (!content) {
-      console.error("Could not extract content from response:", JSON.stringify(jsonResponse).slice(0, 500));
-      return new Response(JSON.stringify({ error: "无法解析AI响应" }), {
+      console.error("Could not extract content from response:", responseText.slice(0, 500));
+      return new Response(JSON.stringify({ error: "无法解析AI响应，请检查API配置是否正确" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("Extracted content (first 100 chars):", content.slice(0, 100));
 
     // 包装成SSE格式返回给前端
     const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`;
