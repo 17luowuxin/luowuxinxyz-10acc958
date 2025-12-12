@@ -113,25 +113,47 @@ async function getAICompletion(
 
   const data = await response.json();
   
+  console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
+  
   let content = '';
+  // 尝试多种格式提取内容
   if (data.choices?.[0]?.message?.content) {
     content = data.choices[0].message.content;
+  } else if (data.choices?.[0]?.delta?.content) {
+    content = data.choices[0].delta.content;
   } else if (data.choices?.[0]?.text) {
     content = data.choices[0].text;
   } else if (data.content) {
     content = data.content;
   } else if (data.result) {
     content = data.result;
+  } else if (data.output?.text) {
+    content = data.output.text;
+  } else if (data.output?.content) {
+    content = data.output.content;
   } else if (data.output) {
-    content = data.output;
+    content = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
   } else if (data.response) {
-    content = data.response;
+    content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
+  } else if (data.text) {
+    content = data.text;
+  } else if (data.answer) {
+    content = data.answer;
+  } else if (data.message?.content) {
+    content = data.message.content;
   } else if (typeof data === 'string') {
     content = data;
   }
   
+  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
+  
+  if (!content || content.trim() === '') {
+    console.error("Empty content from API. Full response:", JSON.stringify(data));
+    return '(AI暂时无法回复，请稍后再试)';
+  }
+  
   // 清理内容 - 移除前后空白和多余换行
-  return (content || '...').trim().replace(/^\n+|\n+$/g, '');
+  return content.trim().replace(/^\n+|\n+$/g, '');
 }
 
 serve(async (req) => {
