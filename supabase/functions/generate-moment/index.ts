@@ -47,12 +47,12 @@ async function getAICompletion(
 
   // 优先使用默认API
   if (config.useDefaultApi) {
-    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+    const defaultKey = Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
     if (defaultKey) {
-      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      apiUrl = 'https://tensdaq-api.x-aio.com/chat/completions';
       headers['Authorization'] = `Bearer ${defaultKey}`;
       model = 'deepseek-chat';
-      console.log('Using default DeepSeek API');
+      console.log('Using default Tensdaq API');
     } else {
       throw new Error("默认API未配置");
     }
