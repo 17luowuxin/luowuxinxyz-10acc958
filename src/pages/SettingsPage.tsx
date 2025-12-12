@@ -399,59 +399,37 @@ const SettingsPage: React.FC = () => {
                     自动获取模型
                   </button>
                 </div>
-                <div className="relative">
+                
+                {availableModels.length > 0 ? (
+                  <select
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    style={{ 
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      backgroundSize: '20px'
+                    }}
+                  >
+                    {availableModels.map((model, index) => (
+                      <option key={index} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <Input
                     placeholder="deepseek-chat"
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
-                    onTouchStart={() => availableModels.length > 0 && setShowModelDropdown(true)}
-                    onClick={() => availableModels.length > 0 && setShowModelDropdown(true)}
-                    className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
+                    className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
                   />
-                  {availableModels.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowModelDropdown(!showModelDropdown)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2"
-                    >
-                      <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                  )}
-                </div>
+                )}
                 
-                {/* Model Dropdown */}
-                {showModelDropdown && availableModels.length > 0 && (
-                  <div 
-                    className="fixed inset-0 z-[9998]"
-                    onClick={() => setShowModelDropdown(false)}
-                  />
-                )}
-                {showModelDropdown && availableModels.length > 0 && (
-                  <div className="relative z-[9999]">
-                    <div 
-                      className="absolute left-0 right-0 mt-1 bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-60 overflow-y-auto overscroll-contain"
-                      style={{ touchAction: 'pan-y' }}
-                    >
-                      {availableModels.map((model, index) => (
-                        <div
-                          key={index}
-                          onClick={() => {
-                            setCustomModel(model);
-                            setShowModelDropdown(false);
-                          }}
-                          className={`w-full px-4 py-3 text-left text-sm active:bg-purple-100 cursor-pointer ${
-                            model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700 hover:bg-purple-50'
-                          } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
-                        >
-                          {model}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {availableModels.length > 0 && !showModelDropdown && (
+                {availableModels.length > 0 && (
                   <p className="text-xs text-gray-400 mt-1.5">
-                    已获取 {availableModels.length} 个可用模型，点击输入框或下拉按钮选择
+                    已获取 {availableModels.length} 个可用模型
                   </p>
                 )}
               </div>
