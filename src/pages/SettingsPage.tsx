@@ -286,14 +286,21 @@ const SettingsPage: React.FC = () => {
                     <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
                   </button>
                 )}
-                
-                {/* Model Dropdown */}
-                {showModelDropdown && availableModels.length > 0 && (
-                  <div className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
+              </div>
+              
+              {/* Model Dropdown - moved outside relative container */}
+              {showModelDropdown && availableModels.length > 0 && (
+                <div className="relative z-[100]">
+                  <div className="absolute w-full mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
                     {availableModels.map((model, index) => (
                       <button
                         key={index}
-                        onClick={() => selectModel(model)}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          selectModel(model);
+                        }}
                         className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
                           model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
                         } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
@@ -302,11 +309,11 @@ const SettingsPage: React.FC = () => {
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-              {availableModels.length > 0 && (
+                </div>
+              )}
+              {availableModels.length > 0 && !showModelDropdown && (
                 <p className="text-xs text-gray-400 mt-1.5">
-                  已获取 {availableModels.length} 个可用模型，点击输入框选择
+                  已获取 {availableModels.length} 个可用模型，点击输入框或下拉按钮选择
                 </p>
               )}
             </div>
@@ -350,7 +357,7 @@ const SettingsPage: React.FC = () => {
       {/* Click outside to close dropdown */}
       {showModelDropdown && (
         <div 
-          className="fixed inset-0 z-40" 
+          className="fixed inset-0 z-[99]" 
           onClick={() => setShowModelDropdown(false)}
         />
       )}
