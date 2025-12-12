@@ -355,6 +355,9 @@ const SettingsPage: React.FC = () => {
                   onChange={(e) => setCustomBaseUrl(e.target.value)}
                   className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
                 />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  填写API地址，系统会自动补全路径。例如：https://api.example.com/v1
+                </p>
               </div>
 
               {/* API Key */}
@@ -378,6 +381,9 @@ const SettingsPage: React.FC = () => {
                     {showApiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  从API提供商获取的密钥，通常以 sk- 开头
+                </p>
               </div>
 
               {/* Model Name with Fetch Button */}
