@@ -7,7 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// 匿名神秘角色池 - 漂流瓶回复都是匿名的
 const anonymousPersonas = [
   { persona: '你是一个温柔的倾听者，说话温暖治愈，像一位知心朋友' },
   { persona: '你是一个活泼开朗的人，说话俏皮可爱，总能带来快乐' },
@@ -21,6 +20,28 @@ interface AIConfig {
   baseUrl?: string;
   model?: string;
   provider?: string;
+  useDefaultApi?: boolean;
+}
+
+async function checkDefaultApiSetting(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+  
+  if (apiSettings) {
+    const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
+    if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function getAICompletion(messages: any[], config: AIConfig) {
@@ -32,8 +53,17 @@ async function getAICompletion(messages: any[], config: AIConfig) {
 
   console.log('getAICompletion called with config:', JSON.stringify(config));
 
-  // 使用用户自定义API
-  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+  if (config.useDefaultApi) {
+    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+    if (defaultKey) {
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${defaultKey}`;
+      model = 'deepseek-chat';
+      console.log('Using default DeepSeek API');
+    } else {
+      throw new Error("默认API未配置");
+    }
+  } else if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
       baseUrl = `${baseUrl}/chat/completions`;
@@ -84,7 +114,6 @@ async function getAICompletion(messages: any[], config: AIConfig) {
 
   const data = await response.json();
   
-  // 兼容多种响应格式
   let content = '';
   if (data.choices?.[0]?.message?.content) {
     content = data.choices[0].message.content;
@@ -114,12 +143,10 @@ serve(async (req) => {
     const { content, apiConfig, userId } = await req.json();
     console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50));
 
-    // 创建Supabase客户端
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 获取用户资料，让AI知道用户是谁
     let userName = '朋友';
     let userPersona = '';
     
@@ -135,7 +162,8 @@ serve(async (req) => {
       console.log('Found user profile:', userName);
     }
 
-    // 随机选择一个匿名人设
+    const useDefaultApi = userId ? await checkDefaultApiSetting(userId) : false;
+
     const randomIndex = Math.floor(Math.random() * anonymousPersonas.length);
     const selectedPersona = anonymousPersonas[randomIndex];
     console.log('Using anonymous persona index:', randomIndex);
@@ -164,12 +192,12 @@ ${userPersona ? `关于${userName}的一些信息: ${userPersona}` : ''}
       baseUrl: apiConfig?.baseUrl,
       model: apiConfig?.model,
       provider: apiConfig?.provider,
+      useDefaultApi: useDefaultApi,
     };
 
     const reply = await getAICompletion(messages, config);
     console.log('Generated anonymous reply');
 
-    // 漂流瓶回复是匿名的，character返回"神秘人"
     return new Response(JSON.stringify({ 
       reply,
       character: '神秘人'
