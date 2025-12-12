@@ -21,7 +21,7 @@ interface BottleMessage {
 const BottlePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig } = useAPIConfig();
+  const { apiConfig, loading: apiConfigLoading } = useAPIConfig();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [bottles, setBottles] = useState<BottleMessage[]>([]);
@@ -73,6 +73,17 @@ const BottlePage: React.FC = () => {
   const throwBottle = async () => {
     if (!input.trim() || sending) return;
     
+    // 检查API配置
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+    
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
+    
     setSending(true);
     
     try {
@@ -99,12 +110,12 @@ const BottlePage: React.FC = () => {
         },
         body: JSON.stringify({ 
           content: input.trim(),
-          apiConfig: apiConfig?.apiKey ? {
+          apiConfig: {
             apiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
-          } : null,
+          },
           userId: user?.id
         }),
       });

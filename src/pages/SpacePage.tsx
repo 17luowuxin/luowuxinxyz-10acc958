@@ -40,7 +40,7 @@ interface Comment {
 const SpacePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, isConfigured } = useAPIConfig();
+  const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [friendMoments, setFriendMoments] = useState<Moment[]>([]);
   const [myMoments, setMyMoments] = useState<Moment[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
@@ -122,6 +122,16 @@ const SpacePage: React.FC = () => {
       return;
     }
 
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
+
     setGenerating(true);
     
     // 随机选择1-3个角色发动态
@@ -165,6 +175,16 @@ const SpacePage: React.FC = () => {
 
   const handleUserPost = async () => {
     if (!newPostContent.trim()) return;
+    
+    if (apiConfigLoading) {
+      toast.error('API配置加载中，请稍候...');
+      return;
+    }
+
+    if (!apiConfig?.apiKey) {
+      toast.error('请先在设置中配置API密钥');
+      return;
+    }
     
     setPosting(true);
     const postContent = newPostContent.trim();
