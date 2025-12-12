@@ -7,6 +7,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+const DEFAULT_MODELS = [
+  { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
+  { id: 'qwen-plus', name: '通义千问', description: '阿里云通义千问模型' },
+];
+
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -20,6 +25,7 @@ const SettingsPage: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [usingDefaultApi, setUsingDefaultApi] = useState(false);
+  const [defaultModel, setDefaultModel] = useState('deepseek-chat');
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -32,6 +38,7 @@ const SettingsPage: React.FC = () => {
       const baseUrl = data.find(k => k.provider === 'custom_base_url');
       const model = data.find(k => k.provider === 'custom_model');
       const useDefault = data.find(k => k.provider === 'use_default_api');
+      const defaultModelSetting = data.find(k => k.provider === 'default_model');
       
       if (useDefault && useDefault.api_key === 'true') {
         setUsingDefaultApi(true);
@@ -42,6 +49,7 @@ const SettingsPage: React.FC = () => {
       }
       if (baseUrl) setCustomBaseUrl(baseUrl.api_key);
       if (model) setCustomModel(model.api_key);
+      if (defaultModelSetting) setDefaultModel(defaultModelSetting.api_key);
     }
   };
 
@@ -205,6 +213,28 @@ const SettingsPage: React.FC = () => {
     toast.success('已切换到默认API');
   };
 
+  const saveDefaultModel = async (modelId: string) => {
+    if (!user) return;
+    
+    setDefaultModel(modelId);
+    
+    const { data: existing } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'default_model')
+      .single();
+    
+    if (existing) {
+      await supabase.from('api_keys').update({ api_key: modelId }).eq('id', existing.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'default_model', api_key: modelId });
+    }
+    
+    const modelName = DEFAULT_MODELS.find(m => m.id === modelId)?.name || modelId;
+    toast.success(`已切换到 ${modelName}`);
+  };
+
   const useCustomApiHandler = () => {
     setUsingDefaultApi(false);
   };
@@ -277,12 +307,40 @@ const SettingsPage: React.FC = () => {
           </div>
 
           {usingDefaultApi ? (
-            <div className="bg-green-50 rounded-2xl p-4 text-center">
-              <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-                <Check className="w-5 h-5" />
-                正在使用默认DeepSeek API
+            <div className="space-y-4">
+              <div className="bg-green-50 rounded-2xl p-4 text-center">
+                <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
+                  <Check className="w-5 h-5" />
+                  正在使用默认API
+                </div>
+                <p className="text-sm text-green-500 mt-1">请选择要使用的模型</p>
               </div>
-              <p className="text-sm text-green-500 mt-1">无需配置，直接使用</p>
+              
+              {/* Default Model Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-purple-600 block">选择模型</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {DEFAULT_MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => saveDefaultModel(model.id)}
+                      className={`p-4 rounded-2xl border-2 transition-all text-left ${
+                        defaultModel === model.id
+                          ? 'border-purple-400 bg-purple-50'
+                          : 'border-gray-200 bg-white hover:border-purple-200'
+                      }`}
+                    >
+                      <div className="font-medium text-gray-800">{model.name}</div>
+                      <div className="text-xs text-gray-500 mt-1">{model.description}</div>
+                      {defaultModel === model.id && (
+                        <div className="flex items-center gap-1 text-xs text-purple-600 mt-2">
+                          <Check className="w-3 h-3" /> 当前使用
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

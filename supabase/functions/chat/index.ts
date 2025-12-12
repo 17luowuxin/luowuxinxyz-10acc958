@@ -55,6 +55,7 @@ serve(async (req) => {
     
     // Check if using default API
     let useDefaultApi = false;
+    let defaultModel = 'deepseek-chat';
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -70,6 +71,10 @@ serve(async (req) => {
         if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
           useDefaultApi = true;
         }
+        const defaultModelSetting = apiSettings.find(s => s.provider === 'default_model');
+        if (defaultModelSetting) {
+          defaultModel = defaultModelSetting.api_key;
+        }
       }
     }
     
@@ -78,9 +83,9 @@ serve(async (req) => {
       // Use the default Tensdaq API key stored in secrets
       apiKey = Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
       apiUrl = "https://tensdaq-api.x-aio.com/chat/completions";
-      model = "deepseek-chat";
+      model = defaultModel;
       headers["Authorization"] = `Bearer ${apiKey}`;
-      console.log("Using default Tensdaq API");
+      console.log("Using default Tensdaq API with model:", model);
     } else if (userApiKey && provider) {
       if (provider === 'deepseek') {
         apiKey = userApiKey;

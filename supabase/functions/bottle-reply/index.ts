@@ -21,10 +21,11 @@ interface AIConfig {
   model?: string;
   provider?: string;
   useDefaultApi?: boolean;
+  defaultModel?: string;
 }
 
-async function checkDefaultApiSetting(userId: string): Promise<boolean> {
-  if (!userId) return false;
+async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
+  if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
   
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -35,13 +36,20 @@ async function checkDefaultApiSetting(userId: string): Promise<boolean> {
     .select('provider, api_key')
     .eq('user_id', userId);
   
+  let useDefault = false;
+  let defaultModel = 'deepseek-chat';
+  
   if (apiSettings) {
     const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
     if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
-      return true;
+      useDefault = true;
+    }
+    const defaultModelSetting = apiSettings.find(s => s.provider === 'default_model');
+    if (defaultModelSetting) {
+      defaultModel = defaultModelSetting.api_key;
     }
   }
-  return false;
+  return { useDefault, defaultModel };
 }
 
 async function getAICompletion(messages: any[], config: AIConfig) {
@@ -58,8 +66,8 @@ async function getAICompletion(messages: any[], config: AIConfig) {
     if (defaultKey) {
       apiUrl = 'https://tensdaq-api.x-aio.com/chat/completions';
       headers['Authorization'] = `Bearer ${defaultKey}`;
-      model = 'deepseek-chat';
-      console.log('Using default Tensdaq API');
+      model = config.defaultModel || 'deepseek-chat';
+      console.log('Using default Tensdaq API with model:', model);
     } else {
       throw new Error("默认API未配置");
     }
@@ -162,7 +170,7 @@ serve(async (req) => {
       console.log('Found user profile:', userName);
     }
 
-    const useDefaultApi = userId ? await checkDefaultApiSetting(userId) : false;
+    const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
 
     const randomIndex = Math.floor(Math.random() * anonymousPersonas.length);
     const selectedPersona = anonymousPersonas[randomIndex];
@@ -192,7 +200,8 @@ ${userPersona ? `关于${userName}的一些信息: ${userPersona}` : ''}
       baseUrl: apiConfig?.baseUrl,
       model: apiConfig?.model,
       provider: apiConfig?.provider,
-      useDefaultApi: useDefaultApi,
+      useDefaultApi: apiSetting.useDefault,
+      defaultModel: apiSetting.defaultModel,
     };
 
     const reply = await getAICompletion(messages, config);
