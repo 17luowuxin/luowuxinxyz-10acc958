@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 
 const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
-  { id: 'qwen-plus', name: '通义千问', description: '阿里云通义千问模型' },
 ];
 
 const SettingsPage: React.FC = () => {
@@ -269,7 +268,7 @@ const SettingsPage: React.FC = () => {
               <div>
                 <h2 className="font-bold text-gray-800">自定义对话API</h2>
                 <p className="text-xs text-gray-500">
-                  支持 OpenAI、Claude、通义千问、智谱、Deepseek 等兼容 OpenAI 格式的 API
+                  支持 OpenAI、Claude、智谱、Deepseek 等兼容 OpenAI 格式的 API
                 </p>
               </div>
             </div>
