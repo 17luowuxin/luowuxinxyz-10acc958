@@ -115,12 +115,25 @@ serve(async (req) => {
       } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
         let finalUrl = baseUrl.trim().replace(/\/+$/, '');
-        if (!finalUrl.endsWith('/chat/completions')) {
-          finalUrl = `${finalUrl}/chat/completions`;
+        
+        // 智能处理URL格式
+        if (finalUrl.endsWith('/chat/completions')) {
+          // 已经是完整路径
+          apiUrl = finalUrl;
+        } else if (finalUrl.endsWith('/v1')) {
+          // 以/v1结尾，添加/chat/completions
+          apiUrl = `${finalUrl}/chat/completions`;
+        } else if (finalUrl.includes('/v1/')) {
+          // 包含/v1/但不完整，替换到正确路径
+          apiUrl = finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
+        } else {
+          // 尝试添加/v1/chat/completions
+          apiUrl = `${finalUrl}/v1/chat/completions`;
         }
-        apiUrl = finalUrl;
+        
         model = customModel || "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
+        console.log("Custom API final URL:", apiUrl);
       } else {
         apiKey = Deno.env.get("LOVABLE_API_KEY");
         apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
