@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,6 +19,7 @@ const SettingsPage: React.FC = () => {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [usingDefaultApi, setUsingDefaultApi] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -30,8 +31,12 @@ const SettingsPage: React.FC = () => {
       const customKey = data.find(k => k.provider === 'custom');
       const baseUrl = data.find(k => k.provider === 'custom_base_url');
       const model = data.find(k => k.provider === 'custom_model');
+      const useDefault = data.find(k => k.provider === 'use_default_api');
       
-      if (customKey) {
+      if (useDefault && useDefault.api_key === 'true') {
+        setUsingDefaultApi(true);
+        setIsConfigured(true);
+      } else if (customKey) {
         setApiKey(customKey.api_key);
         setIsConfigured(true);
       }
@@ -80,6 +85,9 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
+    // Clear default API flag when saving custom
+    await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'use_default_api');
+
     // Save API key
     const { data: existing } = await supabase
       .from('api_keys')
@@ -122,6 +130,7 @@ const SettingsPage: React.FC = () => {
       await supabase.from('api_keys').insert({ user_id: user.id, provider: 'custom_model', api_key: customModel });
     }
 
+    setUsingDefaultApi(false);
     setIsConfigured(true);
     toast.success('API配置已保存');
   };
@@ -170,6 +179,36 @@ const SettingsPage: React.FC = () => {
     setShowModelDropdown(false);
   };
 
+  const useDefaultApiHandler = async () => {
+    if (!user) return;
+    
+    // Save the use_default_api flag
+    const { data: existing } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'use_default_api')
+      .single();
+    
+    if (existing) {
+      await supabase.from('api_keys').update({ api_key: 'true' }).eq('id', existing.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'use_default_api', api_key: 'true' });
+    }
+    
+    // Clear custom API settings
+    await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'custom');
+    
+    setUsingDefaultApi(true);
+    setApiKey('');
+    setIsConfigured(true);
+    toast.success('已切换到默认API');
+  };
+
+  const useCustomApiHandler = () => {
+    setUsingDefaultApi(false);
+  };
+
   return (
     <div className="min-h-screen bg-background/70 backdrop-blur-sm">
       {/* Header */}
@@ -211,136 +250,171 @@ const SettingsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Form Fields */}
-          <div className="space-y-4">
-            {/* Base URL */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
-                <Globe className="w-4 h-4" />
-                Base URL
-              </label>
-              <Input
-                placeholder="https://api.deepseek.com/v1"
-                value={customBaseUrl}
-                onChange={(e) => setCustomBaseUrl(e.target.value)}
-                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
-              />
-            </div>
+          {/* Default API Button */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={useDefaultApiHandler}
+              className={`flex-1 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 transition-all ${
+                usingDefaultApi 
+                  ? 'bg-gradient-to-r from-green-400 to-emerald-400 text-white shadow-lg' 
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              使用默认API
+            </button>
+            <button
+              onClick={useCustomApiHandler}
+              className={`flex-1 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 transition-all ${
+                !usingDefaultApi 
+                  ? 'bg-gradient-to-r from-purple-400 to-pink-400 text-white shadow-lg' 
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Key className="w-4 h-4" />
+              自定义API
+            </button>
+          </div>
 
-            {/* API Key */}
-            <div>
-              <label className="text-sm font-medium text-purple-600 mb-2 block">
-                API Key
-              </label>
-              <div className="relative">
-                <Input
-                  type={showApiKey ? 'text' : 'password'}
-                  placeholder="sk-..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showApiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+          {usingDefaultApi ? (
+            <div className="bg-green-50 rounded-2xl p-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
+                <Check className="w-5 h-5" />
+                正在使用默认DeepSeek API
               </div>
+              <p className="text-sm text-green-500 mt-1">无需配置，直接使用</p>
             </div>
-
-            {/* Model Name with Fetch Button */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-purple-600">
-                  Model Name
+          ) : (
+            <div className="space-y-4">
+              {/* Base URL */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
+                  <Globe className="w-4 h-4" />
+                  Base URL
                 </label>
-                <button
-                  onClick={fetchModels}
-                  disabled={fetchingModels || !apiKey || !customBaseUrl}
-                  className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {fetchingModels ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  )}
-                  自动获取模型
-                </button>
-              </div>
-              <div className="relative">
                 <Input
-                  placeholder="deepseek-chat"
-                  value={customModel}
-                  onChange={(e) => setCustomModel(e.target.value)}
-                  onFocus={() => availableModels.length > 0 && setShowModelDropdown(true)}
-                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
+                  placeholder="https://api.deepseek.com/v1"
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
                 />
-                {availableModels.length > 0 && (
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="text-sm font-medium text-purple-600 mb-2 block">
+                  API Key
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    placeholder="sk-..."
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                  />
                   <button
                     type="button"
-                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                    onClick={() => setShowApiKey(!showApiKey)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                    {showApiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
+                </div>
+              </div>
+
+              {/* Model Name with Fetch Button */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-purple-600">
+                    Model Name
+                  </label>
+                  <button
+                    onClick={fetchModels}
+                    disabled={fetchingModels || !apiKey || !customBaseUrl}
+                    className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {fetchingModels ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    自动获取模型
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    placeholder="deepseek-chat"
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    onFocus={() => availableModels.length > 0 && setShowModelDropdown(true)}
+                    className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
+                  />
+                  {availableModels.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowModelDropdown(!showModelDropdown)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Model Dropdown */}
+                {showModelDropdown && availableModels.length > 0 && (
+                  <div className="relative z-[100]">
+                    <div className="absolute w-full mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
+                      {availableModels.map((model, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            selectModel(model);
+                          }}
+                          className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
+                            model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
+                          } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
+                        >
+                          {model}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {availableModels.length > 0 && !showModelDropdown && (
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    已获取 {availableModels.length} 个可用模型，点击输入框或下拉按钮选择
+                  </p>
                 )}
               </div>
-              
-              {/* Model Dropdown - moved outside relative container */}
-              {showModelDropdown && availableModels.length > 0 && (
-                <div className="relative z-[100]">
-                  <div className="absolute w-full mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
-                    {availableModels.map((model, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          selectModel(model);
-                        }}
-                        className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
-                          model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
-                        } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
-                      >
-                        {model}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {availableModels.length > 0 && !showModelDropdown && (
-                <p className="text-xs text-gray-400 mt-1.5">
-                  已获取 {availableModels.length} 个可用模型，点击输入框或下拉按钮选择
-                </p>
-              )}
+
+              {/* Test Button */}
+              <button
+                onClick={testConnection}
+                disabled={testing || !apiKey}
+                className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {testing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <TestTube className="w-4 h-4 text-green-500" />
+                )}
+                测试API连接
+              </button>
+
+              {/* Save Button */}
+              <Button
+                onClick={saveSettings}
+                disabled={!apiKey}
+                className="w-full py-6 rounded-2xl bg-gradient-to-r from-purple-400 to-pink-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+              >
+                保存配置
+              </Button>
             </div>
-
-            {/* Test Button */}
-            <button
-              onClick={testConnection}
-              disabled={testing || !apiKey}
-              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              {testing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <TestTube className="w-4 h-4 text-green-500" />
-              )}
-              测试API连接
-            </button>
-
-            {/* Save Button */}
-            <Button
-              onClick={saveSettings}
-              disabled={!apiKey}
-              className="w-full py-6 rounded-2xl bg-gradient-to-r from-purple-400 to-pink-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
-            >
-              保存配置
-            </Button>
-          </div>
+          )}
         </div>
 
         {/* Logout Button */}

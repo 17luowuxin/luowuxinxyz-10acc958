@@ -53,8 +53,35 @@ serve(async (req) => {
       "Content-Type": "application/json",
     };
     
-    // Priority: user's custom API key > Lovable AI
-    if (userApiKey && provider) {
+    // Check if using default API
+    let useDefaultApi = false;
+    if (userId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: apiSettings } = await supabase
+        .from('api_keys')
+        .select('provider, api_key')
+        .eq('user_id', userId);
+      
+      if (apiSettings) {
+        const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
+        if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
+          useDefaultApi = true;
+        }
+      }
+    }
+    
+    // Priority: default API > user's custom API key > Lovable AI
+    if (useDefaultApi) {
+      // Use the default DeepSeek API key stored in secrets
+      apiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+      apiUrl = "https://api.deepseek.com/v1/chat/completions";
+      model = "deepseek-chat";
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      console.log("Using default DeepSeek API");
+    } else if (userApiKey && provider) {
       if (provider === 'deepseek') {
         apiKey = userApiKey;
         apiUrl = "https://api.deepseek.com/v1/chat/completions";
