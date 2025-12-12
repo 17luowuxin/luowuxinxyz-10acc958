@@ -394,6 +394,9 @@ const ChatPage: React.FC = () => {
         return;
       }
       
+      // 清理内容 - 移除前后空白和多余换行
+      assistantContent = assistantContent.trim().replace(/^\n+|\n+$/g, '');
+      
       // Show complete message at once (no streaming effect)
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
 

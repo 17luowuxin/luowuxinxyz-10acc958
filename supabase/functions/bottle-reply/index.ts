@@ -135,7 +135,8 @@ async function getAICompletion(messages: any[], config: AIConfig) {
     content = data;
   }
   
-  return content || '...';
+  // 清理内容 - 移除前后空白和多余换行
+  return (content || '...').trim().replace(/^\n+|\n+$/g, '');
 }
 
 serve(async (req) => {

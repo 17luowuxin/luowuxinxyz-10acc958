@@ -137,7 +137,8 @@ async function getAICompletion(
       content = data;
     }
     
-    return content || "...";
+    // 清理内容 - 移除前后空白和多余换行
+    return (content || '...').trim().replace(/^\n+|\n+$/g, '');
   } catch (error) {
     clearTimeout(timeout);
     if (error instanceof Error && error.name === 'AbortError') {
