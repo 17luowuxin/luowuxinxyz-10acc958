@@ -223,6 +223,7 @@ const ScriptMurderPage: React.FC = () => {
           },
           question,
           apiConfig,
+          userId: user?.id,
         },
       });
 

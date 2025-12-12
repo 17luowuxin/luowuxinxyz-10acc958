@@ -65,7 +65,7 @@ const TruthDarePage: React.FC = () => {
   const getAIResponse = async (action: string, character: Character, targetCharacter: Character, gameHistory: string = '') => {
     try {
       const { data, error } = await supabase.functions.invoke('truth-dare', {
-        body: { action, character, targetCharacter, gameHistory, apiConfig }
+        body: { action, character, targetCharacter, gameHistory, apiConfig, userId: user?.id }
       });
       if (error) throw error;
       return data.reply;

@@ -300,6 +300,7 @@ const WerewolfPage: React.FC = () => {
           },
           targetName,
           apiConfig,
+          userId: user?.id,
         },
       });
 
