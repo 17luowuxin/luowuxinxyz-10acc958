@@ -75,12 +75,12 @@ serve(async (req) => {
     
     // Priority: default API > user's custom API key > Lovable AI
     if (useDefaultApi) {
-      // Use the default DeepSeek API key stored in secrets
-      apiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
-      apiUrl = "https://api.deepseek.com/v1/chat/completions";
+      // Use the default Tensdaq API key stored in secrets
+      apiKey = Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
+      apiUrl = "https://tensdaq-api.x-aio.com/chat/completions";
       model = "deepseek-chat";
       headers["Authorization"] = `Bearer ${apiKey}`;
-      console.log("Using default DeepSeek API");
+      console.log("Using default Tensdaq API");
     } else if (userApiKey && provider) {
       if (provider === 'deepseek') {
         apiKey = userApiKey;
