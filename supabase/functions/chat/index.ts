@@ -80,12 +80,21 @@ serve(async (req) => {
     
     // Priority: default API > user's custom API key > Lovable AI
     if (useDefaultApi) {
-      // Use the default Tensdaq API key stored in secrets
-      apiKey = Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
-      apiUrl = "https://tensdaq-api.x-aio.com/chat/completions";
-      model = defaultModel;
-      headers["Authorization"] = `Bearer ${apiKey}`;
-      console.log("Using default Tensdaq API with model:", model);
+      // Use the default DeepSeek API key stored in secrets (more reliable)
+      apiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+      if (apiKey) {
+        apiUrl = "https://api.deepseek.com/v1/chat/completions";
+        model = "deepseek-chat";
+        headers["Authorization"] = `Bearer ${apiKey}`;
+        console.log("Using default DeepSeek API");
+      } else {
+        // Fallback to Lovable AI
+        apiKey = Deno.env.get("LOVABLE_API_KEY");
+        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+        model = "google/gemini-2.5-flash";
+        headers["Authorization"] = `Bearer ${apiKey}`;
+        console.log("Using Lovable AI as fallback");
+      }
     } else if (userApiKey && provider) {
       if (provider === 'deepseek') {
         apiKey = userApiKey;
