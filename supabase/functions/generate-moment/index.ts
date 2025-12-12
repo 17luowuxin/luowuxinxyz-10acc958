@@ -5,6 +5,99 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface AIConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  provider?: string;
+}
+
+async function getAICompletion(
+  messages: Array<{ role: string; content: string }>,
+  config: AIConfig
+): Promise<string> {
+  let apiUrl: string;
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  let model: string;
+
+  // 使用用户自定义API
+  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+    let baseUrl = config.baseUrl.replace(/\/+$/, '');
+    if (!baseUrl.endsWith('/chat/completions')) {
+      baseUrl = `${baseUrl}/chat/completions`;
+    }
+    apiUrl = baseUrl;
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = config.model || 'deepseek-chat';
+    console.log('Using custom API:', apiUrl, 'model:', model);
+  } else if (config.apiKey && config.provider === 'deepseek') {
+    apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'deepseek-chat';
+    console.log('Using DeepSeek API');
+  } else if (config.apiKey && config.provider === 'openai') {
+    apiUrl = 'https://api.openai.com/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+    model = 'gpt-4o-mini';
+    console.log('Using OpenAI API');
+  } else {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+    apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    headers['Authorization'] = `Bearer ${LOVABLE_API_KEY}`;
+    model = "google/gemini-2.5-flash";
+    console.log('Using Lovable AI Gateway');
+  }
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 200,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("AI API error:", response.status, errorText);
+    if (response.status === 429) {
+      throw new Error("请求太频繁，请稍后再试");
+    } else if (response.status === 402) {
+      throw new Error("AI额度不足，请充值");
+    }
+    throw new Error(`AI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  // 兼容多种响应格式
+  let content = '';
+  if (data.choices?.[0]?.message?.content) {
+    content = data.choices[0].message.content;
+  } else if (data.choices?.[0]?.text) {
+    content = data.choices[0].text;
+  } else if (data.content) {
+    content = data.content;
+  } else if (data.result) {
+    content = data.result;
+  } else if (data.output) {
+    content = data.output;
+  } else if (data.response) {
+    content = data.response;
+  } else if (typeof data === 'string') {
+    content = data;
+  }
+  
+  return content || '...';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,53 +106,12 @@ serve(async (req) => {
   try {
     const { character, type, userPost, userApiKey, provider, baseUrl, model: customModel, userProfile } = await req.json();
     
-    let apiKey: string | undefined;
-    let apiUrl: string;
-    let model: string;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+    const config: AIConfig = {
+      apiKey: userApiKey,
+      baseUrl: baseUrl,
+      model: customModel,
+      provider: provider,
     };
-    
-    // Priority: user's custom API key > Lovable AI
-    if (userApiKey && provider) {
-      if (provider === 'deepseek') {
-        apiKey = userApiKey;
-        apiUrl = "https://api.deepseek.com/v1/chat/completions";
-        model = "deepseek-chat";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else if (provider === 'openai') {
-        apiKey = userApiKey;
-        apiUrl = "https://api.openai.com/v1/chat/completions";
-        model = "gpt-4o-mini";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else if (provider === 'custom' && baseUrl) {
-        apiKey = userApiKey;
-        let finalUrl = baseUrl.trim();
-        if (!finalUrl.endsWith('/chat/completions')) {
-          if (!finalUrl.endsWith('/')) finalUrl += '/';
-          if (!finalUrl.includes('/v1/')) finalUrl += 'v1/';
-          if (!finalUrl.endsWith('/')) finalUrl += 'chat/completions';
-          else finalUrl += 'chat/completions';
-        }
-        apiUrl = finalUrl;
-        model = customModel || "deepseek-chat";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      } else {
-        apiKey = Deno.env.get("LOVABLE_API_KEY");
-        apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-        model = "google/gemini-2.5-flash";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-      }
-    } else {
-      apiKey = Deno.env.get("LOVABLE_API_KEY");
-      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-      model = "google/gemini-2.5-flash";
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    if (!apiKey) {
-      throw new Error("API key not configured");
-    }
 
     // 获取用户信息
     const userName = userProfile?.nickname || '用户';
@@ -102,33 +154,12 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     }
 
     console.log(`Using provider: ${userApiKey ? provider : 'lovable-ai'}`);
-    console.log(`API URL: ${apiUrl}`);
     console.log(`User: ${userName}`);
 
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: model,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI API error:", response.status, errorText);
-      
-      if (response.status === 402) {
-        throw new Error("配额已用完，请检查API设置或充值");
-      }
-      if (response.status === 429) {
-        throw new Error("请求过于频繁，请稍后再试");
-      }
-      throw new Error(`AI service error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = await getAICompletion(
+      [{ role: "user", content: prompt }],
+      config
+    );
 
     return new Response(JSON.stringify({ content }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
