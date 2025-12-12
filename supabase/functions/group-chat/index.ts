@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,28 @@ interface AIConfig {
   baseUrl?: string;
   model?: string;
   provider?: string;
+  useDefaultApi?: boolean;
+}
+
+async function checkDefaultApiSetting(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+  
+  if (apiSettings) {
+    const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
+    if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function getAICompletion(
@@ -23,8 +46,17 @@ async function getAICompletion(
   };
   let model: string;
 
-  // 使用用户自定义API
-  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+  if (config.useDefaultApi) {
+    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+    if (defaultKey) {
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${defaultKey}`;
+      model = 'deepseek-chat';
+      console.log('Using default DeepSeek API');
+    } else {
+      throw new Error("默认API未配置");
+    }
+  } else if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
       baseUrl = `${baseUrl}/chat/completions`;
@@ -54,7 +86,6 @@ async function getAICompletion(
     console.log('Using Lovable AI Gateway');
   }
 
-  // 添加超时控制
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -85,7 +116,6 @@ async function getAICompletion(
 
   const data = await response.json();
   
-  // 兼容多种响应格式
   let content = '';
   if (data.choices?.[0]?.message?.content) {
     content = data.choices[0].message.content;
@@ -112,38 +142,36 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds } = await req.json();
+    const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds, userId } = await req.json();
+    
+    const useDefaultApi = userId ? await checkDefaultApiSetting(userId) : false;
     
     const config: AIConfig = {
       apiKey: userApiKey,
       baseUrl: baseUrl,
       model: customModel,
       provider: provider,
+      useDefaultApi: useDefaultApi,
     };
 
-    console.log("Using provider:", userApiKey ? provider : "lovable-ai");
+    console.log("Using provider:", useDefaultApi ? 'default-api' : (userApiKey ? provider : "lovable-ai"));
     console.log("Mentioned characters:", mentionedCharacterIds);
 
-    // 用户信息
     const userName = userProfile?.nickname || '用户';
     const userPersona = userProfile?.persona || '';
 
-    // 确定回复的角色 - 每个角色独立回复，不会一个角色扮演多人
     let responders: any[] = [];
     
-    // 如果有@的角色，只让被@的角色回复
     if (mentionedCharacterIds && mentionedCharacterIds.length > 0) {
       responders = characters.filter((c: any) => mentionedCharacterIds.includes(c.id));
       console.log("Using mentioned characters:", responders.map((r: any) => r.name));
     } else {
-      // 没有@的话，随机选择1个角色来回复（避免多角色混乱）
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
       responders = shuffled.slice(0, 1);
     }
 
     const responses: { characterId: string; characterName: string; content: string }[] = [];
 
-    // 每个角色单独调用API，确保每个回复都是独立的
     for (const character of responders) {
       const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
       
@@ -181,7 +209,6 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
           config
         );
         
-        // 清理回复内容，移除可能的角色名前缀和编号
         if (content) {
           content = content.replace(/^[^:：]*[:：]\s*/g, '');
           content = content.replace(/^\d+[\.\s、]*/, '');
@@ -197,7 +224,6 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
         console.error(`Error getting response for ${character.name}:`, error);
       }
 
-      // 减少延迟时间
       if (responders.length > 1) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }

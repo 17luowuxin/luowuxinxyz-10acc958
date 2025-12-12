@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,28 @@ interface AIConfig {
   baseUrl?: string;
   model?: string;
   provider?: string;
+  useDefaultApi?: boolean;
+}
+
+async function checkDefaultApiSetting(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+  
+  if (apiSettings) {
+    const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
+    if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function getAICompletion(
@@ -22,8 +45,17 @@ async function getAICompletion(
   };
   let model: string;
 
-  // 使用用户自定义API
-  if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
+  if (config.useDefaultApi) {
+    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
+    if (defaultKey) {
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      headers['Authorization'] = `Bearer ${defaultKey}`;
+      model = 'deepseek-chat';
+      console.log('Using default DeepSeek API');
+    } else {
+      throw new Error("默认API未配置");
+    }
+  } else if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
       baseUrl = `${baseUrl}/chat/completions`;
@@ -84,7 +116,6 @@ async function getAICompletion(
 
     const data = await response.json();
     
-    // 兼容多种响应格式
     let content = '';
     if (data.choices?.[0]?.message?.content) {
       content = data.choices[0].message.content;
@@ -133,13 +164,16 @@ serve(async (req) => {
   }
 
   try {
-    const { action, character, gameState, targetName, apiConfig } = await req.json();
+    const { action, character, gameState, targetName, apiConfig, userId } = await req.json();
+
+    const useDefaultApi = userId ? await checkDefaultApiSetting(userId) : false;
 
     const config: AIConfig = {
       apiKey: apiConfig?.apiKey,
       baseUrl: apiConfig?.baseUrl,
       model: apiConfig?.model,
       provider: apiConfig?.provider,
+      useDefaultApi: useDefaultApi,
     };
 
     let prompt = '';
