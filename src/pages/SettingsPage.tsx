@@ -404,17 +404,15 @@ const SettingsPage: React.FC = () => {
                     placeholder="deepseek-chat"
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
+                    onTouchStart={() => availableModels.length > 0 && setShowModelDropdown(true)}
                     onClick={() => availableModels.length > 0 && setShowModelDropdown(true)}
                     className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400 pr-10"
                   />
                   {availableModels.length > 0 && (
                     <button
                       type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setShowModelDropdown(!showModelDropdown);
-                      }}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      onClick={() => setShowModelDropdown(!showModelDropdown)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2"
                     >
                       <ChevronDown className={`w-5 h-5 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
                     </button>
@@ -423,24 +421,30 @@ const SettingsPage: React.FC = () => {
                 
                 {/* Model Dropdown */}
                 {showModelDropdown && availableModels.length > 0 && (
-                  <div className="absolute left-0 right-0 z-[9999] mt-1">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-60 overflow-y-auto">
+                  <div 
+                    className="fixed inset-0 z-[9998]"
+                    onClick={() => setShowModelDropdown(false)}
+                  />
+                )}
+                {showModelDropdown && availableModels.length > 0 && (
+                  <div className="relative z-[9999]">
+                    <div 
+                      className="absolute left-0 right-0 mt-1 bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-60 overflow-y-auto overscroll-contain"
+                      style={{ touchAction: 'pan-y' }}
+                    >
                       {availableModels.map((model, index) => (
-                        <button
+                        <div
                           key={index}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                          onClick={() => {
                             setCustomModel(model);
                             setShowModelDropdown(false);
                           }}
-                          className={`w-full px-4 py-3 text-left text-sm hover:bg-purple-50 transition-colors ${
-                            model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700'
+                          className={`w-full px-4 py-3 text-left text-sm active:bg-purple-100 cursor-pointer ${
+                            model === customModel ? 'bg-purple-100 text-purple-700 font-medium' : 'text-gray-700 hover:bg-purple-50'
                           } ${index === 0 ? 'rounded-t-2xl' : ''} ${index === availableModels.length - 1 ? 'rounded-b-2xl' : ''}`}
                         >
                           {model}
-                        </button>
+                        </div>
                       ))}
                     </div>
                   </div>
