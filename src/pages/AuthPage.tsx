@@ -58,23 +58,9 @@ const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Video Background */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover z-0"
-      >
-        <source src="/videos/auth-bg.mp4" type="video/mp4" />
-      </video>
-      
-      {/* Overlay for better readability */}
-      <div className="absolute inset-0 bg-black/30 z-[1]" />
-      
+    <div className="min-h-screen bg-gradient-to-br from-candy-purple via-candy-pink to-candy-orange flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[2]">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           animate={{ y: [0, -20, 0], rotate: [0, 10, 0] }}
           transition={{ repeat: Infinity, duration: 4 }}
@@ -104,15 +90,23 @@ const AuthPage: React.FC = () => {
         className="w-full max-w-sm z-10"
       >
         <div className="glass rounded-4xl p-8 shadow-2xl">
-          {/* Logo */}
+          {/* Logo with Video */}
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', delay: 0.2 }}
             className="flex justify-center mb-6"
           >
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-candy-pink to-candy-purple flex items-center justify-center shadow-glow">
-              <Heart className="w-10 h-10 text-white" />
+            <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-glow relative">
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              >
+                <source src="/videos/auth-bg.mp4" type="video/mp4" />
+              </video>
             </div>
           </motion.div>
 
