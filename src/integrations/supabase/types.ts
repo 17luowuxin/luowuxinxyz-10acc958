@@ -139,8 +139,10 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          online_message_count: string | null
           opening_line: string | null
           persona: string | null
+          reply_mode: string | null
           updated_at: string
           user_id: string
         }
@@ -149,8 +151,10 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          online_message_count?: string | null
           opening_line?: string | null
           persona?: string | null
+          reply_mode?: string | null
           updated_at?: string
           user_id: string
         }
@@ -159,8 +163,10 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          online_message_count?: string | null
           opening_line?: string | null
           persona?: string | null
+          reply_mode?: string | null
           updated_at?: string
           user_id?: string
         }
