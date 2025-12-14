@@ -274,47 +274,175 @@ ${memoryContent}
     console.log("Sending request to AI...");
     console.log("Request model:", model);
     console.log("API URL:", apiUrl);
+    console.log("Messages count:", messages.length);
 
-    // 添加超时控制
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    // 智能消息截断和重试函数
+    const sendRequestWithRetry = async (msgs: any[], streamMode: boolean): Promise<{ response: Response; usedStream: boolean; messagesUsed: any[] }> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    let response: Response;
-    let usedStream = !isAnthropic; // 记录是否使用了流式
-    
-    try {
-      response = await fetch(apiUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-      
-      // 如果流式请求返回400错误，尝试非流式
-      if (!response.ok && response.status === 400 && usedStream) {
-        console.log("Stream request failed with 400, retrying without stream...");
-        requestBody.stream = false;
-        usedStream = false;
-        
-        response = await fetch(apiUrl, {
+      const body: Record<string, unknown> = isAnthropic ? {
+        model,
+        max_tokens: 1024,
+        messages: msgs.map((m: { role: string; content: string }) => ({
+          role: m.role === 'system' ? 'user' : m.role,
+          content: m.content,
+        })),
+        system: systemPrompt,
+      } : {
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...msgs,
+        ],
+        stream: streamMode,
+        max_tokens: 2048,
+      };
+
+      try {
+        let resp = await fetch(apiUrl, {
           method: "POST",
           headers,
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
+        
+        // 如果流式请求返回400错误，尝试非流式
+        if (!resp.ok && resp.status === 400 && streamMode) {
+          console.log("Stream request failed with 400, retrying without stream...");
+          body.stream = false;
+          
+          const controller2 = new AbortController();
+          const timeoutId2 = setTimeout(() => controller2.abort(), 60000);
+          
+          resp = await fetch(apiUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+            signal: controller2.signal,
+          });
+          clearTimeout(timeoutId2);
+          
+          return { response: resp, usedStream: false, messagesUsed: msgs };
+        }
+        
+        return { response: resp, usedStream: streamMode, messagesUsed: msgs };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
       }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      console.error("Fetch error:", fetchError);
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        return new Response(JSON.stringify({ error: "请求超时，请重试" }), {
-          status: 504,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    };
+
+    // 检查响应是否有效（非空内容）
+    const isValidResponse = async (resp: Response): Promise<{ valid: boolean; content?: string; isStream?: boolean }> => {
+      const contentType = resp.headers.get('content-type') || '';
+      
+      // SSE流式响应，需要先检查是否有效
+      if (contentType.includes('text/event-stream')) {
+        return { valid: true, isStream: true };
       }
-      throw fetchError;
+      
+      // 克隆响应以便多次读取
+      const clonedResp = resp.clone();
+      const text = await clonedResp.text();
+      
+      try {
+        const json = JSON.parse(text);
+        // 检查 choices 是否为空
+        if (json.choices && Array.isArray(json.choices) && json.choices.length === 0) {
+          console.log("API returned empty choices array");
+          return { valid: false };
+        }
+        // 检查是否有实际内容
+        const content = json.choices?.[0]?.message?.content 
+          || json.choices?.[0]?.delta?.content
+          || json.content?.[0]?.text
+          || json.content
+          || '';
+        if (!content) {
+          console.log("API returned no content");
+          return { valid: false };
+        }
+        return { valid: true, content };
+      } catch {
+        // 非JSON响应，假设有效
+        return { valid: true, content: text };
+      }
+    };
+
+    let response!: Response;
+    let usedStream = !isAnthropic;
+    let currentMessages = [...messages];
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    // 尝试发送请求，如果返回空结果则减少历史消息重试
+    while (retryCount <= maxRetries) {
+      try {
+        console.log(`Attempt ${retryCount + 1}: sending ${currentMessages.length} messages`);
+        
+        const result = await sendRequestWithRetry(currentMessages, usedStream);
+        response = result.response;
+        usedStream = result.usedStream;
+        
+        if (!response.ok) {
+          // HTTP错误，不重试消息截断
+          break;
+        }
+        
+        // 检查响应是否有效
+        const validity = await isValidResponse(response);
+        
+        if (validity.valid) {
+          // 有效响应，继续处理
+          if (!validity.isStream && validity.content) {
+            // 非流式响应，需要重新获取
+            const result2 = await sendRequestWithRetry(currentMessages, false);
+            response = result2.response;
+            usedStream = false;
+          }
+          break;
+        }
+        
+        // 无效响应，减少消息数量重试
+        retryCount++;
+        if (retryCount > maxRetries) {
+          console.log("Max retries reached with empty responses");
+          break;
+        }
+        
+        // 逐步减少历史消息
+        if (currentMessages.length > 5) {
+          // 保留最后5条消息
+          currentMessages = currentMessages.slice(-5);
+          console.log(`Reduced to last 5 messages for retry`);
+        } else if (currentMessages.length > 2) {
+          // 保留最后2条消息
+          currentMessages = currentMessages.slice(-2);
+          console.log(`Reduced to last 2 messages for retry`);
+        } else if (currentMessages.length > 1) {
+          // 只保留最后1条消息
+          currentMessages = currentMessages.slice(-1);
+          console.log(`Reduced to last 1 message for retry`);
+        } else {
+          // 已经只有1条消息了，无法再减少
+          console.log("Cannot reduce messages further");
+          break;
+        }
+        
+      } catch (fetchError) {
+        console.error("Fetch error:", fetchError);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          return new Response(JSON.stringify({ error: "请求超时，请重试" }), {
+            status: 504,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw fetchError;
+      }
     }
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
