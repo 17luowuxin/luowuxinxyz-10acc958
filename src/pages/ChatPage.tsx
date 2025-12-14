@@ -715,15 +715,30 @@ const ChatPage: React.FC = () => {
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
       let multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
 
-      // 线上模式下，如果模型没有按要求使用 |||，尝试按句号/感叹号等拆分，保证多条消息体验
+      // 线上模式下，如果模型没有按要求使用 |||，智能拆分
       if (replyMode === 'online' && multiMessages.length <= 1) {
-        const sentenceSplits = assistantContent
-          .split(/(?<=[。！？!?…\n])/)
+        // 先按标点拆分
+        let sentenceSplits = assistantContent
+          .split(/(?<=[。！？!?…~～\n])/)
           .map(s => s.trim())
           .filter(s => s.length > 0);
 
-        if (sentenceSplits.length > 1) {
-          multiMessages = sentenceSplits;
+        // 如果拆分后某条消息仍然太长（超过20字），继续按逗号拆
+        const furtherSplit: string[] = [];
+        for (const sentence of sentenceSplits) {
+          if (sentence.length > 20) {
+            const commaSplits = sentence
+              .split(/(?<=[，,、])/)
+              .map(s => s.trim())
+              .filter(s => s.length > 0);
+            furtherSplit.push(...commaSplits);
+          } else {
+            furtherSplit.push(sentence);
+          }
+        }
+
+        if (furtherSplit.length > 1) {
+          multiMessages = furtherSplit;
         }
       }
       
