@@ -262,7 +262,24 @@ const ChatPage: React.FC = () => {
   };
 
   // 转账相关函数
-  const TRANSFER_KEYWORDS = ['转账', '给我钱', '发红包', '打钱', '给我发个红包', '我要钱', '给点钱'];
+  const TRANSFER_KEYWORDS = [
+    '转账',
+    '打钱',
+    '打个钱',
+    '给我钱',
+    '我要钱',
+    '给点钱',
+    '发红包',
+    '发个红包',
+    '塞红包',
+    '红包',
+    '微信红包',
+    '给我发个红包',
+    '请客',
+    '请我吃饭',
+    '给我买东西',
+    '发工资'
+  ];
   
   const shouldTriggerTransfer = (userInput: string): boolean => {
     // 检查用户是否请求转账
@@ -361,8 +378,9 @@ const ChatPage: React.FC = () => {
     });
 
     try {
+      const recentMessages = messages.slice(-20).map(m => ({ role: m.role, content: m.content }));
       const body: any = { 
-        messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMessage], 
+        messages: [...recentMessages, userMessage], 
         characterName: character?.name, 
         characterId: characterId,
         userId: user?.id,
@@ -506,7 +524,7 @@ const ChatPage: React.FC = () => {
       
       // 检查是否触发转账（用户请求或随机触发）
       const userRequestedTransfer = shouldTriggerTransfer(originalInput);
-      const randomTransferChance = Math.random() < 0.15; // 15% 随机触发概率
+      const randomTransferChance = Math.random() < 0.5; // 50% 随机触发概率，方便测试
       
       if (userRequestedTransfer || randomTransferChance) {
         const amount = generateRandomAmount();
