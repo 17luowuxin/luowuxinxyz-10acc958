@@ -24,24 +24,27 @@ const TransferCard: React.FC<TransferCardProps> = ({
       animate={{ scale: 1, opacity: 1 }}
       className="w-full max-w-[260px] rounded-xl overflow-hidden shadow-lg"
     >
-      {/* Orange header with lightning icon */}
+      {/* Header with background image and overlay */}
       <div 
         className="relative p-4 pb-6"
         style={{
           backgroundImage: `url(${transferBg})`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center'
+          backgroundPosition: 'center top'
         }}
       >
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-white/80 flex items-center justify-center bg-transparent">
+        {/* Dark gradient overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50" />
+        
+        <div className="relative z-10 flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full border-2 border-white/80 flex items-center justify-center bg-white/20 backdrop-blur-sm">
             <Zap className="w-5 h-5 text-white" fill="white" />
           </div>
           <div className="flex-1">
-            <p className="text-white/90 text-sm">{characterName} 向你转账</p>
-            <p className="text-white font-bold text-2xl mt-1">¥{amount.toFixed(2)}</p>
+            <p className="text-white/95 text-sm font-medium drop-shadow-sm">{characterName} 向你转账</p>
+            <p className="text-white font-bold text-2xl mt-1 drop-shadow-md">¥{amount.toFixed(2)}</p>
             {message && (
-              <p className="text-white/80 text-xs mt-1">{message}</p>
+              <p className="text-white/90 text-xs mt-1.5 drop-shadow-sm">{message}</p>
             )}
           </div>
         </div>
