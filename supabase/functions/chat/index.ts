@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -246,23 +246,28 @@ serve(async (req) => {
 
     const userName = userProfile?.nickname || '用户';
     const userPersonaInfo = userProfile?.persona || '';
-    const replyMode = (globalThis as any).__replyMode || 'novel';
+    // 优先使用请求中的replyMode，其次是从数据库加载的
+    const replyMode = reqReplyMode || (globalThis as any).__replyMode || 'novel';
+    console.log('Reply mode:', replyMode);
 
     let replyModePrompt = '';
     if (replyMode === 'online') {
       replyModePrompt = `
 
-【回复格式要求 - 线上聊天模式】
-你需要模拟真实的在线聊天方式，将回复拆分成3-5条短消息。
-每条消息用 "|||" 分隔，每条消息保持简短（10-30个字为宜）。
-示例格式：
-哈哈你好啊|||今天过得怎么样？|||我刚吃完饭|||有点无聊想找你聊天~
+【重要：回复格式要求 - 线上聊天模式】
+你必须模拟真实的在线聊天方式，将你的回复拆分成3-5条短消息。
+每条消息之间使用 "|||" 符号分隔（三个竖线），这是必须的格式。
+每条消息保持简短（10-30个字为宜），就像真正在手机上打字聊天一样。
 
-注意：
-- 每条消息都要简短自然，像真实打字一样
-- 不要在一条消息里说太多内容
-- 可以用表情、语气词让对话更生动
-- 消息之间要有逻辑连贯性`;
+正确格式示例：
+嘿~你好呀|||今天天气真不错呢|||你吃饭了吗？|||我刚刚出去逛了一圈
+
+注意事项：
+- 必须使用 ||| 分隔每条消息
+- 每条消息要简短自然，像真实打字
+- 可以用表情符号、语气词
+- 消息之间保持逻辑连贯
+- 绝对不要把 ||| 当成普通文本，它是分隔符`;
     }
 
     const systemPrompt = `你是一个名叫"${characterName || '小助手'}"的虚拟角色。
