@@ -73,6 +73,7 @@ const SpacePage: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   
   // Guestbook state
   const [guestbookEntries, setGuestbookEntries] = useState<GuestbookEntry[]>([]);
@@ -195,6 +196,44 @@ const SpacePage: React.FC = () => {
       toast.error('上传失败');
     }
     setUploadingBg(false);
+  };
+
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    try {
+      const filePath = `${user.id}/avatar-${Date.now()}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      setUserProfile(prev => ({
+        nickname: prev?.nickname,
+        persona: prev?.persona,
+        avatar_url: publicUrl,
+      }));
+
+      await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('user_id', user.id);
+
+      toast.success('头像已更新');
+    } catch (err) {
+      console.error(err);
+      toast.error('头像上传失败');
+    } finally {
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
   };
 
   const handleUploadPostImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -699,7 +738,10 @@ const SpacePage: React.FC = () => {
         {/* Profile Info */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
           <div className="flex items-end gap-4">
-            <div className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-gradient-to-br from-primary to-primary/60">
+            <div 
+              className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-gradient-to-br from-primary to-primary/60 cursor-pointer"
+              onClick={() => avatarInputRef.current?.click()}
+            >
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="avatar" />
               ) : (
@@ -725,6 +767,13 @@ const SpacePage: React.FC = () => {
           accept="image/*"
           className="hidden"
           onChange={handleUploadBackground}
+        />
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleUploadAvatar}
         />
       </div>
 
