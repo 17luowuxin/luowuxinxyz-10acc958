@@ -121,6 +121,7 @@ const ChatPage: React.FC = () => {
     const saved = localStorage.getItem('transferEnabled');
     return saved === 'true';
   });
+  const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -344,6 +345,12 @@ const ChatPage: React.FC = () => {
         const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
         const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
         const customModel = apiKeys.find(k => k.provider === 'custom_model');
+        const replyModeSetting = apiKeys.find(k => k.provider === 'reply_mode');
+        
+        // 设置回复模式
+        if (replyModeSetting) {
+          setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
+        }
         
         if (customKey) {
           setApiConfig({ 
@@ -707,7 +714,67 @@ const ChatPage: React.FC = () => {
       // 清理内容 - 移除前后空白和多余换行
       assistantContent = assistantContent.trim().replace(/^\n+|\n+$/g, '');
       
-      // Show complete message at once (no streaming effect)
+      // 检查是否是线上模式的多条消息（用 ||| 分隔）
+      const multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
+      
+      if (replyMode === 'online' && multiMessages.length > 1) {
+        // 线上模式：逐条显示消息，有延迟效果
+        let delay = 0;
+        for (let i = 0; i < multiMessages.length; i++) {
+          const msgContent = multiMessages[i];
+          const msgDelay = delay;
+          
+          setTimeout(async () => {
+            const msgId = Date.now() + i;
+            setMessages(prev => [...prev, { id: msgId, role: 'assistant', content: msgContent }]);
+            
+            // 保存到数据库
+            await supabase.from('chat_messages').insert({ 
+              user_id: user?.id, 
+              character_id: characterId, 
+              role: 'assistant', 
+              content: msgContent 
+            });
+          }, msgDelay);
+          
+          // 每条消息间隔 600-1200ms，模拟打字延迟
+          delay += 600 + Math.random() * 600;
+        }
+        
+        // 等待所有消息显示完成后再处理转账等逻辑
+        setTimeout(async () => {
+          // 检查是否触发转账
+          if (transferEnabled) {
+            const userRequestedTransfer = shouldTriggerTransfer(originalInput);
+            const randomTransferChance = Math.random() < 0.2;
+            
+            if (userRequestedTransfer || randomTransferChance) {
+              const amount = generateRandomAmount();
+              const messages_for_transfer = userRequestedTransfer 
+                ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
+                : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
+              const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
+              
+              const transfer = await createTransfer(amount, transferMessage);
+              if (transfer) {
+                setPendingTransfers(prev => [...prev, transfer]);
+                const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
+                setMessages(prev => [...prev, { 
+                  id: Date.now() + multiMessages.length, 
+                  role: 'transfer', 
+                  content: transferMsgContent,
+                  transferData: transfer
+                }]);
+              }
+            }
+          }
+          setLoading(false);
+        }, delay + 300);
+        
+        return; // 提前返回，不走下面的逻辑
+      }
+      
+      // 小说模式：一次显示完整消息
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
 
       await supabase.from('chat_messages').insert({ 
