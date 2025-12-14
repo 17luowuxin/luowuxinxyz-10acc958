@@ -493,24 +493,32 @@ const CustomizePage: React.FC = () => {
           <p className="text-muted-foreground text-sm mb-4">设置全局文字颜色和大小，应用到整个应用</p>
           
           <div className="space-y-4">
-            {/* Text Color */}
+            {/* Text Color - Color Picker */}
             <div>
               <p className="text-sm font-medium mb-3">文字颜色</p>
-              <div className="flex gap-2 flex-wrap">
-                {fontColors.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setGlobalTextColor(color)}
-                    className={`w-10 h-10 rounded-xl border-2 transition-all ${
-                      globalTextColor === color ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-muted'
-                    }`}
-                    style={{ backgroundColor: color }}
-                  >
-                    {globalTextColor === color && (
-                      <Check className="w-4 h-4 mx-auto" style={{ color: color === '#FFFFFF' || color === '#FFE66D' ? '#333' : '#fff' }} />
-                    )}
-                  </button>
-                ))}
+              <div className="flex items-center gap-4">
+                <input
+                  type="color"
+                  value={globalTextColor}
+                  onChange={(e) => setGlobalTextColor(e.target.value)}
+                  className="w-16 h-16 rounded-xl cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground mb-2">当前颜色: {globalTextColor}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {['#333333', '#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFB5C5'].map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setGlobalTextColor(color)}
+                        className={`w-8 h-8 rounded-lg border-2 transition-all ${
+                          globalTextColor === color ? 'border-primary scale-110' : 'border-muted'
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -808,17 +816,26 @@ const CustomizePage: React.FC = () => {
 
             <div>
               <p className="text-sm font-medium mb-3">字体颜色</p>
-              <div className="flex gap-2 flex-wrap">
-                {fontColors.map(c => (
-                  <button 
-                    key={c} 
-                    onClick={() => setFontColor(c)} 
-                    className={`w-10 h-10 rounded-full border-4 transition-transform hover:scale-110 ${
-                      fontColor === c ? 'border-primary scale-110' : 'border-transparent'
-                    }`} 
-                    style={{ backgroundColor: c, border: c === '#FFFFFF' ? '2px solid #ddd' : undefined }} 
-                  />
-                ))}
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={fontColor}
+                  onChange={(e) => setFontColor(e.target.value)}
+                  className="w-12 h-12 rounded-xl cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {['#333333', '#FFFFFF', '#000000', '#FFB5C5', '#FF6B6B'].map(c => (
+                    <button 
+                      key={c} 
+                      onClick={() => setFontColor(c)} 
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                        fontColor === c ? 'border-primary scale-110' : 'border-muted'
+                      }`} 
+                      style={{ backgroundColor: c }} 
+                    />
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -890,17 +907,26 @@ const CustomizePage: React.FC = () => {
 
             <div>
               <p className="text-sm font-medium mb-3">字体颜色</p>
-              <div className="flex gap-2 flex-wrap">
-                {fontColors.map(c => (
-                  <button 
-                    key={c} 
-                    onClick={() => setFriendFontColor(c)} 
-                    className={`w-10 h-10 rounded-full border-4 transition-transform hover:scale-110 ${
-                      friendFontColor === c ? 'border-secondary scale-110' : 'border-transparent'
-                    }`} 
-                    style={{ backgroundColor: c, border: c === '#FFFFFF' ? '2px solid #ddd' : undefined }} 
-                  />
-                ))}
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={friendFontColor}
+                  onChange={(e) => setFriendFontColor(e.target.value)}
+                  className="w-12 h-12 rounded-xl cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {['#333333', '#FFFFFF', '#000000', '#B5D8FF', '#4ECDC4'].map(c => (
+                    <button 
+                      key={c} 
+                      onClick={() => setFriendFontColor(c)} 
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                        friendFontColor === c ? 'border-secondary scale-110' : 'border-muted'
+                      }`} 
+                      style={{ backgroundColor: c }} 
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
