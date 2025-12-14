@@ -587,7 +587,8 @@ const ChatPage: React.FC = () => {
         characterId: characterId,
         userId: user?.id,
         persona: character?.persona,
-        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        replyMode: replyMode
       };
       
       // 始终传递API配置
