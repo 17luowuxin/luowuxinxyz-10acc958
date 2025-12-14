@@ -470,7 +470,8 @@ const ChatPage: React.FC = () => {
     if (transferMatch) {
       const amount = parseFloat(transferMatch[1]);
       const message = transferMatch[2].trim() || '给你的~';
-      if (amount > 0 && amount <= 999999) {
+      // 只要金额大于 0 就允许，具体合理性由上游提示控制
+      if (amount > 0) {
         return { amount, message };
       }
     }
@@ -712,7 +713,19 @@ const ChatPage: React.FC = () => {
       assistantContent = assistantContent.trim().replace(/^\n+|\n+$/g, '');
       
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
-      const multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
+      let multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
+
+      // 线上模式下，如果模型没有按要求使用 |||，尝试按句号/感叹号等拆分，保证多条消息体验
+      if (replyMode === 'online' && multiMessages.length <= 1) {
+        const sentenceSplits = assistantContent
+          .split(/(?<=[。！？!?…\n])/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+
+        if (sentenceSplits.length > 1) {
+          multiMessages = sentenceSplits;
+        }
+      }
       
       // 检查 AI 返回中是否包含转账指令
       const handleAITransfer = async (content: string): Promise<string> => {
@@ -737,7 +750,7 @@ const ChatPage: React.FC = () => {
         return content;
       };
       
-      if ((replyMode === 'online' || assistantContent.includes('|||')) && multiMessages.length > 1) {
+      if (replyMode === 'online' && multiMessages.length > 1) {
         // 线上模式：逐条显示消息，有延迟效果
         let delay = 0;
         for (let i = 0; i < multiMessages.length; i++) {
