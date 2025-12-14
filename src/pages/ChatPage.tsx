@@ -122,6 +122,7 @@ const ChatPage: React.FC = () => {
     return saved === 'true';
   });
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
+  const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -346,10 +347,14 @@ const ChatPage: React.FC = () => {
         const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
         const customModel = apiKeys.find(k => k.provider === 'custom_model');
         const replyModeSetting = apiKeys.find(k => k.provider === 'reply_mode');
+        const messageCountSetting = apiKeys.find(k => k.provider === 'online_message_count');
         
         // 设置回复模式
         if (replyModeSetting) {
           setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
+        }
+        if (messageCountSetting) {
+          setOnlineMessageCount(messageCountSetting.api_key);
         }
         
         if (customKey) {
@@ -588,7 +593,8 @@ const ChatPage: React.FC = () => {
         userId: user?.id,
         persona: character?.persona,
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
-        replyMode: replyMode
+        replyMode: replyMode,
+        onlineMessageCount: onlineMessageCount
       };
       
       // 始终传递API配置

@@ -28,6 +28,7 @@ const SettingsPage: React.FC = () => {
   const [defaultModel, setDefaultModel] = useState('deepseek-chat');
   const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
+  const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -63,6 +64,11 @@ const SettingsPage: React.FC = () => {
       const replyModeSetting = data.find(k => k.provider === 'reply_mode');
       if (replyModeSetting) {
         setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
+      }
+      
+      const messageCountSetting = data.find(k => k.provider === 'online_message_count');
+      if (messageCountSetting) {
+        setOnlineMessageCount(messageCountSetting.api_key);
       }
       
       // 判断当前使用哪种API
@@ -563,7 +569,7 @@ const SettingsPage: React.FC = () => {
           <div className="space-y-3">
             {[
               { id: 'novel' as const, name: '小说模式', icon: '📖', desc: '一次发送完整回复，适合叙事风格' },
-              { id: 'online' as const, name: '线上模式', icon: '💬', desc: '模拟真实聊天，连续发送3-5条短消息' },
+              { id: 'online' as const, name: '线上模式', icon: '💬', desc: '模拟真实聊天，连续发送短消息' },
             ].map((mode) => (
               <button
                 key={mode.id}
@@ -603,6 +609,51 @@ const SettingsPage: React.FC = () => {
               </button>
             ))}
           </div>
+          
+          {/* Online Mode Message Count */}
+          {replyMode === 'online' && (
+            <div className="mt-4 p-4 bg-pink-50/50 rounded-2xl border border-pink-200">
+              <div className="text-sm font-medium text-gray-700 mb-3">连续消息条数</div>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: '2-3', label: '2-3条' },
+                  { id: '3-5', label: '3-5条' },
+                  { id: '4-6', label: '4-6条' },
+                  { id: '5-8', label: '5-8条' },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={async () => {
+                      if (!user) return;
+                      setOnlineMessageCount(option.id);
+                      
+                      const { data: existing } = await supabase
+                        .from('api_keys')
+                        .select('id')
+                        .eq('user_id', user.id)
+                        .eq('provider', 'online_message_count')
+                        .single();
+                      
+                      if (existing) {
+                        await supabase.from('api_keys').update({ api_key: option.id }).eq('id', existing.id);
+                      } else {
+                        await supabase.from('api_keys').insert({ user_id: user.id, provider: 'online_message_count', api_key: option.id });
+                      }
+                      
+                      toast.success(`已设置为${option.label}`);
+                    }}
+                    className={`py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                      onlineMessageCount === option.id
+                        ? 'bg-gradient-to-r from-pink-400 to-rose-400 text-white shadow-md'
+                        : 'bg-white border border-gray-200 text-gray-700 hover:border-pink-300'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reset All Settings Button */}
