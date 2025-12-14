@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText } from 'lucide-react';
+import { ChevronLeft, FileText, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
+import { useToast } from '@/hooks/use-toast';
 const TermsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   return (
     <div className="min-h-screen bg-background/70 backdrop-blur-sm">
@@ -82,8 +83,22 @@ const TermsPage: React.FC = () => {
 
             <h2 className="text-base font-bold text-purple-700 mt-4">10. 联系方式</h2>
             <p className="text-sm leading-relaxed">
-              如有任何问题或建议，请通过应用内反馈功能联系我们。
+              如有任何问题或建议，请通过应用内反馈功能联系我们，或添加微信联系：
             </p>
+            <div className="flex items-center gap-2 mt-2 p-3 bg-purple-50 rounded-xl">
+              <span className="text-sm font-medium text-purple-700">微信号：XxyLxs9201314</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
+                onClick={() => {
+                  navigator.clipboard.writeText('XxyLxs9201314');
+                  toast({ title: '已复制微信号' });
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
