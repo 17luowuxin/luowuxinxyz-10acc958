@@ -95,6 +95,44 @@ export type Database = {
         }
         Relationships: []
       }
+      character_memories: {
+        Row: {
+          character_id: string
+          created_at: string
+          id: string
+          message_count: number
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          id?: string
+          message_count?: number
+          summary?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          id?: string
+          message_count?: number
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_memories_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       characters: {
         Row: {
           avatar_url: string | null

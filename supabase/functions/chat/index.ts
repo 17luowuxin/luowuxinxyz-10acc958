@@ -14,9 +14,10 @@ serve(async (req) => {
   try {
     const { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
-    // 获取预设和世界书
+    // 获取预设、世界书和记忆摘要
     let presetsContent = '';
     let worldBooksContent = '';
+    let memoryContent = '';
     
     if (userId && characterId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -43,6 +44,19 @@ serve(async (req) => {
       
       if (worldBooks && worldBooks.length > 0) {
         worldBooksContent = '\n【世界设定】\n' + worldBooks.map(w => `${w.name}: ${w.content}`).join('\n');
+      }
+      
+      // 获取角色记忆摘要
+      const { data: memory } = await supabase
+        .from('character_memories')
+        .select('summary')
+        .eq('character_id', characterId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (memory?.summary) {
+        memoryContent = `\n【关于用户的记忆】\n${memory.summary}`;
+        console.log('Memory loaded for character:', characterId);
       }
     }
     
@@ -212,6 +226,7 @@ serve(async (req) => {
 ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
 ${worldBooksContent}
 ${presetsContent}
+${memoryContent}
 
 【关于你的聊天对象】
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
@@ -219,7 +234,8 @@ ${presetsContent}
 
 请严格按照上述角色人设来回复用户，保持角色的性格特点、说话方式和语气。
 回复要简洁自然，像真实朋友聊天一样，同时体现角色的独特个性。
-如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。`;
+如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。
+如果你记住了关于用户的一些信息，请自然地运用这些记忆，但不要刻意提及"我记得..."。`;
 
     let requestBody: Record<string, unknown>;
     const isAnthropic = provider === 'anthropic' && userApiKey;

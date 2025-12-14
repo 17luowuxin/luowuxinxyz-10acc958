@@ -436,6 +436,34 @@ const ChatPage: React.FC = () => {
         role: 'assistant', 
         content: assistantContent 
       });
+      
+      // 触发记忆摘要生成（每20条消息）
+      const totalMessages = messages.length + 2; // +2 for user and assistant messages just added
+      if (totalMessages > 0 && totalMessages % 20 === 0) {
+        console.log('Triggering memory summary generation at message count:', totalMessages);
+        // 后台生成摘要，不阻塞UI
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-memory-summary`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            characterId,
+            userId: user?.id,
+            characterName: character?.name,
+            characterPersona: character?.persona,
+          }),
+        }).then(res => {
+          if (res.ok) {
+            console.log('Memory summary generated successfully');
+          } else {
+            console.error('Memory summary generation failed');
+          }
+        }).catch(err => {
+          console.error('Memory summary error:', err);
+        });
+      }
     } catch (err: any) {
       console.error('Chat error:', err);
       toast.error('发送失败，请检查网络或API设置');
