@@ -188,6 +188,139 @@ const ChatPage: React.FC = () => {
     // 按时间排序
     allItems.sort((a, b) => a.timestamp - b.timestamp);
     setMessages(allItems);
+    
+    // 检查最后一条消息是否是用户消息（说明AI还没回复）
+    if (chatData && chatData.length > 0) {
+      const lastMsg = chatData[chatData.length - 1];
+      if (lastMsg.role === 'user') {
+        // 延迟一下再请求，等待其他数据加载完成
+        setTimeout(() => {
+          retryLastMessage(chatData);
+        }, 500);
+      }
+    }
+  };
+  
+  // 重新请求AI回复
+  const retryLastMessage = async (chatData: any[]) => {
+    if (!character || !apiConfig?.apiKey) return;
+    
+    setLoading(true);
+    
+    try {
+      const recentMessages = chatData.slice(-20).map(m => ({ role: m.role, content: m.content }));
+      const body: any = { 
+        messages: recentMessages, 
+        characterName: character?.name, 
+        characterId: characterId,
+        userId: user?.id,
+        persona: character?.persona,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        userApiKey: apiConfig.apiKey,
+        provider: apiConfig.provider,
+      };
+      
+      if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
+      if (apiConfig.model) body.model = apiConfig.model;
+      
+      console.log('Retrying last message for AI response...');
+      
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
+        console.error('Retry chat error:', errorData);
+        setLoading(false);
+        return;
+      }
+      
+      if (!resp.body) {
+        setLoading(false);
+        return;
+      }
+      
+      // 读取响应
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode();
+      
+      // 解析响应
+      let assistantContent = '';
+      
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          if (json.error) {
+            setLoading(false);
+            return;
+          }
+          assistantContent = json.choices?.[0]?.message?.content 
+            || json.choices?.[0]?.delta?.content
+            || json.content
+            || '';
+        } catch {
+          if (fullText.trim() && !fullText.includes('<!DOCTYPE')) {
+            assistantContent = fullText.trim();
+          }
+        }
+      }
+      
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (!line || line.startsWith(':')) continue;
+          
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta = json.choices?.[0]?.delta?.content 
+                || json.choices?.[0]?.message?.content
+                || '';
+              if (delta) assistantContent += delta;
+            } catch {}
+          }
+        }
+      }
+      
+      if (assistantContent.trim()) {
+        assistantContent = assistantContent.trim();
+        
+        // 添加到消息列表
+        setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', content: assistantContent }]);
+        
+        // 保存到数据库
+        await supabase.from('chat_messages').insert({ 
+          user_id: user?.id, 
+          character_id: characterId, 
+          role: 'assistant', 
+          content: assistantContent 
+        });
+        
+        console.log('AI response recovered successfully');
+      }
+    } catch (err) {
+      console.error('Retry error:', err);
+    }
+    
+    setLoading(false);
   };
 
   const fetchCustomization = async () => {
