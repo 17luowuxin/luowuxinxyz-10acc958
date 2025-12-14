@@ -122,7 +122,7 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     if (user && characterId) {
       fetchCharacter();
-      fetchMessages();
+      fetchMessagesWithTransfers();
       fetchCustomization();
       fetchProfile();
       fetchApiConfig();
@@ -143,9 +143,51 @@ const ChatPage: React.FC = () => {
     if (data) setProfile(data);
   };
 
-  const fetchMessages = async () => {
-    const { data } = await supabase.from('chat_messages').select('*').eq('character_id', characterId).order('created_at');
-    if (data) setMessages(data);
+  const fetchMessagesWithTransfers = async () => {
+    // 获取聊天消息
+    const { data: chatData } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('character_id', characterId)
+      .order('created_at');
+    
+    // 获取该角色的转账记录
+    const { data: transferData } = await supabase
+      .from('dream_transactions')
+      .select('*')
+      .eq('character_id', characterId)
+      .eq('user_id', user?.id)
+      .order('created_at');
+    
+    // 合并消息和转账记录
+    const allItems: any[] = [];
+    
+    if (chatData) {
+      chatData.forEach(msg => {
+        allItems.push({
+          ...msg,
+          timestamp: new Date(msg.created_at).getTime()
+        });
+      });
+    }
+    
+    if (transferData) {
+      setPendingTransfers(transferData);
+      transferData.forEach(transfer => {
+        allItems.push({
+          id: transfer.id,
+          role: 'transfer',
+          content: `[TRANSFER:${transfer.id}:${transfer.amount}:${transfer.message || ''}]`,
+          created_at: transfer.created_at,
+          timestamp: new Date(transfer.created_at).getTime(),
+          transferData: transfer
+        });
+      });
+    }
+    
+    // 按时间排序
+    allItems.sort((a, b) => a.timestamp - b.timestamp);
+    setMessages(allItems);
   };
 
   const fetchCustomization = async () => {
