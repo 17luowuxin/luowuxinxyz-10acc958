@@ -383,6 +383,21 @@ const ChatPage: React.FC = () => {
       toast.success('收款成功！');
     }
   };
+  
+  const handleDeleteTransfer = async (transferId: string) => {
+    const { error } = await supabase
+      .from('dream_transactions')
+      .delete()
+      .eq('id', transferId);
+    
+    if (!error) {
+      setPendingTransfers(prev => prev.filter(t => t.id !== transferId));
+      setMessages(prev => prev.filter(m => !(m.role === 'transfer' && m.transferData?.id === transferId)));
+      toast.success('转账记录已删除');
+    } else {
+      toast.error('删除失败');
+    }
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -786,6 +801,7 @@ const ChatPage: React.FC = () => {
                       message={transfer.message}
                       isReceived={transfer.is_received}
                       onReceive={() => handleReceiveTransfer(transfer.id)}
+                      onDelete={() => handleDeleteTransfer(transfer.id)}
                     />
                   </div>
                 );
