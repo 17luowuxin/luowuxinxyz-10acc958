@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
 
 const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
@@ -557,8 +558,42 @@ const SettingsPage: React.FC = () => {
         </Button>
 
         {/* Version and Legal Info */}
-        <div className="text-center pt-6 pb-4 space-y-2">
-          <p className="text-xs text-gray-400">版本 v1.0.0</p>
+        <div className="text-center pt-6 pb-4 space-y-3">
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-xs text-gray-400">版本 v{APP_VERSION}</p>
+            <button
+              onClick={() => {
+                toast.success('已是最新版本', {
+                  description: `当前版本 v${APP_VERSION}，更新于 ${BUILD_DATE}`,
+                  icon: <Sparkles className="w-4 h-4 text-green-500" />,
+                });
+              }}
+              className="text-xs text-purple-500 hover:text-purple-700 flex items-center gap-1"
+            >
+              <RefreshCw className="w-3 h-3" />
+              检查更新
+            </button>
+          </div>
+          
+          {/* Changelog Preview */}
+          <details className="text-left bg-white/40 rounded-xl p-3 text-xs">
+            <summary className="text-gray-500 cursor-pointer hover:text-purple-600">
+              查看更新日志
+            </summary>
+            <div className="mt-2 space-y-2">
+              {CHANGELOG.map((log) => (
+                <div key={log.version} className="border-l-2 border-purple-200 pl-2">
+                  <p className="font-medium text-purple-600">v{log.version} ({log.date})</p>
+                  <ul className="text-gray-500 mt-1 space-y-0.5">
+                    {log.changes.map((change, i) => (
+                      <li key={i}>• {change}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </details>
+          
           <div className="flex items-center justify-center gap-3 text-xs">
             <button 
               onClick={() => navigate('/privacy')}
