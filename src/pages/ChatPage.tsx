@@ -356,16 +356,7 @@ const ChatPage: React.FC = () => {
         const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
         const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
         const customModel = apiKeys.find(k => k.provider === 'custom_model');
-        const replyModeSetting = apiKeys.find(k => k.provider === 'reply_mode');
-        const messageCountSetting = apiKeys.find(k => k.provider === 'online_message_count');
-        
-        // 设置回复模式
-        if (replyModeSetting) {
-          setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
-        }
-        if (messageCountSetting) {
-          setOnlineMessageCount(messageCountSetting.api_key);
-        }
+        // 不再从 api_keys 里覆盖回复模式，优先使用角色级/当前会话设置
         
         if (customKey) {
           setApiConfig({ 
