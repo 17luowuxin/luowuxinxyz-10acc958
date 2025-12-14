@@ -300,10 +300,10 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >
-          <h1 className="text-7xl font-bold tracking-tight drop-shadow-lg lock-screen-text" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+          <h1 className="text-7xl font-bold tracking-tight text-white">
             {formatTime(time)}
           </h1>
-          <p className="text-xl mt-4 opacity-90 font-medium lock-screen-text" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>
+          <p className="text-xl mt-4 opacity-90 font-medium text-white">
             {formatDate(time)}
           </p>
         </motion.div>
