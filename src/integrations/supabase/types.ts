@@ -373,6 +373,47 @@ export type Database = {
           },
         ]
       }
+      dream_transactions: {
+        Row: {
+          amount: number
+          character_id: string | null
+          character_name: string
+          created_at: string
+          id: string
+          is_received: boolean | null
+          message: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          character_id?: string | null
+          character_name: string
+          created_at?: string
+          id?: string
+          is_received?: boolean | null
+          message?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          character_id?: string | null
+          character_name?: string
+          created_at?: string
+          id?: string
+          is_received?: boolean | null
+          message?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dream_transactions_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_chats: {
         Row: {
           avatar_url: string | null
