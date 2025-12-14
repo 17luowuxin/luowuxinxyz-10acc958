@@ -50,6 +50,14 @@ interface GuestbookEntry {
   };
 }
 
+interface SpaceLog {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const SpacePage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -81,6 +89,15 @@ const SpacePage: React.FC = () => {
   const [deleteGuestbookId, setDeleteGuestbookId] = useState<string | null>(null);
   const [postingGuestbook, setPostingGuestbook] = useState(false);
 
+  // Space Logs state
+  const [spaceLogs, setSpaceLogs] = useState<SpaceLog[]>([]);
+  const [newLogTitle, setNewLogTitle] = useState('');
+  const [newLogContent, setNewLogContent] = useState('');
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [postingLog, setPostingLog] = useState(false);
+  const [deleteLogId, setDeleteLogId] = useState<string | null>(null);
+  const [viewingLog, setViewingLog] = useState<SpaceLog | null>(null);
+
   useEffect(() => {
     if (user) {
       fetchCharacters();
@@ -88,6 +105,7 @@ const SpacePage: React.FC = () => {
       fetchUserProfile();
       fetchSpaceBackground();
       fetchGuestbook();
+      fetchSpaceLogs();
     }
   }, [user]);
 
@@ -162,6 +180,68 @@ const SpacePage: React.FC = () => {
         ...entry,
         character: entry.characters
       })));
+    }
+  };
+
+  const fetchSpaceLogs = async () => {
+    if (!user?.id) return;
+    const { data } = await supabase
+      .from('space_logs')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (data) {
+      setSpaceLogs(data);
+    }
+  };
+
+  const handlePostLog = async () => {
+    if (!user?.id || !newLogTitle.trim() || !newLogContent.trim()) return;
+    
+    setPostingLog(true);
+    try {
+      const { data, error } = await supabase
+        .from('space_logs')
+        .insert({
+          user_id: user.id,
+          title: newLogTitle.trim(),
+          content: newLogContent.trim()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setSpaceLogs(prev => [data, ...prev]);
+        setNewLogTitle('');
+        setNewLogContent('');
+        setLogDialogOpen(false);
+        toast.success('日志发布成功!');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('发布失败');
+    }
+    setPostingLog(false);
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    try {
+      const { error } = await supabase
+        .from('space_logs')
+        .delete()
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      setSpaceLogs(prev => prev.filter(l => l.id !== logId));
+      setDeleteLogId(null);
+      toast.success('日志已删除');
+    } catch (err) {
+      console.error(err);
+      toast.error('删除失败');
     }
   };
 
@@ -819,18 +899,44 @@ const SpacePage: React.FC = () => {
         </TabsContent>
 
         {/* 日志 Tab */}
-        <TabsContent value="diary" className="p-4 pb-24 mt-0">
-          <div className="text-center py-16 text-muted-foreground">
-            <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>前往日记本查看日志</p>
-            <Button 
-              variant="outline" 
-              className="mt-4"
-              onClick={() => navigate('/diary')}
-            >
-              打开日记本
-            </Button>
-          </div>
+        <TabsContent value="diary" className="p-4 space-y-4 pb-24 mt-0">
+          {spaceLogs.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>还没有日志</p>
+              <p className="text-sm mt-1">点击右下角发布第一篇日志</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {spaceLogs.map((log, i) => (
+                <motion.div
+                  key={log.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="bg-card rounded-xl p-4 border border-border/50 cursor-pointer hover:bg-card/80 transition-colors"
+                  onClick={() => setViewingLog(log)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground truncate">{log.title}</h3>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{log.content}</p>
+                      <p className="text-xs text-muted-foreground mt-2">{formatTime(log.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteLogId(log.id);
+                      }}
+                      className="p-1 hover:bg-destructive/10 rounded transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* 留言板 Tab */}
@@ -1018,6 +1124,76 @@ const SpacePage: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Delete Log Confirm */}
+      <AlertDialog open={!!deleteLogId} onOpenChange={() => setDeleteLogId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这篇日志吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteLogId && handleDeleteLog(deleteLogId)}>
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* View Log Dialog */}
+      <Dialog open={!!viewingLog} onOpenChange={() => setViewingLog(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewingLog?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">{viewingLog && formatTime(viewingLog.created_at)}</p>
+            <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewingLog?.content}</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post Log Dialog */}
+      {activeTab === 'diary' && (
+        <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg"
+            >
+              <Plus className="w-6 h-6" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>发布日志</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Input
+                value={newLogTitle}
+                onChange={(e) => setNewLogTitle(e.target.value)}
+                placeholder="日志标题"
+              />
+              <Textarea
+                value={newLogContent}
+                onChange={(e) => setNewLogContent(e.target.value)}
+                placeholder="写下你的日志内容..."
+                className="min-h-[200px] resize-none"
+              />
+              <Button 
+                onClick={handlePostLog}
+                disabled={!newLogTitle.trim() || !newLogContent.trim() || postingLog}
+                className="w-full"
+              >
+                {postingLog ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                发布
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };
