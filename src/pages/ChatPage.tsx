@@ -994,7 +994,7 @@ const ChatPage: React.FC = () => {
                 <div className="mt-2 pt-2 border-t border-border">
                   <div className="text-xs text-muted-foreground mb-1">连续消息条数</div>
                   <div className="grid grid-cols-2 gap-1">
-                    {['2-3', '3-5', '4-6', '5-8'].map((count) => (
+                    {['1-2', '1-3', '2-4', '3-5'].map((count) => (
                       <button
                         key={count}
                         className={`px-2 py-1 text-xs rounded-md transition-colors ${onlineMessageCount === count ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
