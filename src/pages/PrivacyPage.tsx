@@ -27,7 +27,7 @@ const PrivacyPage: React.FC = () => {
       <div className="p-4 space-y-4">
         <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-purple-100/50">
           <div className="prose prose-sm max-w-none text-gray-700 space-y-4">
-            <p className="text-sm text-gray-500">最后更新日期：2024年1月1日</p>
+            <p className="text-sm text-gray-500">最后更新日期：2025年1月1日</p>
             
             <h2 className="text-base font-bold text-purple-700 mt-4">1. 信息收集</h2>
             <p className="text-sm leading-relaxed">
