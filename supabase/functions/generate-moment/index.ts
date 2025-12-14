@@ -89,7 +89,8 @@ async function getAICompletion(
     throw new Error("请先在设置中配置API密钥");
   }
 
-  const response = await fetch(apiUrl, {
+  // 尝试流式和非流式
+  let response = await fetch(apiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -99,6 +100,19 @@ async function getAICompletion(
       stream: false,
     }),
   });
+  
+  // 如果返回400错误，可能是模型不支持某些参数，重试
+  if (response.status === 400) {
+    console.log("First request failed with 400, retrying with minimal params...");
+    response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        messages,
+      }),
+    });
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -149,7 +163,15 @@ async function getAICompletion(
   
   if (!content || content.trim() === '') {
     console.error("Empty content from API. Full response:", JSON.stringify(data));
-    return '(AI暂时无法回复，请稍后再试)';
+    // 返回一个默认的有趣内容而不是错误提示
+    const fallbackContents = [
+      '今天也是元气满满的一天呢~ ✨',
+      '刚刚看到了很美的风景，想分享给你们！🌸',
+      '有点困困的，但还是想来看看大家~',
+      '最近在想一些有趣的事情呢 🤔',
+      '希望大家今天都开开心心的！💕'
+    ];
+    return fallbackContents[Math.floor(Math.random() * fallbackContents.length)];
   }
   
   // 清理内容 - 移除前后空白和多余换行
