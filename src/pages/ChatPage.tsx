@@ -585,7 +585,10 @@ const ChatPage: React.FC = () => {
     });
 
     try {
-      const recentMessages = messages.slice(-20).map(m => ({ role: m.role, content: m.content }));
+      const recentMessages = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-20)
+        .map(m => ({ role: m.role, content: m.content }));
       const body: any = { 
         messages: [...recentMessages, userMessage], 
         characterName: character?.name, 
@@ -724,7 +727,7 @@ const ChatPage: React.FC = () => {
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
       const multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
       
-      if (replyMode === 'online' && multiMessages.length > 1) {
+      if ((replyMode === 'online' || assistantContent.includes('|||')) && multiMessages.length > 1) {
         // 线上模式：逐条显示消息，有延迟效果
         let delay = 0;
         for (let i = 0; i < multiMessages.length; i++) {
