@@ -991,10 +991,18 @@ const SpacePage: React.FC = () => {
                         <User className="w-4 h-4 text-white" />
                       )}
                     </div>
-                    <span className="font-medium text-sm">
-                      {entry.is_character_reply ? entry.character?.name || 'AI角色' : userProfile?.nickname || '我'}
+                    <span className="font-medium text-sm flex-1">
+                      {entry.is_character_reply ? (
+                        <>
+                          <span className="text-primary">{entry.character?.name || 'AI角色'}</span>
+                          <span className="text-muted-foreground mx-1">回复</span>
+                          <span className="text-foreground">{userProfile?.nickname || '我'}</span>
+                        </>
+                      ) : (
+                        <span className="text-foreground">{userProfile?.nickname || '我'}</span>
+                      )}
                     </span>
-                    <span className="text-xs text-muted-foreground ml-auto">
+                    <span className="text-xs text-muted-foreground">
                       {formatTime(entry.created_at)}
                     </span>
                     <button
