@@ -267,6 +267,7 @@ ${memoryContent}
           ...messages,
         ],
         stream: true,
+        max_tokens: 2048, // 确保有足够的token生成完整回复
       };
     }
 
