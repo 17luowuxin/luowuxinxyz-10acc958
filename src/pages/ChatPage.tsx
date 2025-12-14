@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -116,6 +116,11 @@ const ChatPage: React.FC = () => {
   const [quotedMessage, setQuotedMessage] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
+  const [transferEnabled, setTransferEnabled] = useState(() => {
+    // 从localStorage读取转账开关状态
+    const saved = localStorage.getItem('transferEnabled');
+    return saved === 'true';
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -712,28 +717,30 @@ const ChatPage: React.FC = () => {
         content: assistantContent 
       });
       
-      // 检查是否触发转账（用户请求或随机触发）
-      const userRequestedTransfer = shouldTriggerTransfer(originalInput);
-      const randomTransferChance = Math.random() < 0.5; // 50% 随机触发概率，方便测试
-      
-      if (userRequestedTransfer || randomTransferChance) {
-        const amount = generateRandomAmount();
-        const messages_for_transfer = userRequestedTransfer 
-          ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
-          : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
-        const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
+      // 检查是否触发转账（只有开启转账功能时才会触发）
+      if (transferEnabled) {
+        const userRequestedTransfer = shouldTriggerTransfer(originalInput);
+        const randomTransferChance = Math.random() < 0.2; // 20% 随机触发概率
         
-        const transfer = await createTransfer(amount, transferMessage);
-        if (transfer) {
-          setPendingTransfers(prev => [...prev, transfer]);
-          // 添加转账消息到聊天
-          const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
-          setMessages(prev => [...prev, { 
-            id: Date.now() + 2, 
-            role: 'transfer', 
-            content: transferMsgContent,
-            transferData: transfer
-          }]);
+        if (userRequestedTransfer || randomTransferChance) {
+          const amount = generateRandomAmount();
+          const messages_for_transfer = userRequestedTransfer 
+            ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
+            : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
+          const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
+          
+          const transfer = await createTransfer(amount, transferMessage);
+          if (transfer) {
+            setPendingTransfers(prev => [...prev, transfer]);
+            // 添加转账消息到聊天
+            const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
+            setMessages(prev => [...prev, { 
+              id: Date.now() + 2, 
+              role: 'transfer', 
+              content: transferMsgContent,
+              transferData: transfer
+            }]);
+          }
         }
       }
       
@@ -859,7 +866,24 @@ const ChatPage: React.FC = () => {
               <MoreVertical className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-40 p-1" align="end">
+          <PopoverContent className="w-44 p-1" align="end">
+            {/* 转账开关 */}
+            <button 
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors ${transferEnabled ? 'text-orange-500' : 'text-muted-foreground'}`}
+              onClick={() => {
+                const newValue = !transferEnabled;
+                setTransferEnabled(newValue);
+                localStorage.setItem('transferEnabled', String(newValue));
+                toast.success(newValue ? '转账功能已开启' : '转账功能已关闭');
+                setShowMenu(false);
+              }}
+            >
+              <Gift className="w-4 h-4" />
+              {transferEnabled ? '关闭转账' : '开启转账'}
+            </button>
+            
+            <div className="h-px bg-border my-1" />
+            
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted rounded-md transition-colors">
