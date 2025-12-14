@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.fetch-models]
 verify_jwt = false
+
+[functions.generate-memory-summary]
+verify_jwt = false
