@@ -357,58 +357,111 @@ ${memoryContent}
       });
     }
 
-    // 非SSE响应 - 读取并解析
+    // 非SSE响应 - 读取并解析，支持自动续写
+    const extractContent = (text: string): { content: string; finishReason: string | null } => {
+      let content = '';
+      let finishReason: string | null = null;
+      
+      try {
+        const jsonResponse = JSON.parse(text);
+        finishReason = jsonResponse.choices?.[0]?.finish_reason || null;
+        
+        if (jsonResponse.choices?.[0]?.message?.content) {
+          content = jsonResponse.choices[0].message.content;
+        } else if (jsonResponse.choices?.[0]?.delta?.content) {
+          content = jsonResponse.choices[0].delta.content;
+        } else if (jsonResponse.choices?.[0]?.text) {
+          content = jsonResponse.choices[0].text;
+        } else if (jsonResponse.content?.[0]?.text) {
+          content = jsonResponse.content[0].text;
+        } else if (jsonResponse.content) {
+          content = typeof jsonResponse.content === 'string' ? jsonResponse.content : JSON.stringify(jsonResponse.content);
+        } else if (jsonResponse.result) {
+          content = typeof jsonResponse.result === 'string' ? jsonResponse.result : JSON.stringify(jsonResponse.result);
+        } else if (jsonResponse.output?.text) {
+          content = jsonResponse.output.text;
+        } else if (jsonResponse.output) {
+          content = typeof jsonResponse.output === 'string' ? jsonResponse.output : JSON.stringify(jsonResponse.output);
+        } else if (jsonResponse.response) {
+          content = typeof jsonResponse.response === 'string' ? jsonResponse.response : JSON.stringify(jsonResponse.response);
+        } else if (jsonResponse.data?.choices?.[0]?.message?.content) {
+          content = jsonResponse.data.choices[0].message.content;
+        } else if (jsonResponse.message) {
+          content = typeof jsonResponse.message === 'string' ? jsonResponse.message : JSON.stringify(jsonResponse.message);
+        } else if (typeof jsonResponse === 'string') {
+          content = jsonResponse;
+        }
+
+        if (!content && jsonResponse.error) {
+          throw new Error(typeof jsonResponse.error === 'string' ? jsonResponse.error : (jsonResponse.error.message || JSON.stringify(jsonResponse.error)));
+        }
+      } catch (parseError) {
+        if (parseError instanceof Error && parseError.message.includes('error')) {
+          throw parseError;
+        }
+        content = text;
+      }
+      
+      return { content, finishReason };
+    };
+
     const responseText = await response.text();
     console.log("Response text (first 500 chars):", responseText.slice(0, 500));
 
-    // 尝试解析为JSON
-    let content = '';
-    try {
-      const jsonResponse = JSON.parse(responseText);
-      
-      // 尝试多种格式提取内容
-      if (jsonResponse.choices?.[0]?.message?.content) {
-        content = jsonResponse.choices[0].message.content;
-      } else if (jsonResponse.choices?.[0]?.delta?.content) {
-        content = jsonResponse.choices[0].delta.content;
-      } else if (jsonResponse.choices?.[0]?.text) {
-        content = jsonResponse.choices[0].text;
-      } else if (jsonResponse.content?.[0]?.text) {
-        // Claude格式
-        content = jsonResponse.content[0].text;
-      } else if (jsonResponse.content) {
-        content = typeof jsonResponse.content === 'string' ? jsonResponse.content : JSON.stringify(jsonResponse.content);
-      } else if (jsonResponse.result) {
-        content = typeof jsonResponse.result === 'string' ? jsonResponse.result : JSON.stringify(jsonResponse.result);
-      } else if (jsonResponse.output?.text) {
-        content = jsonResponse.output.text;
-      } else if (jsonResponse.output) {
-        content = typeof jsonResponse.output === 'string' ? jsonResponse.output : JSON.stringify(jsonResponse.output);
-      } else if (jsonResponse.response) {
-        content = typeof jsonResponse.response === 'string' ? jsonResponse.response : JSON.stringify(jsonResponse.response);
-      } else if (jsonResponse.data?.choices?.[0]?.message?.content) {
-        content = jsonResponse.data.choices[0].message.content;
-      } else if (jsonResponse.message) {
-        content = typeof jsonResponse.message === 'string' ? jsonResponse.message : JSON.stringify(jsonResponse.message);
-      } else if (typeof jsonResponse === 'string') {
-        content = jsonResponse;
-      }
+    let { content, finishReason } = extractContent(responseText);
+    let fullContent = content;
+    let continueCount = 0;
+    const maxContinue = 3; // 最多续写3次
 
-      if (!content && jsonResponse.error) {
-        console.error("API returned error:", jsonResponse.error);
-        const errorMsg = typeof jsonResponse.error === 'string' ? jsonResponse.error : (jsonResponse.error.message || JSON.stringify(jsonResponse.error));
-        return new Response(JSON.stringify({ error: `API错误: ${errorMsg}` }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // 自动续写：如果 finish_reason 是 length，说明被截断了
+    while (finishReason === 'length' && continueCount < maxContinue && fullContent.length > 0) {
+      continueCount++;
+      console.log(`Content truncated (finish_reason=length), auto-continuing... attempt ${continueCount}`);
+      
+      // 构建续写请求
+      const continueMessages = [
+        { role: "system", content: systemPrompt },
+        ...messages,
+        { role: "assistant", content: fullContent },
+        { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
+      ];
+      
+      const continueBody = {
+        model,
+        messages: continueMessages,
+        stream: false,
+        max_tokens: 2048,
+      };
+      
+      try {
+        const continueResponse = await fetch(apiUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(continueBody),
         });
+        
+        if (continueResponse.ok) {
+          const continueText = await continueResponse.text();
+          const { content: newContent, finishReason: newFinishReason } = extractContent(continueText);
+          
+          if (newContent) {
+            fullContent += newContent;
+            finishReason = newFinishReason;
+            console.log(`Continuation ${continueCount} added ${newContent.length} chars, new finish_reason: ${finishReason}`);
+          } else {
+            break;
+          }
+        } else {
+          console.error("Continue request failed:", continueResponse.status);
+          break;
+        }
+      } catch (continueError) {
+        console.error("Continue request error:", continueError);
+        break;
       }
-    } catch (parseError) {
-      console.log("Response is not JSON, treating as plain text");
-      // 如果不是JSON，可能是纯文本或其他格式
-      content = responseText;
     }
 
-    if (!content) {
+    if (!fullContent) {
       console.error("Could not extract content from response:", responseText.slice(0, 500));
       return new Response(JSON.stringify({ error: "无法解析AI响应，请检查API配置是否正确" }), {
         status: 500,
@@ -416,10 +469,10 @@ ${memoryContent}
       });
     }
 
-    console.log("Extracted content (first 100 chars):", content.slice(0, 100));
+    console.log(`Final content length: ${fullContent.length} chars, continued ${continueCount} times`);
 
     // 包装成SSE格式返回给前端
-    const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`;
+    const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: fullContent } }] })}\n\ndata: [DONE]\n\n`;
     return new Response(sseData, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
