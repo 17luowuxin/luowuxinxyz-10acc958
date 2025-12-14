@@ -1,6 +1,6 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, Check } from 'lucide-react';
 import transferBg from '@/assets/transfer-card-bg.jpg';
 
 interface TransferCardProps {
@@ -18,51 +18,84 @@ const TransferCard: React.FC<TransferCardProps> = ({
   isReceived,
   onReceive
 }) => {
+  const [showOpened, setShowOpened] = useState(false);
+
+  const handleReceive = () => {
+    setShowOpened(true);
+    onReceive?.();
+  };
+
   return (
     <motion.div
       initial={{ scale: 0.9, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className="w-full max-w-[260px] rounded-xl overflow-hidden shadow-lg"
+      className="w-full max-w-[220px] rounded-lg overflow-hidden shadow-md"
     >
-      {/* Header with background image and overlay */}
+      {/* Header with background */}
       <div 
-        className="relative p-4 pb-6"
+        className="relative px-3 py-2.5"
         style={{
           backgroundImage: `url(${transferBg})`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center top'
+          backgroundPosition: 'center'
         }}
       >
-        {/* Dark gradient overlay for better text readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50" />
-        
-        <div className="relative z-10 flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-white/80 flex items-center justify-center bg-white/20 backdrop-blur-sm">
-            <Zap className="w-5 h-5 text-white" fill="white" />
+        <div className="relative z-10 flex items-start gap-2">
+          <div className="w-7 h-7 rounded-full border border-white/70 flex items-center justify-center bg-white/20 backdrop-blur-sm flex-shrink-0">
+            <Zap className="w-3.5 h-3.5 text-white" fill="white" />
           </div>
-          <div className="flex-1">
-            <p className="text-white/95 text-sm font-medium drop-shadow-sm">{characterName} 向你转账</p>
-            <p className="text-white font-bold text-2xl mt-1 drop-shadow-md">¥{amount.toFixed(2)}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-white/95 text-xs font-medium truncate">{characterName} 向你转账</p>
             {message && (
-              <p className="text-white/90 text-xs mt-1.5 drop-shadow-sm">{message}</p>
+              <p className="text-white/90 text-[10px] mt-0.5 truncate">{message}</p>
             )}
           </div>
         </div>
       </div>
       
-      {/* White footer */}
-      <div className="bg-white p-3 flex items-center justify-between">
-        <span className="text-xs text-gray-400">梦境转账</span>
-        {!isReceived ? (
-          <button
-            onClick={onReceive}
-            className="px-4 py-1.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm rounded-full font-medium hover:opacity-90 transition-opacity"
-          >
-            收款
-          </button>
-        ) : (
-          <span className="text-xs text-green-500 flex items-center gap-1">
-            ✓ 已收款
+      {/* Content area */}
+      <div className="bg-[#FFA940] px-3 py-2">
+        <AnimatePresence mode="wait">
+          {!isReceived && !showOpened ? (
+            <motion.div
+              key="unreceived"
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex items-center justify-between"
+            >
+              <span className="text-white/80 text-[10px]">点击领取</span>
+              <button
+                onClick={handleReceive}
+                className="px-3 py-1 bg-white text-orange-500 text-xs rounded font-medium hover:bg-white/90 transition-colors"
+              >
+                领取红包
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="received"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-1"
+            >
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <Check className="w-3 h-3 text-white" />
+                <span className="text-white text-[10px]">已领取</span>
+              </div>
+              <p className="text-white font-bold text-lg">¥{amount.toFixed(2)}</p>
+              <p className="text-white/70 text-[10px] mt-0.5">已存入梦境钱包</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      
+      {/* Footer */}
+      <div className="bg-white px-3 py-1.5 flex items-center justify-between">
+        <span className="text-[10px] text-gray-400">梦境转账</span>
+        {(isReceived || showOpened) && (
+          <span className="text-[10px] text-green-500 flex items-center gap-0.5">
+            <Check className="w-2.5 h-2.5" />
+            已收款
           </span>
         )}
       </div>
