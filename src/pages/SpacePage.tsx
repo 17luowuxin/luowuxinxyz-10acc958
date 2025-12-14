@@ -708,11 +708,31 @@ const SpacePage: React.FC = () => {
           backgroundPosition: 'center'
         } : {}}
       >
-        {/* Top Bar */}
+        {/* Top Bar with User Avatar */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-3 z-10">
-          <Button variant="ghost" size="icon" className="h-9 w-9 bg-black/20 text-white hover:bg-black/30" onClick={() => navigate('/home')}>
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-9 w-9 bg-black/20 text-white hover:bg-black/30" onClick={() => navigate('/home')}>
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            {/* User Avatar & Name in Top Left */}
+            <div 
+              className="flex items-center gap-2 cursor-pointer"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              <div className="w-10 h-10 rounded-full border-2 border-white/80 overflow-hidden bg-gradient-to-br from-primary to-primary/60 shadow-lg">
+                {userProfile?.avatar_url ? (
+                  <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="avatar" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                )}
+              </div>
+              <span className="text-white font-semibold text-sm drop-shadow-lg">
+                {userProfile?.nickname || '我'}
+              </span>
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button 
               variant="ghost" 
@@ -735,7 +755,7 @@ const SpacePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Profile Info */}
+        {/* Profile Info at Bottom */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
           <div className="flex items-end gap-4">
             <div 
