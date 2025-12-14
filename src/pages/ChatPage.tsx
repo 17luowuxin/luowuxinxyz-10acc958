@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -115,6 +115,7 @@ const ChatPage: React.FC = () => {
   const [longPressedMsg, setLongPressedMsg] = useState<any>(null);
   const [quotedMessage, setQuotedMessage] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [showReplyModeMenu, setShowReplyModeMenu] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
   const [transferEnabled, setTransferEnabled] = useState(() => {
     // 从localStorage读取转账开关状态
@@ -142,7 +143,16 @@ const ChatPage: React.FC = () => {
 
   const fetchCharacter = async () => {
     const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
-    if (data) setCharacter(data);
+    if (data) {
+      setCharacter(data);
+      // 使用角色的回复模式设置
+      if (data.reply_mode) {
+        setReplyMode(data.reply_mode as 'novel' | 'online');
+      }
+      if (data.online_message_count) {
+        setOnlineMessageCount(data.online_message_count);
+      }
+    }
   };
 
   const fetchProfile = async () => {
@@ -943,7 +953,64 @@ const ChatPage: React.FC = () => {
               <MoreVertical className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-44 p-1" align="end">
+          <PopoverContent className="w-52 p-1" align="end">
+            {/* 回复模式设置 */}
+            <div className="px-3 py-2">
+              <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                <MessageSquare className="w-3 h-3" />
+                回复模式
+              </div>
+              <div className="space-y-1">
+                <button
+                  className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${replyMode === 'novel' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+                  onClick={async () => {
+                    setReplyMode('novel');
+                    await supabase.from('characters').update({ reply_mode: 'novel' }).eq('id', characterId);
+                    toast.success('已切换为小说模式');
+                  }}
+                >
+                  <span>📖 小说模式</span>
+                  {replyMode === 'novel' && <Check className="w-4 h-4" />}
+                </button>
+                <button
+                  className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${replyMode === 'online' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+                  onClick={async () => {
+                    setReplyMode('online');
+                    await supabase.from('characters').update({ reply_mode: 'online' }).eq('id', characterId);
+                    toast.success('已切换为线上模式');
+                    setShowReplyModeMenu(true);
+                  }}
+                >
+                  <span>💬 线上模式</span>
+                  {replyMode === 'online' && <Check className="w-4 h-4" />}
+                </button>
+              </div>
+              
+              {/* 线上模式消息条数设置 */}
+              {replyMode === 'online' && (
+                <div className="mt-2 pt-2 border-t border-border">
+                  <div className="text-xs text-muted-foreground mb-1">连续消息条数</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {['2-3', '3-5', '4-6', '5-8'].map((count) => (
+                      <button
+                        key={count}
+                        className={`px-2 py-1 text-xs rounded-md transition-colors ${onlineMessageCount === count ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                        onClick={async () => {
+                          setOnlineMessageCount(count);
+                          await supabase.from('characters').update({ online_message_count: count }).eq('id', characterId);
+                          toast.success(`已设置为${count}条`);
+                        }}
+                      >
+                        {count}条
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="h-px bg-border my-1" />
+            
             {/* 转账开关 */}
             <button 
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors ${transferEnabled ? 'text-orange-500' : 'text-muted-foreground'}`}
