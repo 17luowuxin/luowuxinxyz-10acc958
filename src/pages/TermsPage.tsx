@@ -27,7 +27,7 @@ const TermsPage: React.FC = () => {
       <div className="p-4 space-y-4">
         <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-purple-100/50">
           <div className="prose prose-sm max-w-none text-gray-700 space-y-4">
-            <p className="text-sm text-gray-500">最后更新日期：2024年1月1日</p>
+            <p className="text-sm text-gray-500">最后更新日期：2025年1月1日</p>
             
             <h2 className="text-base font-bold text-purple-700 mt-4">1. 服务条款</h2>
             <p className="text-sm leading-relaxed">
@@ -69,9 +69,15 @@ const TermsPage: React.FC = () => {
               我们保留随时修改或终止服务的权利，恕不另行通知。我们也可能随时更新本协议。
             </p>
 
-            <h2 className="text-base font-bold text-purple-700 mt-4">9. 适用法律</h2>
+            <h2 className="text-base font-bold text-purple-700 mt-4">9. 法律责任与争议解决</h2>
             <p className="text-sm leading-relaxed">
-              本协议受中华人民共和国法律管辖。任何争议应通过友好协商解决。
+              如因使用本应用产生任何争议，双方应首先通过友好协商解决。协商不成的，任何一方均可向开发者所在地有管辖权的人民法院提起诉讼。
+            </p>
+            <p className="text-sm leading-relaxed">
+              用户因违反本协议或相关法律法规而导致的任何法律责任，由用户自行承担。如因用户行为给开发者或第三方造成损失，用户应承担相应的赔偿责任。
+            </p>
+            <p className="text-sm leading-relaxed">
+              本协议的订立、执行和解释及争议的解决均应适用中华人民共和国法律。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">10. 联系方式</h2>
