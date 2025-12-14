@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import TransferCard from '@/components/chat/TransferCard';
 
 // Emoji categories with comprehensive emoji list
 const EMOJI_CATEGORIES = {
@@ -114,6 +115,7 @@ const ChatPage: React.FC = () => {
   const [longPressedMsg, setLongPressedMsg] = useState<any>(null);
   const [quotedMessage, setQuotedMessage] = useState<any>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -256,6 +258,70 @@ const ChatPage: React.FC = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+    }
+  };
+
+  // 转账相关函数
+  const TRANSFER_KEYWORDS = ['转账', '给我钱', '发红包', '打钱', '给我发个红包', '我要钱', '给点钱'];
+  
+  const shouldTriggerTransfer = (userInput: string): boolean => {
+    // 检查用户是否请求转账
+    return TRANSFER_KEYWORDS.some(keyword => userInput.includes(keyword));
+  };
+  
+  const generateRandomAmount = (): number => {
+    // 随机生成金额，有不同的概率区间
+    const rand = Math.random();
+    if (rand < 0.5) {
+      // 50% 概率: 0.01 - 99.99
+      return Math.round((Math.random() * 99.99 + 0.01) * 100) / 100;
+    } else if (rand < 0.85) {
+      // 35% 概率: 100 - 999.99
+      return Math.round((Math.random() * 899.99 + 100) * 100) / 100;
+    } else if (rand < 0.95) {
+      // 10% 概率: 1000 - 9999.99
+      return Math.round((Math.random() * 8999.99 + 1000) * 100) / 100;
+    } else {
+      // 5% 概率: 10000 - 99999.99 (大额)
+      return Math.round((Math.random() * 89999.99 + 10000) * 100) / 100;
+    }
+  };
+  
+  const createTransfer = async (amount: number, message?: string) => {
+    if (!user?.id || !character) return null;
+    
+    const { data, error } = await supabase
+      .from('dream_transactions')
+      .insert({
+        user_id: user.id,
+        character_id: characterId,
+        character_name: character.name,
+        amount: amount,
+        message: message || null,
+        is_received: false
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Create transfer error:', error);
+      return null;
+    }
+    
+    return data;
+  };
+  
+  const handleReceiveTransfer = async (transferId: string) => {
+    const { error } = await supabase
+      .from('dream_transactions')
+      .update({ is_received: true })
+      .eq('id', transferId);
+    
+    if (!error) {
+      setPendingTransfers(prev => prev.map(t => 
+        t.id === transferId ? { ...t, is_received: true } : t
+      ));
+      toast.success('收款成功！');
     }
   };
 
@@ -437,6 +503,31 @@ const ChatPage: React.FC = () => {
         content: assistantContent 
       });
       
+      // 检查是否触发转账（用户请求或随机触发）
+      const userRequestedTransfer = shouldTriggerTransfer(input);
+      const randomTransferChance = Math.random() < 0.08; // 8% 随机触发概率
+      
+      if (userRequestedTransfer || randomTransferChance) {
+        const amount = generateRandomAmount();
+        const messages_for_transfer = userRequestedTransfer 
+          ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
+          : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
+        const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
+        
+        const transfer = await createTransfer(amount, transferMessage);
+        if (transfer) {
+          setPendingTransfers(prev => [...prev, transfer]);
+          // 添加转账消息到聊天
+          const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
+          setMessages(prev => [...prev, { 
+            id: Date.now() + 2, 
+            role: 'transfer', 
+            content: transferMsgContent,
+            transferData: transfer
+          }]);
+        }
+      }
+      
       // 触发记忆摘要生成（每20条消息）
       const totalMessages = messages.length + 2; // +2 for user and assistant messages just added
       if (totalMessages > 0 && totalMessages % 20 === 0) {
@@ -606,6 +697,40 @@ const ChatPage: React.FC = () => {
               }
               return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
             };
+            
+            // 处理转账消息
+            if (msg.role === 'transfer') {
+              const transfer = msg.transferData || pendingTransfers.find(t => msg.content.includes(t.id));
+              if (transfer) {
+                return (
+                  <div key={msg.id} className="flex items-end gap-2 flex-row">
+                    {/* 角色头像 */}
+                    <div className="relative w-10 h-10 flex-shrink-0">
+                      {friendAvatarFrame && (
+                        <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                      )}
+                      <div className={`absolute rounded-full overflow-hidden ${friendAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
+                        {character?.avatar_url ? (
+                          <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
+                            {character?.name?.charAt(0) || '?'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <TransferCard
+                      amount={Number(transfer.amount)}
+                      characterName={transfer.character_name || character?.name || '角色'}
+                      message={transfer.message}
+                      isReceived={transfer.is_received}
+                      onReceive={() => handleReceiveTransfer(transfer.id)}
+                    />
+                  </div>
+                );
+              }
+              return null;
+            }
             
             return (
               <React.Fragment key={msg.id}>
