@@ -5,22 +5,68 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Heart, Sparkles, Mail, Lock } from 'lucide-react';
+import { Heart, Sparkles, Mail, Lock, KeyRound } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const AuthPage: React.FC = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'update'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+
+  // 发送密码重置邮件
+  const handleResetPassword = async () => {
+    if (!email) {
+      toast.error('请输入邮箱地址');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?mode=update`,
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('重置密码邮件已发送，请查收邮箱');
+      setMode('login');
+    }
+    setLoading(false);
+  };
+
+  // 更新密码
+  const handleUpdatePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('密码至少需要6个字符');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('密码修改成功!');
+      navigate('/');
+    }
+    setLoading(false);
+  };
+
+  // 检查URL参数是否是重置密码回调
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'update') {
+      setMode('update');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      if (isLogin) {
+      if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
@@ -32,7 +78,7 @@ const AuthPage: React.FC = () => {
           toast.success('登录成功!');
           navigate('/');
         }
-      } else {
+      } else if (mode === 'signup') {
         if (password.length < 6) {
           toast.error('密码至少需要6个字符');
           setLoading(false);
@@ -55,6 +101,24 @@ const AuthPage: React.FC = () => {
     }
 
     setLoading(false);
+  };
+
+  const getTitle = () => {
+    switch (mode) {
+      case 'login': return '欢迎回来 💕';
+      case 'signup': return '加入我们 ✨';
+      case 'reset': return '重置密码 🔑';
+      case 'update': return '设置新密码 🔐';
+    }
+  };
+
+  const getSubtitle = () => {
+    switch (mode) {
+      case 'login': return '登录你的梦女小窝';
+      case 'signup': return '创建你的专属空间';
+      case 'reset': return '输入邮箱接收重置链接';
+      case 'update': return '请设置你的新密码';
+    }
   };
 
   return (
@@ -111,55 +175,139 @@ const AuthPage: React.FC = () => {
           </motion.div>
 
           <h1 className="text-2xl font-bold text-center text-foreground mb-2">
-            {isLogin ? '欢迎回来 💕' : '加入我们 ✨'}
+            {getTitle()}
           </h1>
           <p className="text-sm text-muted-foreground text-center mb-6">
-            {isLogin ? '登录你的梦女小窝' : '创建你的专属空间'}
+            {getSubtitle()}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                type="email"
-                placeholder="邮箱地址"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
-              />
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                type="password"
-                placeholder="密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
-              />
-            </div>
+          {/* 登录/注册表单 */}
+          {(mode === 'login' || mode === 'signup') && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="email"
+                  placeholder="邮箱地址"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="密码"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
+                />
+              </div>
 
-            <Button
-              type="submit"
-              variant="candy"
-              size="lg"
-              className="w-full"
-              disabled={loading}
-            >
-              {loading ? '请稍候...' : isLogin ? '登录' : '注册'}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                variant="candy"
+                size="lg"
+                className="w-full"
+                disabled={loading}
+              >
+                {loading ? '请稍候...' : mode === 'login' ? '登录' : '注册'}
+              </Button>
+            </form>
+          )}
 
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-primary hover:underline font-medium"
-            >
-              {isLogin ? '还没有账号? 立即注册' : '已有账号? 立即登录'}
-            </button>
+          {/* 重置密码表单 */}
+          {mode === 'reset' && (
+            <div className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="email"
+                  placeholder="邮箱地址"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="candy"
+                size="lg"
+                className="w-full"
+                disabled={loading}
+                onClick={handleResetPassword}
+              >
+                {loading ? '发送中...' : '发送重置链接'}
+              </Button>
+            </div>
+          )}
+
+          {/* 更新密码表单 */}
+          {mode === 'update' && (
+            <div className="space-y-4">
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="新密码 (至少6位)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="candy"
+                size="lg"
+                className="w-full"
+                disabled={loading}
+                onClick={handleUpdatePassword}
+              >
+                {loading ? '更新中...' : '确认修改密码'}
+              </Button>
+            </div>
+          )}
+
+          <div className="mt-6 text-center space-y-2">
+            {mode === 'login' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMode('reset')}
+                  className="text-sm text-muted-foreground hover:text-primary hover:underline block w-full"
+                >
+                  忘记密码?
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('signup')}
+                  className="text-sm text-primary hover:underline font-medium"
+                >
+                  还没有账号? 立即注册
+                </button>
+              </>
+            )}
+            {mode === 'signup' && (
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="text-sm text-primary hover:underline font-medium"
+              >
+                已有账号? 立即登录
+              </button>
+            )}
+            {(mode === 'reset' || mode === 'update') && (
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="text-sm text-primary hover:underline font-medium"
+              >
+                返回登录
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
