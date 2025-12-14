@@ -733,42 +733,9 @@ const ChatPage: React.FC = () => {
         }
       }
 
-      // 再根据你在菜单里设置的条数（例如 3-5）尽量补足最少条数
-      if (replyMode === 'online') {
-        const [minStr] = (onlineMessageCount || '3-5').split('-');
-        const minCount = Math.max(Number(minStr) || 3, 2);
-
-        // 不断把最长的一条再拆成两条，直到达到最少条数或无法再拆
-        let safety = 0;
-        while (multiMessages.length > 0 && multiMessages.length < minCount && safety < 5) {
-          safety++;
-          // 找到当前最长的一条
-          let longestIndex = 0;
-          for (let i = 1; i < multiMessages.length; i++) {
-            if (multiMessages[i].length > multiMessages[longestIndex].length) {
-              longestIndex = i;
-            }
-          }
-
-          const longest = multiMessages[longestIndex];
-          if (!longest || longest.length <= 6) break; // 太短就不再拆
-
-          // 优先按标点再拆一次，否则从中间硬拆
-          const byPunc = longest.split(/(?<=[。！？!?…~～，,、])/).map(s => s.trim()).filter(Boolean);
-          let partA: string;
-          let partB: string;
-          if (byPunc.length >= 2) {
-            partA = byPunc[0];
-            partB = byPunc.slice(1).join('');
-          } else {
-            const mid = Math.floor(longest.length / 2);
-            partA = longest.slice(0, mid);
-            partB = longest.slice(mid);
-          }
-
-          // 替换为两条
-          multiMessages.splice(longestIndex, 1, partA.trim(), partB.trim()).filter(Boolean);
-        }
+      // 限制最多5条
+      if (multiMessages.length > 5) {
+        multiMessages = multiMessages.slice(0, 5);
       }
       
       // 检查 AI 返回中是否包含转账指令
