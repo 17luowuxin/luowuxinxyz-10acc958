@@ -765,31 +765,6 @@ const SpacePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Profile Info at Bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
-          <div className="flex items-end gap-4">
-            <div 
-              className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-gradient-to-br from-primary to-primary/60 cursor-pointer"
-              onClick={() => avatarInputRef.current?.click()}
-            >
-              {userProfile?.avatar_url ? (
-                <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="avatar" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <User className="w-8 h-8 text-white" />
-                </div>
-              )}
-            </div>
-            <div className="flex-1 pb-1">
-              <h1 className="text-xl font-bold text-white drop-shadow-lg">
-                {userProfile?.nickname || '我的空间'}
-              </h1>
-              <p className="text-sm text-white/80 truncate">
-                {userProfile?.persona || '这个人很懒，什么都没写~'}
-              </p>
-            </div>
-          </div>
-        </div>
 
         <input
           ref={bgInputRef}
