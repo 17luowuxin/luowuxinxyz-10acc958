@@ -347,6 +347,7 @@ const ChatPage: React.FC = () => {
     }
     
     const userMessage = { role: 'user', content: messageContent };
+    const originalInput = input; // 保存原始输入用于转账检测
     setMessages(prev => [...prev, { ...userMessage, id: Date.now(), quotedMessage }]);
     setInput('');
     setQuotedMessage(null);
@@ -504,8 +505,8 @@ const ChatPage: React.FC = () => {
       });
       
       // 检查是否触发转账（用户请求或随机触发）
-      const userRequestedTransfer = shouldTriggerTransfer(input);
-      const randomTransferChance = Math.random() < 0.08; // 8% 随机触发概率
+      const userRequestedTransfer = shouldTriggerTransfer(originalInput);
+      const randomTransferChance = Math.random() < 0.15; // 15% 随机触发概率
       
       if (userRequestedTransfer || randomTransferChance) {
         const amount = generateRandomAmount();
