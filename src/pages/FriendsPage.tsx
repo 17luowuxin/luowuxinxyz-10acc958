@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -22,6 +23,9 @@ const FriendsPage: React.FC = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
   const [editingChar, setEditingChar] = useState<any>(null);
+  const [memorySummary, setMemorySummary] = useState('');
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [regeneratingMemory, setRegeneratingMemory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -138,19 +142,101 @@ const FriendsPage: React.FC = () => {
     setAvatarFile(null);
   };
 
-  const openEditDialog = (char: any) => {
+  const openEditDialog = async (char: any) => {
     setEditingChar(char);
     setName(char.name);
     setPersona(char.persona || '');
     setOpeningLine(char.opening_line || '');
     setAvatarUrl(char.avatar_url || '');
+    setMemorySummary('');
     setOpen(true);
+    
+    // 加载记忆摘要
+    setMemoryLoading(true);
+    try {
+      const { data } = await supabase
+        .from('character_memories')
+        .select('summary')
+        .eq('character_id', char.id)
+        .eq('user_id', user?.id)
+        .maybeSingle();
+      
+      if (data?.summary) {
+        setMemorySummary(data.summary);
+      }
+    } catch (err) {
+      console.error('Failed to load memory:', err);
+    } finally {
+      setMemoryLoading(false);
+    }
   };
 
   const handleDialogClose = () => {
     setOpen(false);
     setEditingChar(null);
     resetForm();
+    setMemorySummary('');
+  };
+
+  const saveMemory = async () => {
+    if (!editingChar || !user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('character_memories')
+        .upsert({
+          character_id: editingChar.id,
+          user_id: user.id,
+          summary: memorySummary,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'character_id,user_id'
+        });
+      
+      if (error) throw error;
+      toast.success('记忆已保存');
+    } catch (err) {
+      console.error('Failed to save memory:', err);
+      toast.error('保存失败');
+    }
+  };
+
+  const regenerateMemory = async () => {
+    if (!editingChar || !user) return;
+    
+    setRegeneratingMemory(true);
+    try {
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-memory-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          characterId: editingChar.id,
+          userId: user.id,
+          characterName: editingChar.name,
+          characterPersona: editingChar.persona,
+        }),
+      });
+      
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.summary) {
+          setMemorySummary(data.summary);
+          toast.success('记忆已重新生成');
+        } else {
+          toast.info(data.message || '消息不足，无法生成摘要');
+        }
+      } else {
+        toast.error('生成失败');
+      }
+    } catch (err) {
+      console.error('Failed to regenerate memory:', err);
+      toast.error('生成失败');
+    } finally {
+      setRegeneratingMemory(false);
+    }
   };
 
   return (
@@ -184,53 +270,152 @@ const FriendsPage: React.FC = () => {
               <Plus className="w-6 h-6" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="rounded-3xl bg-white/95 backdrop-blur-sm border-0 shadow-2xl max-w-sm mx-auto">
+          <DialogContent className="rounded-3xl bg-white/95 backdrop-blur-sm border-0 shadow-2xl max-w-sm mx-auto max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-center text-gray-700">
                 {editingChar ? '编辑角色' : '创建新角色'}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              {/* Avatar Upload */}
-              <div className="flex justify-center">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-300 to-pink-300 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg"
-                >
-                  {avatarUrl ? (
-                    <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" />
+            
+            {editingChar ? (
+              <Tabs defaultValue="basic" className="mt-4">
+                <TabsList className="grid w-full grid-cols-2 rounded-xl bg-gray-100">
+                  <TabsTrigger value="basic" className="rounded-lg">基本信息</TabsTrigger>
+                  <TabsTrigger value="memory" className="rounded-lg">
+                    <Brain className="w-4 h-4 mr-1" />
+                    记忆
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="basic" className="space-y-4 mt-4">
+                  {/* Avatar Upload */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-300 to-pink-300 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg"
+                    >
+                      {avatarUrl ? (
+                        <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" />
+                      ) : (
+                        <Plus className="w-8 h-8 text-white" />
+                      )}
+                    </button>
+                  </div>
+                  
+                  <Input 
+                    placeholder="角色名称" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    className="rounded-xl bg-gray-50 border-gray-200"
+                  />
+                  <Textarea 
+                    placeholder="角色人设（性格、背景、说话风格等）" 
+                    value={persona} 
+                    onChange={(e) => setPersona(e.target.value)} 
+                    rows={3}
+                    className="rounded-xl bg-gray-50 border-gray-200"
+                  />
+                  <Input 
+                    placeholder="开场白" 
+                    value={openingLine} 
+                    onChange={(e) => setOpeningLine(e.target.value)}
+                    className="rounded-xl bg-gray-50 border-gray-200"
+                  />
+                  <Button 
+                    className="w-full rounded-xl py-6 bg-gradient-to-r from-pink-400 to-purple-400 text-white shadow-lg" 
+                    onClick={updateCharacter}
+                  >
+                    保存修改
+                  </Button>
+                </TabsContent>
+                
+                <TabsContent value="memory" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                      角色对你的记忆摘要
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={regenerateMemory}
+                      disabled={regeneratingMemory}
+                      className="text-purple-500"
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-1 ${regeneratingMemory ? 'animate-spin' : ''}`} />
+                      {regeneratingMemory ? '生成中...' : '重新生成'}
+                    </Button>
+                  </div>
+                  
+                  {memoryLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
+                    </div>
                   ) : (
-                    <Plus className="w-8 h-8 text-white" />
+                    <Textarea 
+                      placeholder="暂无记忆摘要。与角色聊天20条以上后会自动生成，或点击上方按钮手动生成。"
+                      value={memorySummary} 
+                      onChange={(e) => setMemorySummary(e.target.value)} 
+                      rows={6}
+                      className="rounded-xl bg-gray-50 border-gray-200 text-sm"
+                    />
                   )}
-                </button>
+                  
+                  <p className="text-xs text-gray-400">
+                    记忆会帮助角色记住你们的对话内容，让交流更加自然。你可以手动编辑或重新生成。
+                  </p>
+                  
+                  <Button 
+                    className="w-full rounded-xl py-6 bg-gradient-to-r from-purple-400 to-indigo-400 text-white shadow-lg" 
+                    onClick={saveMemory}
+                    disabled={memoryLoading}
+                  >
+                    保存记忆
+                  </Button>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <div className="space-y-4 mt-4">
+                {/* Avatar Upload */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-300 to-pink-300 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg"
+                  >
+                    {avatarUrl ? (
+                      <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" />
+                    ) : (
+                      <Plus className="w-8 h-8 text-white" />
+                    )}
+                  </button>
+                </div>
+                
+                <Input 
+                  placeholder="角色名称" 
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
+                  className="rounded-xl bg-gray-50 border-gray-200"
+                />
+                <Textarea 
+                  placeholder="角色人设（性格、背景、说话风格等）" 
+                  value={persona} 
+                  onChange={(e) => setPersona(e.target.value)} 
+                  rows={3}
+                  className="rounded-xl bg-gray-50 border-gray-200"
+                />
+                <Input 
+                  placeholder="你好呀~" 
+                  value={openingLine} 
+                  onChange={(e) => setOpeningLine(e.target.value)}
+                  className="rounded-xl bg-gray-50 border-gray-200"
+                />
+                <Button 
+                  className="w-full rounded-xl py-6 bg-gradient-to-r from-pink-400 to-purple-400 text-white shadow-lg" 
+                  onClick={createCharacter}
+                >
+                  创建角色
+                </Button>
               </div>
-              
-              <Input 
-                placeholder="角色名称" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                className="rounded-xl bg-gray-50 border-gray-200"
-              />
-              <Textarea 
-                placeholder="角色人设（性格、背景、说话风格等）" 
-                value={persona} 
-                onChange={(e) => setPersona(e.target.value)} 
-                rows={3}
-                className="rounded-xl bg-gray-50 border-gray-200"
-              />
-              <Input 
-                placeholder="你好呀~" 
-                value={openingLine} 
-                onChange={(e) => setOpeningLine(e.target.value)}
-                className="rounded-xl bg-gray-50 border-gray-200"
-              />
-              <Button 
-                className="w-full rounded-xl py-6 bg-gradient-to-r from-pink-400 to-purple-400 text-white shadow-lg" 
-                onClick={editingChar ? updateCharacter : createCharacter}
-              >
-                {editingChar ? '保存修改' : '创建角色'}
-              </Button>
-            </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
