@@ -36,7 +36,7 @@ const applyGlobalTextColor = (color: string) => {
   const style = document.getElementById('global-text-color-style') || document.createElement('style');
   style.id = 'global-text-color-style';
   style.textContent = `
-    body, .global-text-color { color: ${color} !important; }
+    body, .global-text-color, .desktop-text { color: ${color} !important; }
   `;
   if (!document.getElementById('global-text-color-style')) {
     document.head.appendChild(style);

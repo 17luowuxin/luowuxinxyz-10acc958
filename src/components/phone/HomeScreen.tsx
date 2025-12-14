@@ -274,7 +274,7 @@ const HomeScreen: React.FC = () => {
                 </div>
               )}
             </motion.button>
-            <span className="text-xs font-medium text-foreground/70">{app.name}</span>
+            <span className="text-xs font-medium desktop-text">{app.name}</span>
           </motion.div>
         ))}
       </motion.div>
