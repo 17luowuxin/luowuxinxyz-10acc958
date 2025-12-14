@@ -534,7 +534,21 @@ const ChatPage: React.FC = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0 w-8 h-8">
           <ChevronLeft className="w-5 h-5" />
         </Button>
-        <span className="font-semibold text-foreground text-sm ml-2 truncate flex-1">{character?.name || '加载中...'}</span>
+        <div className="flex items-center gap-2 ml-2 flex-1">
+          {character?.avatar_url && (
+            <div className="relative">
+              <Avatar className="w-7 h-7 border border-white/50 shadow-sm">
+                <AvatarImage src={character.avatar_url} />
+                <AvatarFallback>{character?.name?.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 border border-background rounded-full" />
+            </div>
+          )}
+          <div className="flex flex-col">
+            <span className="font-semibold text-foreground text-sm truncate">{character?.name || '加载中...'}</span>
+            <span className="text-[10px] text-green-500">在线</span>
+          </div>
+        </div>
         
         {/* 更多菜单 */}
         <Popover open={showMenu} onOpenChange={setShowMenu}>
@@ -573,13 +587,38 @@ const ChatPage: React.FC = () => {
       {/* Scrollable Messages Area - 只有这个区域可以滚动，背景透明 */}
       <main className="flex-1 overflow-y-auto overscroll-none touch-pan-y">
         <div className="p-3 space-y-3 pb-4">
-          {messages.map((msg) => (
-            <div 
-              key={msg.id} 
-              className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-              onTouchStart={() => handleTouchStart(msg)}
-              onTouchEnd={handleTouchEnd}
-              onMouseDown={() => handleTouchStart(msg)}
+          {messages.map((msg, index) => {
+            // 计算是否需要显示时间分隔
+            const currentTime = new Date(msg.created_at);
+            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const prevTime = prevMsg ? new Date(prevMsg.created_at) : null;
+            const showTimeDivider = prevTime && (currentTime.getTime() - prevTime.getTime() > 60000); // 超过1分钟
+            
+            const formatTime = (date: Date) => {
+              const now = new Date();
+              const isToday = date.toDateString() === now.toDateString();
+              const hours = date.getHours().toString().padStart(2, '0');
+              const minutes = date.getMinutes().toString().padStart(2, '0');
+              if (isToday) {
+                return `${hours}:${minutes}`;
+              }
+              return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
+            };
+            
+            return (
+              <React.Fragment key={msg.id}>
+                {showTimeDivider && (
+                  <div className="flex justify-center py-2">
+                    <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                      {formatTime(currentTime)}
+                    </span>
+                  </div>
+                )}
+                <div 
+                  className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  onTouchStart={() => handleTouchStart(msg)}
+                  onTouchEnd={handleTouchEnd}
+                  onMouseDown={() => handleTouchStart(msg)}
               onMouseUp={handleTouchEnd}
               onMouseLeave={handleTouchEnd}
             >
@@ -679,26 +718,15 @@ const ChatPage: React.FC = () => {
                 )}
               </div>
             </div>
-          ))}
+              </React.Fragment>
+            );
+          })}
           
           {loading && (
-            <div className="flex items-end gap-2 flex-row">
-              <Avatar className="w-7 h-7 flex-shrink-0 border border-white/50 shadow-sm">
-                <AvatarImage src={character?.avatar_url} />
-                <AvatarFallback className="bg-gradient-to-br from-pink-100 to-purple-100 text-[10px]">
-                  {character?.name?.charAt(0) || '?'}
-                </AvatarFallback>
-              </Avatar>
-              <div 
-                className="px-3 py-2 rounded-2xl rounded-bl-md shadow-sm" 
-                style={{ backgroundColor: friendBubbleColor, opacity: bubbleOpacity }}
-              >
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
+            <div className="flex items-center justify-center py-2">
+              <span className="text-xs text-muted-foreground animate-pulse">
+                对方正在输入中……
+              </span>
             </div>
           )}
           <div ref={messagesEndRef} />
