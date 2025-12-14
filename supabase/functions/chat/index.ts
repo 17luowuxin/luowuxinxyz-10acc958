@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -252,10 +252,14 @@ serve(async (req) => {
 
     let replyModePrompt = '';
     if (replyMode === 'online') {
+      // 解析消息条数范围
+      const messageCount = reqMessageCount || '3-5';
+      const [minCount, maxCount] = messageCount.split('-').map(Number);
+      
       replyModePrompt = `
 
 【重要：回复格式要求 - 线上聊天模式】
-你必须模拟真实的在线聊天方式，将你的回复拆分成3-5条短消息。
+你必须模拟真实的在线聊天方式，将你的回复拆分成${minCount}-${maxCount}条短消息。
 每条消息之间使用 "|||" 符号分隔（三个竖线），这是必须的格式。
 每条消息保持简短（10-30个字为宜），就像真正在手机上打字聊天一样。
 
@@ -264,6 +268,7 @@ serve(async (req) => {
 
 注意事项：
 - 必须使用 ||| 分隔每条消息
+- 消息数量控制在${minCount}到${maxCount}条之间
 - 每条消息要简短自然，像真实打字
 - 可以用表情符号、语气词
 - 消息之间保持逻辑连贯
