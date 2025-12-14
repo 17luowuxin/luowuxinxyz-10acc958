@@ -546,7 +546,9 @@ const ChatPage: React.FC = () => {
           )}
           <div className="flex flex-col">
             <span className="font-semibold text-foreground text-sm truncate">{character?.name || '加载中...'}</span>
-            <span className="text-[10px] text-green-500">在线</span>
+            <span className="text-[10px] text-green-500">
+              {loading ? '对方正在输入中……' : '在线'}
+            </span>
           </div>
         </div>
         
@@ -672,6 +674,13 @@ const ChatPage: React.FC = () => {
                 
                 {msg.content}
                 
+                {/* 已读状态 - 仅用户消息显示 */}
+                {msg.role === 'user' && (
+                  <span className="absolute -bottom-4 right-0 text-[10px] text-muted-foreground">
+                    已读
+                  </span>
+                )}
+                
                 {/* 长按菜单 */}
                 {longPressedMsg?.id === msg.id && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-30">
@@ -723,10 +732,30 @@ const ChatPage: React.FC = () => {
           })}
           
           {loading && (
-            <div className="flex items-center justify-center py-2">
-              <span className="text-xs text-muted-foreground animate-pulse">
-                对方正在输入中……
-              </span>
+            <div className="flex items-end gap-2">
+              {/* AI头像 */}
+              <div className="relative w-10 h-10 flex-shrink-0">
+                {friendAvatarFrame && (
+                  <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                )}
+                <div className={`absolute rounded-full overflow-hidden ${friendAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
+                  {character?.avatar_url ? (
+                    <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
+                      {character?.name?.charAt(0) || '?'}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* 输入中气泡 */}
+              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-muted/80 text-muted-foreground text-sm">
+                <span className="inline-flex gap-1">
+                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
             </div>
           )}
           <div ref={messagesEndRef} />
