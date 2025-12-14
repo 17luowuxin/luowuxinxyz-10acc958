@@ -1,0 +1,88 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const TermsPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="min-h-screen bg-background/70 backdrop-blur-sm">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 pb-2">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => navigate(-1)}
+          className="rounded-full"
+        >
+          <ChevronLeft className="w-6 h-6 text-purple-600" />
+        </Button>
+        <div className="flex items-center gap-2">
+          <FileText className="w-5 h-5 text-purple-500" />
+          <h1 className="text-lg font-bold text-purple-700">用户协议</h1>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-4">
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-purple-100/50">
+          <div className="prose prose-sm max-w-none text-gray-700 space-y-4">
+            <p className="text-sm text-gray-500">最后更新日期：2024年1月1日</p>
+            
+            <h2 className="text-base font-bold text-purple-700 mt-4">1. 服务条款</h2>
+            <p className="text-sm leading-relaxed">
+              欢迎使用本应用。使用本应用即表示您同意遵守本用户协议的所有条款和条件。如果您不同意任何条款，请不要使用本应用。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">2. 用户账户</h2>
+            <p className="text-sm leading-relaxed">
+              您需要创建账户才能使用本应用的完整功能。您有责任维护账户的安全性，并对账户下发生的所有活动负责。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">3. 用户内容</h2>
+            <p className="text-sm leading-relaxed">
+              您对在本应用中创建的所有内容（包括角色、对话、日记等）拥有所有权。但您授予我们存储和处理这些内容以提供服务的权利。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">4. 禁止行为</h2>
+            <p className="text-sm leading-relaxed">
+              您同意不会：使用本应用进行任何非法活动；上传或分享任何违法、有害或冒犯性的内容；试图未经授权访问系统；干扰或破坏服务的正常运行。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">5. 知识产权</h2>
+            <p className="text-sm leading-relaxed">
+              本应用及其原始内容、功能和特性均为开发者所有，受国际版权、商标和其他知识产权法律保护。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">6. 免责声明</h2>
+            <p className="text-sm leading-relaxed">
+              本应用按"现状"提供，不作任何明示或暗示的保证。我们不保证服务不会中断或无错误。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">7. 责任限制</h2>
+            <p className="text-sm leading-relaxed">
+              在法律允许的最大范围内，开发者对因使用或无法使用本应用而产生的任何损害不承担责任。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">8. 服务变更</h2>
+            <p className="text-sm leading-relaxed">
+              我们保留随时修改或终止服务的权利，恕不另行通知。我们也可能随时更新本协议。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">9. 适用法律</h2>
+            <p className="text-sm leading-relaxed">
+              本协议受中华人民共和国法律管辖。任何争议应通过友好协商解决。
+            </p>
+
+            <h2 className="text-base font-bold text-purple-700 mt-4">10. 联系方式</h2>
+            <p className="text-sm leading-relaxed">
+              如有任何问题或建议，请通过应用内反馈功能联系我们。
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TermsPage;
