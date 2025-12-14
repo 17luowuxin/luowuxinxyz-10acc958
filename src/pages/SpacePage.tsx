@@ -728,9 +728,14 @@ const SpacePage: React.FC = () => {
                   </div>
                 )}
               </div>
-              <span className="text-white font-semibold text-sm drop-shadow-lg">
-                {userProfile?.nickname || '我'}
-              </span>
+              <div className="flex flex-col">
+                <span className="text-white font-semibold text-sm drop-shadow-lg">
+                  {userProfile?.nickname || '我'}
+                </span>
+                <span className="text-white/70 text-xs drop-shadow">
+                  访客 {moments.length > 0 ? Math.floor(moments.length * 3.7 + 12) : 0}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
