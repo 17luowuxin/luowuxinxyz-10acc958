@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -282,6 +282,32 @@ serve(async (req) => {
 - 消息之间保持对话感和连贯性`;
     }
 
+    // 转账功能提示
+    let transferPrompt = '';
+    if (transferEnabled) {
+      transferPrompt = `
+
+【转账功能】
+你可以给用户转账（虚拟货币，纯娱乐）。当你想给用户转账时，在回复中加入特殊格式：
+[转账:金额:留言]
+
+规则：
+- 只有在以下情况才转账：
+  1. 用户明确要求转账/发红包/给钱时
+  2. 符合角色人设的特殊情感时刻（如表达爱意、道歉、庆祝等）
+- 金额要合理，根据情境决定：
+  - 日常小红包：5.20、13.14、52.00、66.66、88.88、99.99、520 等有意义的数字
+  - 用户指定金额：如果用户说"转100给我"，就转100
+  - 大额转账需要特殊理由
+- 不要无缘无故转账，不要每次都转账
+- 留言要符合转账场景和你的角色人设
+
+示例：
+- 用户说"给我发个红包"，你可以回复：好呀，给你~ [转账:52.00:爱你哟~]
+- 用户说"转1000给我"，你可以回复：好好好，土豪接好！[转账:1000:给你花]
+- 不需要转账时，就正常聊天，不要加[转账:...]`;
+    }
+
     const systemPrompt = `你是一个名叫"${characterName || '小助手'}"的虚拟角色。
 ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
 ${worldBooksContent}
@@ -292,6 +318,7 @@ ${memoryContent}
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
 记住要用"${userName}"称呼对方，不要随便给对方取别的名字或昵称。
 ${replyModePrompt}
+${transferPrompt}
 
 请严格按照上述角色人设来回复用户，保持角色的性格特点、说话方式和语气。
 回复要简洁自然，像真实朋友聊天一样，同时体现角色的独特个性。

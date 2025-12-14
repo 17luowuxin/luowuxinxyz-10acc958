@@ -463,47 +463,23 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 转账相关函数
-  const TRANSFER_KEYWORDS = [
-    '转账',
-    '打钱',
-    '打个钱',
-    '给我钱',
-    '我要钱',
-    '给点钱',
-    '发红包',
-    '发个红包',
-    '塞红包',
-    '红包',
-    '微信红包',
-    '给我发个红包',
-    '请客',
-    '请我吃饭',
-    '给我买东西',
-    '发工资'
-  ];
-  
-  const shouldTriggerTransfer = (userInput: string): boolean => {
-    // 检查用户是否请求转账
-    return TRANSFER_KEYWORDS.some(keyword => userInput.includes(keyword));
+  // 转账相关函数 - 解析 AI 返回的转账指令
+  const parseTransferCommand = (content: string): { amount: number; message: string } | null => {
+    // 匹配格式: [转账:金额:留言] 或 [TRANSFER:金额:留言]
+    const transferMatch = content.match(/\[(?:转账|TRANSFER):(\d+(?:\.\d{1,2})?):([^\]]*)\]/i);
+    if (transferMatch) {
+      const amount = parseFloat(transferMatch[1]);
+      const message = transferMatch[2].trim() || '给你的~';
+      if (amount > 0 && amount <= 999999) {
+        return { amount, message };
+      }
+    }
+    return null;
   };
   
-  const generateRandomAmount = (): number => {
-    // 随机生成金额，有不同的概率区间
-    const rand = Math.random();
-    if (rand < 0.5) {
-      // 50% 概率: 0.01 - 99.99
-      return Math.round((Math.random() * 99.99 + 0.01) * 100) / 100;
-    } else if (rand < 0.85) {
-      // 35% 概率: 100 - 999.99
-      return Math.round((Math.random() * 899.99 + 100) * 100) / 100;
-    } else if (rand < 0.95) {
-      // 10% 概率: 1000 - 9999.99
-      return Math.round((Math.random() * 8999.99 + 1000) * 100) / 100;
-    } else {
-      // 5% 概率: 10000 - 99999.99 (大额)
-      return Math.round((Math.random() * 89999.99 + 10000) * 100) / 100;
-    }
+  // 从内容中移除转账指令标记
+  const removeTransferCommand = (content: string): string => {
+    return content.replace(/\[(?:转账|TRANSFER):\d+(?:\.\d{1,2})?:[^\]]*\]/gi, '').trim();
   };
   
   const createTransfer = async (amount: number, message?: string) => {
@@ -607,7 +583,8 @@ const ChatPage: React.FC = () => {
         persona: character?.persona,
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         replyMode: replyMode,
-        onlineMessageCount: onlineMessageCount
+        onlineMessageCount: onlineMessageCount,
+        transferEnabled: transferEnabled
       };
       
       // 始终传递API配置
@@ -737,98 +714,97 @@ const ChatPage: React.FC = () => {
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
       const multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
       
+      // 检查 AI 返回中是否包含转账指令
+      const handleAITransfer = async (content: string): Promise<string> => {
+        if (!transferEnabled) return content;
+        
+        const transferData = parseTransferCommand(content);
+        if (transferData) {
+          const transfer = await createTransfer(transferData.amount, transferData.message);
+          if (transfer) {
+            setPendingTransfers(prev => [...prev, transfer]);
+            const transferMsgContent = `[TRANSFER:${transfer.id}:${transferData.amount}:${transferData.message}]`;
+            setMessages(prev => [...prev, { 
+              id: Date.now() + 999, 
+              role: 'transfer', 
+              content: transferMsgContent,
+              transferData: transfer
+            }]);
+          }
+          // 移除转账指令，只保留对话内容
+          return removeTransferCommand(content);
+        }
+        return content;
+      };
+      
       if ((replyMode === 'online' || assistantContent.includes('|||')) && multiMessages.length > 1) {
         // 线上模式：逐条显示消息，有延迟效果
         let delay = 0;
         for (let i = 0; i < multiMessages.length; i++) {
-          const msgContent = multiMessages[i];
+          let msgContent = multiMessages[i];
           const msgDelay = delay;
+          
+          // 检查这条消息是否包含转账指令
+          const transferData = parseTransferCommand(msgContent);
           
           setTimeout(async () => {
             const msgId = Date.now() + i;
-            setMessages(prev => [...prev, { id: msgId, role: 'assistant', content: msgContent }]);
             
-            // 保存到数据库
-            await supabase.from('chat_messages').insert({ 
-              user_id: user?.id, 
-              character_id: characterId, 
-              role: 'assistant', 
-              content: msgContent 
-            });
+            // 如果有转账指令，处理转账
+            if (transferEnabled && transferData) {
+              const transfer = await createTransfer(transferData.amount, transferData.message);
+              if (transfer) {
+                setPendingTransfers(prev => [...prev, transfer]);
+                const transferMsgContent = `[TRANSFER:${transfer.id}:${transferData.amount}:${transferData.message}]`;
+                setMessages(prev => [...prev, { 
+                  id: msgId + 0.5, 
+                  role: 'transfer', 
+                  content: transferMsgContent,
+                  transferData: transfer
+                }]);
+              }
+              // 移除转账指令
+              msgContent = removeTransferCommand(msgContent);
+            }
+            
+            // 如果移除转账指令后还有内容，显示消息
+            if (msgContent.trim()) {
+              setMessages(prev => [...prev, { id: msgId, role: 'assistant', content: msgContent }]);
+              
+              // 保存到数据库
+              await supabase.from('chat_messages').insert({ 
+                user_id: user?.id, 
+                character_id: characterId, 
+                role: 'assistant', 
+                content: msgContent 
+              });
+            }
           }, msgDelay);
           
           // 每条消息间隔 600-1200ms，模拟打字延迟
           delay += 600 + Math.random() * 600;
         }
         
-        // 等待所有消息显示完成后再处理转账等逻辑
-        setTimeout(async () => {
-          // 检查是否触发转账
-          if (transferEnabled) {
-            const userRequestedTransfer = shouldTriggerTransfer(originalInput);
-            const randomTransferChance = Math.random() < 0.2;
-            
-            if (userRequestedTransfer || randomTransferChance) {
-              const amount = generateRandomAmount();
-              const messages_for_transfer = userRequestedTransfer 
-                ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
-                : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
-              const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
-              
-              const transfer = await createTransfer(amount, transferMessage);
-              if (transfer) {
-                setPendingTransfers(prev => [...prev, transfer]);
-                const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
-                setMessages(prev => [...prev, { 
-                  id: Date.now() + multiMessages.length, 
-                  role: 'transfer', 
-                  content: transferMsgContent,
-                  transferData: transfer
-                }]);
-              }
-            }
-          }
+        // 等待所有消息显示完成
+        setTimeout(() => {
           setLoading(false);
         }, delay + 300);
         
         return; // 提前返回，不走下面的逻辑
       }
       
-      // 小说模式：一次显示完整消息
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
-
-      await supabase.from('chat_messages').insert({ 
-        user_id: user?.id, 
-        character_id: characterId, 
-        role: 'assistant', 
-        content: assistantContent 
-      });
+      // 小说模式：先处理转账指令
+      const cleanContent = await handleAITransfer(assistantContent);
       
-      // 检查是否触发转账（只有开启转账功能时才会触发）
-      if (transferEnabled) {
-        const userRequestedTransfer = shouldTriggerTransfer(originalInput);
-        const randomTransferChance = Math.random() < 0.2; // 20% 随机触发概率
-        
-        if (userRequestedTransfer || randomTransferChance) {
-          const amount = generateRandomAmount();
-          const messages_for_transfer = userRequestedTransfer 
-            ? ['给你转了一点零花钱~', '拿去花吧！', '别客气~', '收好啦！'] 
-            : ['突然想给你发个红包~', '今天心情好，给你转点钱！', '惊喜！', '送你的小礼物~'];
-          const transferMessage = messages_for_transfer[Math.floor(Math.random() * messages_for_transfer.length)];
-          
-          const transfer = await createTransfer(amount, transferMessage);
-          if (transfer) {
-            setPendingTransfers(prev => [...prev, transfer]);
-            // 添加转账消息到聊天
-            const transferMsgContent = `[TRANSFER:${transfer.id}:${amount}:${transferMessage}]`;
-            setMessages(prev => [...prev, { 
-              id: Date.now() + 2, 
-              role: 'transfer', 
-              content: transferMsgContent,
-              transferData: transfer
-            }]);
-          }
-        }
+      if (cleanContent.trim()) {
+        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: cleanContent }]);
+
+        await supabase.from('chat_messages').insert({ 
+          user_id: user?.id, 
+          character_id: characterId, 
+          role: 'assistant', 
+          content: cleanContent 
+        });
       }
       
       // 触发记忆摘要生成（每20条消息）
