@@ -264,6 +264,7 @@ export type Database = {
           lock_screen_bg_url: string | null
           lock_screen_video_url: string | null
           music_cover_url: string | null
+          space_background_url: string | null
           theme: string | null
           updated_at: string
           user_id: string
@@ -293,6 +294,7 @@ export type Database = {
           lock_screen_bg_url?: string | null
           lock_screen_video_url?: string | null
           music_cover_url?: string | null
+          space_background_url?: string | null
           theme?: string | null
           updated_at?: string
           user_id: string
@@ -322,6 +324,7 @@ export type Database = {
           lock_screen_bg_url?: string | null
           lock_screen_video_url?: string | null
           music_cover_url?: string | null
+          space_background_url?: string | null
           theme?: string | null
           updated_at?: string
           user_id?: string
@@ -468,6 +471,51 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "group_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guestbook: {
+        Row: {
+          character_id: string | null
+          content: string
+          created_at: string
+          id: string
+          is_character_reply: boolean | null
+          parent_id: string | null
+          user_id: string
+        }
+        Insert: {
+          character_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_character_reply?: boolean | null
+          parent_id?: string | null
+          user_id: string
+        }
+        Update: {
+          character_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_character_reply?: boolean | null
+          parent_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guestbook_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guestbook_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "guestbook"
             referencedColumns: ["id"]
           },
         ]
