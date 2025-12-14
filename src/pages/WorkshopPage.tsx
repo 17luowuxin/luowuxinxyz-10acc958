@@ -252,11 +252,47 @@ const WorkshopPage: React.FC = () => {
     
     try {
       const text = await file.text();
-      console.log('Importing character file:', text);
-      const data = JSON.parse(text);
+      console.log('Importing character file:', text.slice(0, 200));
+      const rawData = JSON.parse(text);
       
-      if (!data.name) {
-        toast.error('无效的角色文件：缺少名称');
+      // 支持多种角色卡格式
+      // SillyTavern V2 格式: { spec: "chara_card_v2", data: { name, description, ... } }
+      // SillyTavern V1 格式: { name, description, ... }
+      // 自定义格式: { name, persona, opening_line }
+      
+      let charData: {
+        name?: string;
+        persona?: string;
+        opening_line?: string;
+      };
+
+      if (rawData.spec === 'chara_card_v2' && rawData.data) {
+        // SillyTavern V2 格式
+        const v2Data = rawData.data;
+        charData = {
+          name: v2Data.name,
+          persona: [
+            v2Data.description,
+            v2Data.personality ? `\n【性格】${v2Data.personality}` : '',
+            v2Data.scenario ? `\n【场景】${v2Data.scenario}` : '',
+            v2Data.mes_example ? `\n【对话示例】${v2Data.mes_example}` : ''
+          ].filter(Boolean).join(''),
+          opening_line: v2Data.first_mes || v2Data.greeting || ''
+        };
+      } else if (rawData.char_name || rawData.name) {
+        // SillyTavern V1 格式或其他格式
+        charData = {
+          name: rawData.char_name || rawData.name,
+          persona: rawData.char_persona || rawData.description || rawData.persona || '',
+          opening_line: rawData.first_mes || rawData.char_greeting || rawData.greeting || rawData.opening_line || ''
+        };
+      } else {
+        toast.error('无效的角色文件：无法识别格式');
+        return;
+      }
+      
+      if (!charData.name) {
+        toast.error('无效的角色文件：缺少角色名称');
         return;
       }
 
@@ -267,9 +303,9 @@ const WorkshopPage: React.FC = () => {
       
       const { error } = await supabase.from('characters').insert({
         user_id: user.id,
-        name: data.name,
-        persona: data.persona || '',
-        opening_line: data.opening_line || data.first_mes || data.greeting || ''
+        name: charData.name,
+        persona: charData.persona || '',
+        opening_line: charData.opening_line || ''
       });
       
       if (error) {
@@ -278,7 +314,7 @@ const WorkshopPage: React.FC = () => {
         return;
       }
       
-      toast.success('角色已导入');
+      toast.success(`角色「${charData.name}」已导入`);
       fetchCharacters();
     } catch (err: any) {
       console.error('Import parse error:', err);
