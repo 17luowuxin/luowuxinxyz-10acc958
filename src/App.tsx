@@ -28,6 +28,8 @@ import RiddlePage from "./pages/RiddlePage";
 import DiaryPage from "./pages/DiaryPage";
 import StatsPage from "./pages/StatsPage";
 import WorkshopPage from "./pages/WorkshopPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
 import NotFound from "./pages/NotFound";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import { useEffect } from "react";
@@ -79,6 +81,8 @@ const App = () => (
                 <Route path="/diary" element={<WithPhoneFrame><DiaryPage /></WithPhoneFrame>} />
                 <Route path="/stats" element={<WithPhoneFrame><StatsPage /></WithPhoneFrame>} />
                 <Route path="/workshop" element={<WithPhoneFrame><WorkshopPage /></WithPhoneFrame>} />
+                <Route path="/privacy" element={<WithPhoneFrame><PrivacyPage /></WithPhoneFrame>} />
+                <Route path="/terms" element={<WithPhoneFrame><TermsPage /></WithPhoneFrame>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

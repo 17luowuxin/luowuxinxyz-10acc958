@@ -559,6 +559,21 @@ const SettingsPage: React.FC = () => {
         {/* Version and Legal Info */}
         <div className="text-center pt-6 pb-4 space-y-2">
           <p className="text-xs text-gray-400">版本 v1.0.0</p>
+          <div className="flex items-center justify-center gap-3 text-xs">
+            <button 
+              onClick={() => navigate('/privacy')}
+              className="text-purple-500 hover:text-purple-700 underline"
+            >
+              隐私政策
+            </button>
+            <span className="text-gray-300">|</span>
+            <button 
+              onClick={() => navigate('/terms')}
+              className="text-purple-500 hover:text-purple-700 underline"
+            >
+              用户协议
+            </button>
+          </div>
           <p className="text-xs text-gray-400 leading-relaxed">
             本应用最终解释权归开发者所有
           </p>
