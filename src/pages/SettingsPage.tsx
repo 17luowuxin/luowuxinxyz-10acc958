@@ -555,6 +555,17 @@ const SettingsPage: React.FC = () => {
           <LogOut className="w-4 h-4 mr-2" />
           退出登录
         </Button>
+
+        {/* Version and Legal Info */}
+        <div className="text-center pt-6 pb-4 space-y-2">
+          <p className="text-xs text-gray-400">版本 v1.0.0</p>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            本应用最终解释权归开发者所有
+          </p>
+          <p className="text-xs text-gray-300">
+            © 2024 All Rights Reserved
+          </p>
+        </div>
       </div>
       
       {/* Click outside to close dropdown */}
