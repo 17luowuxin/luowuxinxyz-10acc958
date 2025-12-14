@@ -279,6 +279,8 @@ ${memoryContent}
     const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
     let response: Response;
+    let usedStream = !isAnthropic; // 记录是否使用了流式
+    
     try {
       response = await fetch(apiUrl, {
         method: "POST",
@@ -286,6 +288,20 @@ ${memoryContent}
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
+      
+      // 如果流式请求返回400错误，尝试非流式
+      if (!response.ok && response.status === 400 && usedStream) {
+        console.log("Stream request failed with 400, retrying without stream...");
+        requestBody.stream = false;
+        usedStream = false;
+        
+        response = await fetch(apiUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+      }
     } catch (fetchError) {
       clearTimeout(timeoutId);
       console.error("Fetch error:", fetchError);
