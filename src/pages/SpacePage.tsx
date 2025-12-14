@@ -667,7 +667,12 @@ const SpacePage: React.FC = () => {
                         <span className="text-muted-foreground">:</span>
                       </span>
                     ) : (
-                      <span className="font-medium text-foreground">{userName}:</span>
+                      <span className="font-medium">
+                        <span className="text-foreground">{userName}</span>
+                        <span className="text-muted-foreground mx-1">回复</span>
+                        <span className="text-primary">{moment.character?.name || '角色'}</span>
+                        <span className="text-muted-foreground">:</span>
+                      </span>
                     )}
                     <span className="ml-2 text-foreground">{displayContent}</span>
                   </div>
