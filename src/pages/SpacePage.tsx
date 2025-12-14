@@ -77,6 +77,7 @@ const SpacePage: React.FC = () => {
   // Guestbook state
   const [guestbookEntries, setGuestbookEntries] = useState<GuestbookEntry[]>([]);
   const [newGuestbookContent, setNewGuestbookContent] = useState('');
+  const [deleteGuestbookId, setDeleteGuestbookId] = useState<string | null>(null);
   const [postingGuestbook, setPostingGuestbook] = useState(false);
 
   useEffect(() => {
@@ -407,6 +408,17 @@ const SpacePage: React.FC = () => {
       toast.error('留言失败');
     }
     setPostingGuestbook(false);
+  };
+
+  const handleDeleteGuestbook = async (entryId: string) => {
+    try {
+      await supabase.from('guestbook').delete().eq('id', entryId);
+      toast.success('留言删除成功');
+      fetchGuestbook();
+    } catch (err) {
+      toast.error('删除失败');
+    }
+    setDeleteGuestbookId(null);
   };
 
   const handleLike = async (momentId: string) => {
@@ -817,6 +829,12 @@ const SpacePage: React.FC = () => {
                     <span className="text-xs text-muted-foreground ml-auto">
                       {formatTime(entry.created_at)}
                     </span>
+                    <button
+                      onClick={() => setDeleteGuestbookId(entry.id)}
+                      className="p-1 hover:bg-destructive/10 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                    </button>
                   </div>
                   <p className="text-foreground">{entry.content}</p>
                 </motion.div>
@@ -915,6 +933,24 @@ const SpacePage: React.FC = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteId && handleDelete(deleteId)}>
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Guestbook Confirm */}
+      <AlertDialog open={!!deleteGuestbookId} onOpenChange={() => setDeleteGuestbookId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这条留言吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteGuestbookId && handleDeleteGuestbook(deleteGuestbookId)}>
               删除
             </AlertDialogAction>
           </AlertDialogFooter>
