@@ -733,7 +733,56 @@ const ChatPage: React.FC = () => {
         }
       }
 
-      // 限制最多5条
+      // 根据设置的连续消息条数范围强制条数（1-2 或 3-5）
+      if (replyMode === 'online') {
+        const [minStr, maxStr] = (onlineMessageCount || '3-5').split('-');
+        const minCount = Math.max(Number(minStr) || 1, 1);
+        const maxCount = Math.max(Number(maxStr) || minCount, minCount);
+
+        // 先限制最多条数
+        if (multiMessages.length > maxCount) {
+          multiMessages = multiMessages.slice(0, maxCount);
+        }
+
+        // 再尽量把条数补到最大值（例如 3-5 就努力拆成 5 条）
+        let safety = 0;
+        while (multiMessages.length > 0 && multiMessages.length < maxCount && safety < 8) {
+          safety++;
+          // 找到当前最长的一条
+          let longestIndex = 0;
+          for (let i = 1; i < multiMessages.length; i++) {
+            if (multiMessages[i].length > multiMessages[longestIndex].length) {
+              longestIndex = i;
+            }
+          }
+
+          const longest = multiMessages[longestIndex];
+          if (!longest || longest.length <= 6) break; // 太短就不再拆
+
+          // 优先按标点/逗号再拆一次，否则从中间硬拆
+          const byPunc = longest
+            .split(/(?<=[。！？!?…~～，,、])/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+          let partA: string;
+          let partB: string;
+          if (byPunc.length >= 2) {
+            partA = byPunc[0];
+            partB = byPunc.slice(1).join('');
+          } else {
+            const mid = Math.floor(longest.length / 2);
+            partA = longest.slice(0, mid);
+            partB = longest.slice(mid);
+          }
+
+          // 替换为两条
+          multiMessages.splice(longestIndex, 1, partA.trim(), partB.trim());
+          multiMessages = multiMessages.filter(Boolean);
+        }
+      }
+      
+      // 再保险一次：最多5条
       if (multiMessages.length > 5) {
         multiMessages = multiMessages.slice(0, 5);
       }
