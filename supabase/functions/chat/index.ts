@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -98,6 +98,7 @@ serve(async (req) => {
         const customKeySetting = apiSettings.find(s => s.provider === 'custom');
         const baseUrlSetting = apiSettings.find(s => s.provider === 'custom_base_url');
         const modelSetting = apiSettings.find(s => s.provider === 'custom_model');
+        const historyLimitSetting = apiSettings.find(s => s.provider === 'history_limit');
         
         if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
           useDefaultApi = true;
@@ -111,6 +112,15 @@ serve(async (req) => {
         }
         if (modelSetting) {
           savedModel = modelSetting.api_key;
+        }
+        
+        // 应用历史消息限制
+        if (historyLimitSetting) {
+          const limit = Number(historyLimitSetting.api_key) || 10;
+          if (messages.length > limit) {
+            console.log(`Limiting messages from ${messages.length} to ${limit}`);
+            messages = messages.slice(-limit);
+          }
         }
       }
     }
