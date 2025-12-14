@@ -812,8 +812,11 @@ const ChatPage: React.FC = () => {
         return; // 提前返回，不走下面的逻辑
       }
       
-      // 小说模式：先处理转账指令
-      const cleanContent = await handleAITransfer(assistantContent);
+      // 小说模式或线上模式下只拆出1条：清理可能残留的 ||| 分隔符
+      let finalContent = assistantContent.replace(/\|\|\|/g, ' ').trim();
+      
+      // 处理转账指令
+      const cleanContent = await handleAITransfer(finalContent);
       
       if (cleanContent.trim()) {
         setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: cleanContent }]);

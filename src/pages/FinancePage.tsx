@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wallet, TrendingUp, History, Sparkles } from 'lucide-react';
+import { ChevronLeft, Wallet, TrendingUp, History, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface Transaction {
   id: string;
@@ -23,6 +24,8 @@ const FinancePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [totalBalance, setTotalBalance] = useState(0);
   const [totalReceived, setTotalReceived] = useState(0);
+  const [showDeleteMode, setShowDeleteMode] = useState(false);
+  const [deleteClickCount, setDeleteClickCount] = useState(0);
 
   useEffect(() => {
     if (user) {
@@ -62,6 +65,49 @@ const FinancePage: React.FC = () => {
     }
   };
 
+  // 隐藏的删除模式触发 - 连续点击余额5次
+  const handleBalanceClick = () => {
+    const newCount = deleteClickCount + 1;
+    setDeleteClickCount(newCount);
+    if (newCount >= 5) {
+      setShowDeleteMode(!showDeleteMode);
+      setDeleteClickCount(0);
+      toast.info(showDeleteMode ? '已退出管理模式' : '已进入管理模式');
+    }
+    // 2秒后重置计数
+    setTimeout(() => setDeleteClickCount(0), 2000);
+  };
+
+  const handleDeleteTransaction = async (transactionId: string) => {
+    const { error } = await supabase
+      .from('dream_transactions')
+      .delete()
+      .eq('id', transactionId);
+
+    if (!error) {
+      toast.success('已删除');
+      fetchTransactions();
+    } else {
+      toast.error('删除失败');
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('确定要清空所有转账记录吗？此操作不可撤销！')) return;
+    
+    const { error } = await supabase
+      .from('dream_transactions')
+      .delete()
+      .eq('user_id', user?.id);
+
+    if (!error) {
+      toast.success('已清空所有记录');
+      fetchTransactions();
+    } else {
+      toast.error('清空失败');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background/70 backdrop-blur-sm">
       {/* Header */}
@@ -85,11 +131,24 @@ const FinancePage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-orange-400 to-orange-500 rounded-3xl p-5 text-white shadow-lg"
+          className="bg-gradient-to-br from-orange-400 to-orange-500 rounded-3xl p-5 text-white shadow-lg cursor-pointer select-none"
+          onClick={handleBalanceClick}
         >
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-5 h-5" />
-            <span className="text-white/90 text-sm">梦境余额</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              <span className="text-white/90 text-sm">梦境余额</span>
+            </div>
+            {showDeleteMode && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => { e.stopPropagation(); handleClearAll(); }}
+                className="text-white/80 hover:text-white hover:bg-white/20 text-xs"
+              >
+                清空全部
+              </Button>
+            )}
           </div>
           <p className="text-4xl font-bold">¥{totalBalance.toFixed(2)}</p>
           <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-sm">
@@ -167,6 +226,16 @@ const FinancePage: React.FC = () => {
                   className="flex items-center justify-between bg-white/50 rounded-xl p-3"
                 >
                   <div className="flex items-center gap-3">
+                    {showDeleteMode && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleDeleteTransaction(tx.id)}
+                        className="w-6 h-6 text-red-400 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center">
                       <span className="text-white text-sm">💰</span>
                     </div>
