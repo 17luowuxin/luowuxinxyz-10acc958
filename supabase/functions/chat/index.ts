@@ -24,7 +24,7 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // 获取该角色的预设
+      // 获取该角色的预设（角色专属 + 无角色关联的通用预设）
       const { data: presets } = await supabase
         .from('presets')
         .select('name, content')
@@ -32,18 +32,27 @@ serve(async (req) => {
         .or(`character_id.eq.${characterId},character_id.is.null`);
       
       if (presets && presets.length > 0) {
-        presetsContent = '\n【可用预设】\n' + presets.map(p => `- ${p.name}: ${p.content}`).join('\n');
+        presetsContent = '\n【预设指令】\n' + presets.map(p => `【${p.name}】\n${p.content}`).join('\n\n');
+        console.log('Presets loaded:', presets.length);
       }
       
-      // 获取全局世界书
-      const { data: worldBooks } = await supabase
+      // 获取世界书（全局 + 角色专属）
+      const { data: globalWorldBooks } = await supabase
         .from('world_books')
         .select('name, content')
         .eq('user_id', userId)
         .eq('is_global', true);
       
-      if (worldBooks && worldBooks.length > 0) {
-        worldBooksContent = '\n【世界设定】\n' + worldBooks.map(w => `${w.name}: ${w.content}`).join('\n');
+      const { data: charWorldBooks } = await supabase
+        .from('world_books')
+        .select('name, content')
+        .eq('user_id', userId)
+        .eq('character_id', characterId);
+      
+      const allWorldBooks = [...(globalWorldBooks || []), ...(charWorldBooks || [])];
+      if (allWorldBooks.length > 0) {
+        worldBooksContent = '\n【世界设定】\n' + allWorldBooks.map(w => `【${w.name}】\n${w.content}`).join('\n\n');
+        console.log('World books loaded:', allWorldBooks.length);
       }
       
       // 获取角色记忆摘要
