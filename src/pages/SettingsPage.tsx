@@ -616,10 +616,10 @@ const SettingsPage: React.FC = () => {
               <div className="text-sm font-medium text-gray-700 mb-3">连续消息条数</div>
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { id: '2-3', label: '2-3条' },
+                  { id: '1-2', label: '1-2条' },
+                  { id: '1-3', label: '1-3条' },
+                  { id: '2-4', label: '2-4条' },
                   { id: '3-5', label: '3-5条' },
-                  { id: '4-6', label: '4-6条' },
-                  { id: '5-8', label: '5-8条' },
                 ].map((option) => (
                   <button
                     key={option.id}
