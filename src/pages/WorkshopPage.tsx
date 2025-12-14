@@ -252,24 +252,37 @@ const WorkshopPage: React.FC = () => {
     
     try {
       const text = await file.text();
+      console.log('Importing character file:', text);
       const data = JSON.parse(text);
       
       if (!data.name) {
-        toast.error('无效的角色文件');
+        toast.error('无效的角色文件：缺少名称');
+        return;
+      }
+
+      if (!user?.id) {
+        toast.error('请先登录');
         return;
       }
       
-      await supabase.from('characters').insert({
-        user_id: user?.id,
+      const { error } = await supabase.from('characters').insert({
+        user_id: user.id,
         name: data.name,
         persona: data.persona || '',
-        opening_line: data.opening_line || ''
+        opening_line: data.opening_line || data.first_mes || data.greeting || ''
       });
+      
+      if (error) {
+        console.error('Import character error:', error);
+        toast.error('导入失败: ' + error.message);
+        return;
+      }
       
       toast.success('角色已导入');
       fetchCharacters();
-    } catch (err) {
-      toast.error('导入失败，请检查文件格式');
+    } catch (err: any) {
+      console.error('Import parse error:', err);
+      toast.error('导入失败: ' + (err.message || '请检查文件格式'));
     }
     
     e.target.value = '';
