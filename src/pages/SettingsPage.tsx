@@ -27,6 +27,7 @@ const SettingsPage: React.FC = () => {
   const [usingDefaultApi, setUsingDefaultApi] = useState(false);
   const [defaultModel, setDefaultModel] = useState('deepseek-chat');
   const [historyLimit, setHistoryLimit] = useState(10);
+  const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -57,6 +58,11 @@ const SettingsPage: React.FC = () => {
       }
       if (historyLimitSetting) {
         setHistoryLimit(Number(historyLimitSetting.api_key) || 10);
+      }
+      
+      const replyModeSetting = data.find(k => k.provider === 'reply_mode');
+      if (replyModeSetting) {
+        setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
       }
       
       // 判断当前使用哪种API
@@ -539,6 +545,63 @@ const SettingsPage: React.FC = () => {
             <p className="text-xs text-gray-400 text-center">
               💡 消息越少，AI回复越快，但可能记不住之前的对话内容
             </p>
+          </div>
+        </div>
+
+        {/* Reply Mode Setting */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-pink-100/50">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-100 to-rose-100 flex items-center justify-center">
+              <span className="text-lg">✨</span>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-800">回复模式</h2>
+              <p className="text-xs text-gray-500">选择AI回复的方式</p>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {[
+              { id: 'novel' as const, name: '小说模式', icon: '📖', desc: '一次发送完整回复，适合叙事风格' },
+              { id: 'online' as const, name: '线上模式', icon: '💬', desc: '模拟真实聊天，连续发送3-5条短消息' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                onClick={async () => {
+                  if (!user) return;
+                  setReplyMode(mode.id);
+                  
+                  const { data: existing } = await supabase
+                    .from('api_keys')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('provider', 'reply_mode')
+                    .single();
+                  
+                  if (existing) {
+                    await supabase.from('api_keys').update({ api_key: mode.id }).eq('id', existing.id);
+                  } else {
+                    await supabase.from('api_keys').insert({ user_id: user.id, provider: 'reply_mode', api_key: mode.id });
+                  }
+                  
+                  toast.success(`已切换到${mode.name}`);
+                }}
+                className={`w-full p-4 rounded-2xl border-2 transition-all text-left flex items-center gap-3 ${
+                  replyMode === mode.id
+                    ? 'border-pink-400 bg-pink-50'
+                    : 'border-gray-200 bg-white hover:border-pink-200'
+                }`}
+              >
+                <span className="text-2xl">{mode.icon}</span>
+                <div className="flex-1">
+                  <div className="font-medium text-gray-800">{mode.name}</div>
+                  <div className="text-xs text-gray-500">{mode.desc}</div>
+                </div>
+                {replyMode === mode.id && (
+                  <Check className="w-5 h-5 text-pink-500" />
+                )}
+              </button>
+            ))}
           </div>
         </div>
 

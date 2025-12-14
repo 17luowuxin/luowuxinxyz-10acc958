@@ -122,6 +122,12 @@ serve(async (req) => {
             messages = messages.slice(-limit);
           }
         }
+        
+        // 获取回复模式设置
+        const replyModeSetting = apiSettings.find(s => s.provider === 'reply_mode');
+        if (replyModeSetting) {
+          (globalThis as any).__replyMode = replyModeSetting.api_key;
+        }
       }
     }
     
@@ -240,6 +246,24 @@ serve(async (req) => {
 
     const userName = userProfile?.nickname || '用户';
     const userPersonaInfo = userProfile?.persona || '';
+    const replyMode = (globalThis as any).__replyMode || 'novel';
+
+    let replyModePrompt = '';
+    if (replyMode === 'online') {
+      replyModePrompt = `
+
+【回复格式要求 - 线上聊天模式】
+你需要模拟真实的在线聊天方式，将回复拆分成3-5条短消息。
+每条消息用 "|||" 分隔，每条消息保持简短（10-30个字为宜）。
+示例格式：
+哈哈你好啊|||今天过得怎么样？|||我刚吃完饭|||有点无聊想找你聊天~
+
+注意：
+- 每条消息都要简短自然，像真实打字一样
+- 不要在一条消息里说太多内容
+- 可以用表情、语气词让对话更生动
+- 消息之间要有逻辑连贯性`;
+    }
 
     const systemPrompt = `你是一个名叫"${characterName || '小助手'}"的虚拟角色。
 ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
@@ -250,6 +274,7 @@ ${memoryContent}
 【关于你的聊天对象】
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
 记住要用"${userName}"称呼对方，不要随便给对方取别的名字或昵称。
+${replyModePrompt}
 
 请严格按照上述角色人设来回复用户，保持角色的性格特点、说话方式和语气。
 回复要简洁自然，像真实朋友聊天一样，同时体现角色的独特个性。
