@@ -300,10 +300,10 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >
-          <h1 className="text-7xl font-bold tracking-tight text-white">
+          <h1 className="lock-screen-text text-7xl font-bold tracking-tight">
             {formatTime(time)}
           </h1>
-          <p className="text-xl mt-4 opacity-90 font-medium text-white">
+          <p className="lock-screen-text text-xl mt-4 opacity-90 font-medium">
             {formatDate(time)}
           </p>
         </motion.div>
@@ -314,12 +314,12 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
       {/* Unlock hint */}
       <motion.div
-        className="relative z-10 pb-16 flex flex-col items-center text-white/80"
+        className="relative z-10 pb-16 flex flex-col items-center lock-screen-text/80"
         animate={{ y: [0, -8, 0] }}
         transition={{ repeat: Infinity, duration: 1.5 }}
       >
         <ChevronUp className="w-8 h-8" />
-        <p className="text-sm font-medium mt-1">上滑解锁</p>
+        <p className="text-sm font-medium mt-1 lock-screen-text">上滑解锁</p>
       </motion.div>
     </motion.div>
   );
