@@ -609,8 +609,9 @@ const SpacePage: React.FC = () => {
             >
               {moment.comments?.map((comment) => {
                 const charMatch = comment.content.match(/^\[(.+?)\]\s*/);
-                const charName = charMatch ? charMatch[1] : (comment.is_character_reply ? moment.character?.name || 'AI' : '我');
+                const charName = charMatch ? charMatch[1] : (comment.is_character_reply ? moment.character?.name || 'AI' : null);
                 const displayContent = charMatch ? comment.content.replace(/^\[.+?\]\s*/, '') : comment.content;
+                const userName = userProfile?.nickname || '我';
                 
                 return (
                   <div 
@@ -619,9 +620,16 @@ const SpacePage: React.FC = () => {
                       comment.is_character_reply ? 'bg-primary/10 ml-4' : 'bg-muted'
                     }`}
                   >
-                    <span className="font-medium text-primary">
-                      {comment.is_character_reply ? charName : '我'}:
-                    </span>
+                    {comment.is_character_reply ? (
+                      <span className="font-medium">
+                        <span className="text-primary">{charName}</span>
+                        <span className="text-muted-foreground mx-1">回复</span>
+                        <span className="text-foreground">{userName}</span>
+                        <span className="text-muted-foreground">:</span>
+                      </span>
+                    ) : (
+                      <span className="font-medium text-foreground">{userName}:</span>
+                    )}
                     <span className="ml-2 text-foreground">{displayContent}</span>
                   </div>
                 );
