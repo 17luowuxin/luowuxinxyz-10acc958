@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -114,13 +114,11 @@ serve(async (req) => {
           savedModel = modelSetting.api_key;
         }
         
-        // 应用历史消息限制
-        if (historyLimitSetting) {
-          const limit = Number(historyLimitSetting.api_key) || 10;
-          if (messages.length > limit) {
-            console.log(`Limiting messages from ${messages.length} to ${limit}`);
-            messages = messages.slice(-limit);
-          }
+        // 应用历史消息限制 - 使用请求中的 historyLimit（角色级别）或从设置中读取（兼容旧版本）
+        const historyLimitValue = reqHistoryLimit || (historyLimitSetting ? Number(historyLimitSetting.api_key) : 10);
+        if (messages.length > historyLimitValue) {
+          console.log(`Limiting messages from ${messages.length} to ${historyLimitValue}`);
+          messages = messages.slice(-historyLimitValue);
         }
         
         // 获取回复模式设置
