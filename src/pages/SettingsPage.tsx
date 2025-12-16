@@ -18,6 +18,16 @@ const NOVELAI_MODELS = [
   { id: 'nai-diffusion-2', name: 'V2', description: '上一代' },
 ];
 
+const NOVELAI_STYLES = [
+  { id: 'selfie', name: '自拍', prompt: 'selfie, close-up, looking at viewer, front view' },
+  { id: 'portrait', name: '半身', prompt: 'upper body, portrait, looking at viewer' },
+  { id: 'fullbody', name: '全身', prompt: 'full body, standing, from front' },
+  { id: 'scene', name: '场景', prompt: 'scenic, background, detailed environment' },
+  { id: 'custom', name: '自定义', prompt: '' },
+];
+
+const DEFAULT_TRIGGER_KEYWORDS = `画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子`;
+
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -40,6 +50,11 @@ const SettingsPage: React.FC = () => {
   const [novelaiConfigured, setNovelaiConfigured] = useState(false);
   const [testingNovelai, setTestingNovelai] = useState(false);
   const [novelaiAutoGenerate, setNovelaiAutoGenerate] = useState(false);
+  const [novelaiStyle, setNovelaiStyle] = useState('selfie');
+  const [novelaiCustomStylePrompt, setNovelaiCustomStylePrompt] = useState('');
+  const [novelaiTriggerKeywords, setNovelaiTriggerKeywords] = useState(DEFAULT_TRIGGER_KEYWORDS);
+  const [triggerTestInput, setTriggerTestInput] = useState('');
+  const [triggerTestResult, setTriggerTestResult] = useState<{ triggered: boolean; keyword?: string } | null>(null);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -83,6 +98,21 @@ const SettingsPage: React.FC = () => {
       }
       if (novelaiAutoSetting) {
         setNovelaiAutoGenerate(novelaiAutoSetting.api_key === 'true');
+      }
+      
+      // New NovelAI settings
+      const novelaiStyleSetting = data.find(k => k.provider === 'novelai_style');
+      const novelaiCustomPromptSetting = data.find(k => k.provider === 'novelai_custom_style_prompt');
+      const novelaiTriggerSetting = data.find(k => k.provider === 'novelai_trigger_keywords');
+      
+      if (novelaiStyleSetting) {
+        setNovelaiStyle(novelaiStyleSetting.api_key);
+      }
+      if (novelaiCustomPromptSetting) {
+        setNovelaiCustomStylePrompt(novelaiCustomPromptSetting.api_key);
+      }
+      if (novelaiTriggerSetting) {
+        setNovelaiTriggerKeywords(novelaiTriggerSetting.api_key);
       }
       
       // 判断当前使用哪种API
@@ -327,8 +357,75 @@ const SettingsPage: React.FC = () => {
       await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' });
     }
 
+    // Save style setting
+    const { data: existingStyle } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai_style')
+      .single();
+    
+    if (existingStyle) {
+      await supabase.from('api_keys').update({ api_key: novelaiStyle }).eq('id', existingStyle.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_style', api_key: novelaiStyle });
+    }
+
+    // Save custom style prompt
+    const { data: existingCustomPrompt } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai_custom_style_prompt')
+      .single();
+    
+    if (existingCustomPrompt) {
+      await supabase.from('api_keys').update({ api_key: novelaiCustomStylePrompt }).eq('id', existingCustomPrompt.id);
+    } else if (novelaiCustomStylePrompt) {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_custom_style_prompt', api_key: novelaiCustomStylePrompt });
+    }
+
+    // Save trigger keywords
+    const { data: existingTrigger } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai_trigger_keywords')
+      .single();
+    
+    if (existingTrigger) {
+      await supabase.from('api_keys').update({ api_key: novelaiTriggerKeywords }).eq('id', existingTrigger.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_trigger_keywords', api_key: novelaiTriggerKeywords });
+    }
+
     setNovelaiConfigured(true);
     toast.success('NovelAI配置已保存');
+  };
+
+  const testTrigger = () => {
+    if (!triggerTestInput.trim()) {
+      setTriggerTestResult(null);
+      return;
+    }
+    
+    const keywords = novelaiTriggerKeywords.split(',').map(k => k.trim()).filter(k => k);
+    const input = triggerTestInput.toLowerCase();
+    
+    for (const kw of keywords) {
+      if (input.includes(kw.toLowerCase())) {
+        setTriggerTestResult({ triggered: true, keyword: kw });
+        return;
+      }
+    }
+    
+    // Also check regex pattern
+    if (/(画|发|来|给).*?(图|图片|照片|自拍)/.test(triggerTestInput)) {
+      setTriggerTestResult({ triggered: true, keyword: '(正则匹配)' });
+      return;
+    }
+    
+    setTriggerTestResult({ triggered: false });
   };
 
   const testNovelaiConnection = async () => {
@@ -665,6 +762,48 @@ const SettingsPage: React.FC = () => {
               </select>
             </div>
 
+            {/* Style Template Selection */}
+            <div>
+              <label className="text-sm font-medium text-pink-600 mb-2 block">
+                风格模板
+              </label>
+              <select
+                value={novelaiStyle}
+                onChange={(e) => setNovelaiStyle(e.target.value)}
+                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-300"
+                style={{ 
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '20px'
+                }}
+              >
+                {NOVELAI_STYLES.map((style) => (
+                  <option key={style.id} value={style.id}>
+                    {style.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1.5">
+                {NOVELAI_STYLES.find(s => s.id === novelaiStyle)?.prompt || '自定义提示词'}
+              </p>
+            </div>
+
+            {/* Custom Style Prompt (only show when custom is selected) */}
+            {novelaiStyle === 'custom' && (
+              <div>
+                <label className="text-sm font-medium text-pink-600 mb-2 block">
+                  自定义风格提示词
+                </label>
+                <Input
+                  placeholder="例如: close-up, side view, dramatic lighting"
+                  value={novelaiCustomStylePrompt}
+                  onChange={(e) => setNovelaiCustomStylePrompt(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                />
+              </div>
+            )}
+
             {/* Auto Generate Toggle */}
             <div className="flex items-center justify-between p-4 bg-pink-50/50 rounded-2xl">
               <div>
@@ -681,6 +820,60 @@ const SettingsPage: React.FC = () => {
                   novelaiAutoGenerate ? 'translate-x-7' : 'translate-x-1'
                 }`} />
               </button>
+            </div>
+
+            {/* Trigger Keywords Configuration */}
+            <div className="p-4 bg-purple-50/50 rounded-2xl space-y-3">
+              <div>
+                <label className="text-sm font-medium text-purple-600 mb-2 block">
+                  触发关键词（用逗号分隔）
+                </label>
+                <textarea
+                  value={novelaiTriggerKeywords}
+                  onChange={(e) => setNovelaiTriggerKeywords(e.target.value)}
+                  placeholder="画图,发张图,自拍..."
+                  className="w-full h-24 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-300"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  当用户消息包含这些词时会触发画图
+                </p>
+              </div>
+
+              {/* Test Trigger */}
+              <div className="pt-2 border-t border-purple-100">
+                <label className="text-sm font-medium text-purple-600 mb-2 block">
+                  测试触发
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="输入测试句子..."
+                    value={triggerTestInput}
+                    onChange={(e) => {
+                      setTriggerTestInput(e.target.value);
+                      setTriggerTestResult(null);
+                    }}
+                    className="flex-1 rounded-2xl bg-white border-gray-200 h-10 text-gray-700 placeholder:text-gray-400"
+                  />
+                  <Button
+                    onClick={testTrigger}
+                    variant="outline"
+                    className="rounded-2xl h-10 px-4"
+                  >
+                    测试
+                  </Button>
+                </div>
+                {triggerTestResult !== null && (
+                  <div className={`mt-2 text-sm p-2 rounded-xl ${
+                    triggerTestResult.triggered 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {triggerTestResult.triggered 
+                      ? `✓ 会触发画图！匹配: "${triggerTestResult.keyword}"` 
+                      : '✗ 不会触发画图'}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Test Button */}
