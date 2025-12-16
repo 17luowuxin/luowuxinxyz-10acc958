@@ -96,7 +96,7 @@ async function getAICompletion(
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 200,
+      max_tokens: 800,
       stream: false,
     }),
   });
