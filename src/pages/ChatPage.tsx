@@ -121,6 +121,8 @@ const ChatPage: React.FC = () => {
   const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
+  const [novelaiConfig, setNovelaiConfig] = useState<{ apiKey?: string; model?: string; autoGenerate?: boolean } | null>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -356,7 +358,19 @@ const ChatPage: React.FC = () => {
         const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
         const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
         const customModel = apiKeys.find(k => k.provider === 'custom_model');
-        // 不再从 api_keys 里覆盖回复模式，优先使用角色级/当前会话设置
+        
+        // NovelAI config
+        const novelaiKey = apiKeys.find(k => k.provider === 'novelai');
+        const novelaiModel = apiKeys.find(k => k.provider === 'novelai_model');
+        const novelaiAutoGenerate = apiKeys.find(k => k.provider === 'novelai_auto_generate');
+        
+        if (novelaiKey) {
+          setNovelaiConfig({
+            apiKey: novelaiKey.api_key,
+            model: novelaiModel?.api_key || 'nai-diffusion-3',
+            autoGenerate: novelaiAutoGenerate?.api_key === 'true',
+          });
+        }
         
         if (customKey) {
           setApiConfig({ 
@@ -524,6 +538,95 @@ const ChatPage: React.FC = () => {
       toast.success('转账记录已删除');
     } else {
       toast.error('删除失败');
+    }
+  };
+
+  // NovelAI 画图相关
+  const shouldGenerateImage = (userInput: string, aiResponse: string): { should: boolean; prompt: string } => {
+    // 检测用户请求画图的关键词
+    const userImageKeywords = ['画', '画图', '画一张', '画一幅', '生成图', '来一张图', '给我画', '帮我画', '想看', '发张图', '发图', '发个图', '看看你', '你的照片', '自拍'];
+    const userRequestsImage = userImageKeywords.some(kw => userInput.includes(kw));
+    
+    // 检测AI描述场景的关键词
+    const sceneKeywords = ['现在我穿着', '我正在', '此刻我', '我的样子', '*展示', '*看向', '*微笑', '*害羞', '*脸红'];
+    const aiDescribesScene = sceneKeywords.some(kw => aiResponse.includes(kw));
+    
+    if (userRequestsImage || (novelaiConfig?.autoGenerate && aiDescribesScene)) {
+      // 构建画图提示词
+      let prompt = '';
+      
+      // 从角色人设提取外观特征
+      if (character?.persona) {
+        const appearanceMatch = character.persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^，。\n]+)/);
+        if (appearanceMatch) {
+          prompt += appearanceMatch[1] + ', ';
+        }
+      }
+      
+      // 从AI回复中提取场景描述
+      const sceneParts = aiResponse.match(/\*([^*]+)\*/g);
+      if (sceneParts) {
+        prompt += sceneParts.map(s => s.replace(/\*/g, '')).join(', ') + ', ';
+      }
+      
+      // 基础提示词
+      prompt += `${character?.name || 'anime girl'}, beautiful, high quality, detailed`;
+      
+      return { should: true, prompt };
+    }
+    
+    return { should: false, prompt: '' };
+  };
+
+  const generateNovelAIImage = async (prompt: string) => {
+    if (!novelaiConfig?.apiKey || !user?.id) return;
+    
+    setGeneratingImage(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('novelai-generate', {
+        body: {
+          prompt,
+          userId: user.id,
+          characterName: character?.name,
+        },
+      });
+      
+      if (error) {
+        console.error('NovelAI error:', error);
+        toast.error('画图失败: ' + error.message);
+        return;
+      }
+      
+      if (data?.success && data?.imageUrl) {
+        // 添加图片消息
+        const imageMsg = {
+          id: Date.now() + 1000,
+          role: 'assistant',
+          content: `*给你发了一张图片~*`,
+          image_url: data.imageUrl,
+        };
+        
+        setMessages(prev => [...prev, imageMsg]);
+        
+        // 保存到数据库
+        await supabase.from('chat_messages').insert({
+          user_id: user.id,
+          character_id: characterId,
+          role: 'assistant',
+          content: imageMsg.content,
+          image_url: data.imageUrl,
+        });
+        
+        toast.success('图片生成完成~');
+      } else if (data?.error) {
+        toast.error(data.error);
+      }
+    } catch (err) {
+      console.error('Generate image error:', err);
+      toast.error('画图失败，请稍后重试');
+    } finally {
+      setGeneratingImage(false);
     }
   };
 
@@ -824,6 +927,15 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: cleanContent 
         });
+      }
+      
+      // 检查是否需要生成图片
+      if (novelaiConfig?.apiKey && cleanContent.trim()) {
+        const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
+        if (should) {
+          // 异步生成图片，不阻塞主流程
+          generateNovelAIImage(prompt);
+        }
       }
       
       // 触发记忆摘要生成（每20条消息）
@@ -1152,6 +1264,17 @@ const ChatPage: React.FC = () => {
                 )}
                 {msg.role !== 'user' && getFriendBubbleDecor() && (
                   <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                )}
+                
+                {/* 图片消息 */}
+                {msg.image_url && (
+                  <img 
+                    src={msg.image_url} 
+                    alt="AI生成的图片" 
+                    className="rounded-lg max-w-full mb-2 cursor-pointer hover:opacity-90"
+                    style={{ maxHeight: '300px' }}
+                    onClick={() => window.open(msg.image_url, '_blank')}
+                  />
                 )}
                 
                 {msg.content}
