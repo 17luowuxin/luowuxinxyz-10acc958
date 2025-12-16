@@ -706,83 +706,25 @@ const ChatPage: React.FC = () => {
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
       let multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
 
-      // 线上模式下，如果模型没有按要求使用 |||，智能拆分
-      if (replyMode === 'online' && multiMessages.length <= 1) {
-        // 先按标点拆分
-        let sentenceSplits = assistantContent
-          .split(/(?<=[。！？!?…~～\n])/)
-          .map(s => s.trim())
-          .filter(s => s.length > 0);
-
-        // 如果拆分后某条消息仍然太长（超过20字），继续按逗号拆
-        const furtherSplit: string[] = [];
-        for (const sentence of sentenceSplits) {
-          if (sentence.length > 20) {
-            const commaSplits = sentence
-              .split(/(?<=[，,、])/)
-              .map(s => s.trim())
-              .filter(s => s.length > 0);
-            furtherSplit.push(...commaSplits);
-          } else {
-            furtherSplit.push(sentence);
-          }
-        }
-
-        if (furtherSplit.length > 1) {
-          multiMessages = furtherSplit;
-        }
-      }
-
-      // 根据设置的连续消息条数范围强制条数（1-2 或 3-5）
+      // 线上模式：严格固定条数，不足时自动补语气词
       if (replyMode === 'online') {
-        const [minStr, maxStr] = (onlineMessageCount || '3-5').split('-');
-        const minCount = Math.max(Number(minStr) || 1, 1);
-        const maxCount = Math.max(Number(maxStr) || minCount, minCount);
-
-        // 先限制最多条数
-        if (multiMessages.length > maxCount) {
-          multiMessages = multiMessages.slice(0, maxCount);
+        const fixedCount = onlineMessageCount === '1-2' ? 2 : 5;
+        
+        // 限制最多条数
+        if (multiMessages.length > fixedCount) {
+          multiMessages = multiMessages.slice(0, fixedCount);
         }
-
-        // 再尽量把条数补到最大值（例如 3-5 就努力拆成 5 条）
-        let safety = 0;
-        while (multiMessages.length > 0 && multiMessages.length < maxCount && safety < 8) {
-          safety++;
-          // 找到当前最长的一条
-          let longestIndex = 0;
-          for (let i = 1; i < multiMessages.length; i++) {
-            if (multiMessages[i].length > multiMessages[longestIndex].length) {
-              longestIndex = i;
-            }
-          }
-
-          const longest = multiMessages[longestIndex];
-          if (!longest || longest.length <= 6) break; // 太短就不再拆
-
-          // 优先按标点/逗号再拆一次，否则从中间硬拆
-          const byPunc = longest
-            .split(/(?<=[。！？!?…~～，,、])/)
-            .map(s => s.trim())
-            .filter(Boolean);
-
-          let partA: string;
-          let partB: string;
-          if (byPunc.length >= 2) {
-            partA = byPunc[0];
-            partB = byPunc.slice(1).join('');
-          } else {
-            const mid = Math.floor(longest.length / 2);
-            partA = longest.slice(0, mid);
-            partB = longest.slice(mid);
-          }
-
-          // 替换为两条
-          multiMessages.splice(longestIndex, 1, partA.trim(), partB.trim());
-          multiMessages = multiMessages.filter(Boolean);
+        
+        // 不足时自动补语气词（不拆分原有消息）
+        const fillerWords = ['嗯', '哦', '呢', '呀', '嘻嘻', '😊', '❤️', '💕', '你呢', '是吧', '对吧', '哈哈', '嘿嘿', '~'];
+        let fillerIndex = 0;
+        while (multiMessages.length < fixedCount) {
+          multiMessages.push(fillerWords[fillerIndex % fillerWords.length]);
+          fillerIndex++;
         }
       }
       
-      // 再保险一次：最多5条
+      // 最多5条
       if (multiMessages.length > 5) {
         multiMessages = multiMessages.slice(0, 5);
       }
