@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Heart, MessageCircle, RefreshCw, User, Send, Sparkles, Plus, Trash2, Image, Camera, BookOpen, MessageSquare } from 'lucide-react';
+import { ChevronLeft, Heart, MessageCircle, RefreshCw, User, Send, Sparkles, Plus, Trash2, Image, Camera, BookOpen, MessageSquare, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -97,6 +98,7 @@ const SpacePage: React.FC = () => {
   const [postingLog, setPostingLog] = useState(false);
   const [deleteLogId, setDeleteLogId] = useState<string | null>(null);
   const [viewingLog, setViewingLog] = useState<SpaceLog | null>(null);
+  const [charSelectOpen, setCharSelectOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -349,7 +351,7 @@ const SpacePage: React.FC = () => {
     setUploadingImage(false);
   };
 
-  const generateMoment = async () => {
+  const generateMoment = async (selectedCharacter?: any) => {
     if (characters.length === 0) {
       toast.error('请先创建AI角色');
       return;
@@ -361,9 +363,19 @@ const SpacePage: React.FC = () => {
     }
 
     setGenerating(true);
-    const numChars = Math.min(Math.floor(Math.random() * 3) + 1, characters.length);
-    const shuffled = [...characters].sort(() => Math.random() - 0.5);
-    const selectedChars = shuffled.slice(0, numChars);
+    setCharSelectOpen(false);
+    
+    let selectedChars: any[];
+    
+    if (selectedCharacter) {
+      // 用户选择了特定角色
+      selectedChars = [selectedCharacter];
+    } else {
+      // 随机选择1-3个角色
+      const numChars = Math.min(Math.floor(Math.random() * 3) + 1, characters.length);
+      const shuffled = [...characters].sort(() => Math.random() - 0.5);
+      selectedChars = shuffled.slice(0, numChars);
+    }
     
     try {
       for (const char of selectedChars) {
@@ -833,15 +845,56 @@ const SpacePage: React.FC = () => {
             >
               <Camera className="w-5 h-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-9 w-9 bg-black/20 text-white hover:bg-black/30"
-              onClick={generateMoment}
-              disabled={generating}
-            >
-              {generating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            </Button>
+            
+            {/* 选择角色发说说 */}
+            <Popover open={charSelectOpen} onOpenChange={setCharSelectOpen}>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="h-9 px-2 bg-black/20 text-white hover:bg-black/30"
+                  disabled={generating}
+                >
+                  {generating ? <RefreshCw className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+                  <span className="text-xs">发说说</span>
+                  <ChevronDown className="w-3 h-3 ml-1" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="end">
+                <div className="space-y-1">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-sm h-10"
+                    onClick={() => generateMoment()}
+                    disabled={generating}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                    随机角色发说说
+                  </Button>
+                  <div className="border-t my-2" />
+                  <p className="text-xs text-muted-foreground px-2 py-1">选择角色:</p>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {characters.map(char => (
+                      <Button
+                        key={char.id}
+                        variant="ghost"
+                        className="w-full justify-start text-sm h-10"
+                        onClick={() => generateMoment(char)}
+                        disabled={generating}
+                      >
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center mr-2 overflow-hidden">
+                          {char.avatar_url ? (
+                            <img src={char.avatar_url} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-white text-xs">{char.name[0]}</span>
+                          )}
+                        </div>
+                        <span className="truncate">{char.name}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
