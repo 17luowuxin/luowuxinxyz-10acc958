@@ -542,40 +542,86 @@ const ChatPage: React.FC = () => {
   };
 
   // NovelAI 画图相关
-  const shouldGenerateImage = (userInput: string, aiResponse: string): { should: boolean; prompt: string } => {
-    // 检测用户请求画图的关键词
-    const userImageKeywords = ['画', '画图', '画一张', '画一幅', '生成图', '来一张图', '给我画', '帮我画', '想看', '发张图', '发图', '发个图', '看看你', '你的照片', '自拍'];
-    const userRequestsImage = userImageKeywords.some(kw => userInput.includes(kw));
-    
-    // 检测AI描述场景的关键词
-    const sceneKeywords = ['现在我穿着', '我正在', '此刻我', '我的样子', '*展示', '*看向', '*微笑', '*害羞', '*脸红'];
-    const aiDescribesScene = sceneKeywords.some(kw => aiResponse.includes(kw));
-    
-    if (userRequestsImage || (novelaiConfig?.autoGenerate && aiDescribesScene)) {
-      // 构建画图提示词
-      let prompt = '';
-      
-      // 从角色人设提取外观特征
-      if (character?.persona) {
-        const appearanceMatch = character.persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^，。\n]+)/);
-        if (appearanceMatch) {
-          prompt += appearanceMatch[1] + ', ';
-        }
-      }
-      
-      // 从AI回复中提取场景描述
-      const sceneParts = aiResponse.match(/\*([^*]+)\*/g);
-      if (sceneParts) {
-        prompt += sceneParts.map(s => s.replace(/\*/g, '')).join(', ') + ', ';
-      }
-      
-      // 基础提示词
-      prompt += `${character?.name || 'anime girl'}, beautiful, high quality, detailed`;
-      
-      return { should: true, prompt };
+  const shouldGenerateImage = (
+    userInput: string,
+    aiResponse: string,
+  ): { should: boolean; prompt: string } => {
+    const input = (userInput || '').trim();
+    const reply = (aiResponse || '').trim();
+
+    // 1) 用户显式要图（尽量宽松一点）
+    const keywordList = [
+      '画图',
+      '画一张',
+      '画一幅',
+      '画个',
+      '生成图',
+      '生成一张',
+      '来一张图',
+      '来张图',
+      '发张图',
+      '发图',
+      '发个图',
+      '发我一张',
+      '图片',
+      '照片',
+      '自拍',
+      '拍照',
+      '给我看看',
+      '看看你',
+      '你的样子',
+      '你的照片',
+    ];
+
+    const userRequestsImage =
+      keywordList.some((kw) => input.includes(kw)) ||
+      /(画|发|来|给).*?(图|图片|照片|自拍)/.test(input) ||
+      /^\s*(\/draw|\/pic|\/image)\b/i.test(input);
+
+    // 2) 自动触发：只要 AI 回复里出现 *动作* / *场景* 描述就认为“有画面”
+    const hasActionEmotes = /\*[^*]{2,}\*/.test(reply);
+    const aiDescribesScene =
+      hasActionEmotes ||
+      ['现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发'].some((kw) =>
+        reply.includes(kw),
+      );
+
+    if (!(userRequestsImage || (novelaiConfig?.autoGenerate && aiDescribesScene))) {
+      return { should: false, prompt: '' };
     }
-    
-    return { should: false, prompt: '' };
+
+    // 构建画图提示词
+    let prompt = '';
+
+    // 从角色人设提取外观特征
+    if (character?.persona) {
+      const appearanceMatch = character.persona.match(
+        /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^，。\n]+)/,
+      );
+      if (appearanceMatch) {
+        prompt += appearanceMatch[1] + ', ';
+      }
+    }
+
+    // 用户显式要图时，把用户的描述也带上（更稳）
+    if (userRequestsImage && input) {
+      const cleaned = input
+        .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
+        .replace(/(画|发|来|给).{0,6}(图|图片|照片|自拍)/g, '')
+        .trim();
+      if (cleaned) prompt += cleaned + ', ';
+    }
+
+    // 从AI回复中提取 *场景描述*
+    const sceneParts = reply.match(/\*([^*]+)\*/g);
+    if (sceneParts) {
+      prompt += sceneParts.map((s) => s.replace(/\*/g, '')).join(', ') + ', ';
+    }
+
+    // 基础提示词
+    prompt += `${character?.name || 'anime girl'}, beautiful, high quality, detailed`;
+
+    return { should: true, prompt };
   };
 
   const generateNovelAIImage = async (prompt: string) => {
@@ -902,6 +948,20 @@ const ChatPage: React.FC = () => {
           
           // 每条消息间隔 600-1200ms，模拟打字延迟
           delay += 600 + Math.random() * 600;
+        }
+
+        // 线上模式也要触发画图（之前这里提前 return，导致“只成功一次/后面不发”）
+        if (novelaiConfig?.apiKey) {
+          const combinedForImage = multiMessages
+            .map((m) => removeTransferCommand(m))
+            .join(' ')
+            .trim();
+          if (combinedForImage) {
+            const { should, prompt } = shouldGenerateImage(messageContent, combinedForImage);
+            if (should) {
+              void generateNovelAIImage(prompt);
+            }
+          }
         }
         
         // 等待所有消息显示完成
@@ -1268,13 +1328,16 @@ const ChatPage: React.FC = () => {
                 
                 {/* 图片消息 */}
                 {msg.image_url && (
-                  <img 
-                    src={msg.image_url} 
-                    alt="AI生成的图片" 
-                    className="rounded-lg max-w-full mb-2 cursor-pointer hover:opacity-90"
-                    style={{ maxHeight: '300px' }}
-                    onClick={() => window.open(msg.image_url, '_blank')}
-                  />
+                  <div className="mb-2 rounded-lg border border-border bg-card p-1">
+                    <img 
+                      src={msg.image_url} 
+                      alt="AI生成的正方形图片" 
+                      loading="lazy"
+                      className="aspect-square w-full rounded-md object-cover cursor-pointer hover:opacity-90"
+                      style={{ maxHeight: '300px' }}
+                      onClick={() => window.open(msg.image_url, '_blank')}
+                    />
+                  </div>
                 )}
                 
                 {msg.content}

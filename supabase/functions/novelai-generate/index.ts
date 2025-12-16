@@ -70,8 +70,8 @@ serve(async (req) => {
       model: config.model || "nai-diffusion-3",
       action: "generate",
       parameters: {
-        width: 512,
-        height: 768,
+        width: 640,
+        height: 640,
         scale: 7,
         sampler: "k_euler_ancestral",
         steps: 28,
