@@ -26,9 +26,6 @@ const SettingsPage: React.FC = () => {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [usingDefaultApi, setUsingDefaultApi] = useState(false);
   const [defaultModel, setDefaultModel] = useState('deepseek-chat');
-  const [historyLimit, setHistoryLimit] = useState(10);
-  const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
-  const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -42,7 +39,6 @@ const SettingsPage: React.FC = () => {
       const model = data.find(k => k.provider === 'custom_model');
       const useDefault = data.find(k => k.provider === 'use_default_api');
       const defaultModelSetting = data.find(k => k.provider === 'default_model');
-      const historyLimitSetting = data.find(k => k.provider === 'history_limit');
       
       // 总是加载保存的自定义API配置
       if (customKey) {
@@ -56,19 +52,6 @@ const SettingsPage: React.FC = () => {
       }
       if (defaultModelSetting) {
         setDefaultModel(defaultModelSetting.api_key);
-      }
-      if (historyLimitSetting) {
-        setHistoryLimit(Number(historyLimitSetting.api_key) || 10);
-      }
-      
-      const replyModeSetting = data.find(k => k.provider === 'reply_mode');
-      if (replyModeSetting) {
-        setReplyMode(replyModeSetting.api_key as 'novel' | 'online');
-      }
-      
-      const messageCountSetting = data.find(k => k.provider === 'online_message_count');
-      if (messageCountSetting) {
-        setOnlineMessageCount(messageCountSetting.api_key);
       }
       
       // 判断当前使用哪种API
@@ -494,64 +477,6 @@ const SettingsPage: React.FC = () => {
               </Button>
             </div>
           )}
-        </div>
-
-        {/* History Limit Setting */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-blue-100/50">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center">
-              <span className="text-lg">💬</span>
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-800">历史消息数量</h2>
-              <p className="text-xs text-gray-500">限制发送给AI的历史消息数量，越少回复越快</p>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">当前设置: <span className="font-bold text-purple-600">{historyLimit}条</span></span>
-              <span className="text-xs text-gray-400">推荐: 5-10条</span>
-            </div>
-            
-            <div className="grid grid-cols-5 gap-2">
-              {[3, 5, 10, 15, 20].map((limit) => (
-                <button
-                  key={limit}
-                  onClick={async () => {
-                    if (!user) return;
-                    setHistoryLimit(limit);
-                    
-                    const { data: existing } = await supabase
-                      .from('api_keys')
-                      .select('id')
-                      .eq('user_id', user.id)
-                      .eq('provider', 'history_limit')
-                      .single();
-                    
-                    if (existing) {
-                      await supabase.from('api_keys').update({ api_key: String(limit) }).eq('id', existing.id);
-                    } else {
-                      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'history_limit', api_key: String(limit) });
-                    }
-                    
-                    toast.success(`已设置历史消息为 ${limit} 条`);
-                  }}
-                  className={`py-3 rounded-xl font-medium transition-all ${
-                    historyLimit === limit
-                      ? 'bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-lg'
-                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {limit}
-                </button>
-              ))}
-            </div>
-            
-            <p className="text-xs text-gray-400 text-center">
-              💡 消息越少，AI回复越快，但可能记不住之前的对话内容
-            </p>
-          </div>
         </div>
 
         {/* Reset All Settings Button */}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,6 +26,8 @@ const FriendsPage: React.FC = () => {
   const [memorySummary, setMemorySummary] = useState('');
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [regeneratingMemory, setRegeneratingMemory] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [transferEnabled, setTransferEnabled] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,7 +119,9 @@ const FriendsPage: React.FC = () => {
         name, 
         persona, 
         opening_line: openingLine,
-        avatar_url: finalAvatarUrl
+        avatar_url: finalAvatarUrl,
+        history_limit: historyLimit,
+        transfer_enabled: transferEnabled
       })
       .eq('id', editingChar.id);
     
@@ -140,6 +144,8 @@ const FriendsPage: React.FC = () => {
     setOpeningLine('');
     setAvatarUrl('');
     setAvatarFile(null);
+    setHistoryLimit(10);
+    setTransferEnabled(true);
   };
 
   const openEditDialog = async (char: any) => {
@@ -148,6 +154,8 @@ const FriendsPage: React.FC = () => {
     setPersona(char.persona || '');
     setOpeningLine(char.opening_line || '');
     setAvatarUrl(char.avatar_url || '');
+    setHistoryLimit(char.history_limit ?? 10);
+    setTransferEnabled(char.transfer_enabled ?? true);
     setMemorySummary('');
     setOpen(true);
     
@@ -279,10 +287,14 @@ const FriendsPage: React.FC = () => {
             
             {editingChar ? (
               <Tabs defaultValue="basic" className="mt-4">
-                <TabsList className="grid w-full grid-cols-2 rounded-xl bg-gray-100">
-                  <TabsTrigger value="basic" className="rounded-lg">基本信息</TabsTrigger>
-                  <TabsTrigger value="memory" className="rounded-lg">
-                    <Brain className="w-4 h-4 mr-1" />
+                <TabsList className="grid w-full grid-cols-3 rounded-xl bg-gray-100">
+                  <TabsTrigger value="basic" className="rounded-lg text-xs">基本信息</TabsTrigger>
+                  <TabsTrigger value="settings" className="rounded-lg text-xs">
+                    <Settings className="w-3 h-3 mr-1" />
+                    设置
+                  </TabsTrigger>
+                  <TabsTrigger value="memory" className="rounded-lg text-xs">
+                    <Brain className="w-3 h-3 mr-1" />
                     记忆
                   </TabsTrigger>
                 </TabsList>
@@ -326,6 +338,62 @@ const FriendsPage: React.FC = () => {
                     onClick={updateCharacter}
                   >
                     保存修改
+                  </Button>
+                </TabsContent>
+                
+                <TabsContent value="settings" className="space-y-4 mt-4">
+                  {/* History Limit */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">💬</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">历史消息数量</p>
+                        <p className="text-xs text-gray-400">发送给AI的历史消息条数</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[3, 5, 10, 15, 20].map((limit) => (
+                        <button
+                          key={limit}
+                          onClick={() => setHistoryLimit(limit)}
+                          className={`py-2 rounded-xl text-sm font-medium transition-all ${
+                            historyLimit === limit
+                              ? 'bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {limit}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Transfer Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <Gift className="w-5 h-5 text-pink-500" />
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">转账功能</p>
+                        <p className="text-xs text-gray-400">允许角色给你发红包</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setTransferEnabled(!transferEnabled)}
+                      className={`w-12 h-6 rounded-full transition-all ${
+                        transferEnabled ? 'bg-pink-400' : 'bg-gray-300'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                        transferEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                      }`} />
+                    </button>
+                  </div>
+                  
+                  <Button 
+                    className="w-full rounded-xl py-6 bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-lg" 
+                    onClick={updateCharacter}
+                  >
+                    保存设置
                   </Button>
                 </TabsContent>
                 

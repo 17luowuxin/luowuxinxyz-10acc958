@@ -117,11 +117,8 @@ const ChatPage: React.FC = () => {
   const [showMenu, setShowMenu] = useState(false);
   const [showReplyModeMenu, setShowReplyModeMenu] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
-  const [transferEnabled, setTransferEnabled] = useState(() => {
-    // 从localStorage读取转账开关状态
-    const saved = localStorage.getItem('transferEnabled');
-    return saved === 'true';
-  });
+  const [transferEnabled, setTransferEnabled] = useState(true);
+  const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -145,13 +142,16 @@ const ChatPage: React.FC = () => {
     const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
     if (data) {
       setCharacter(data);
-      // 使用角色的回复模式设置
+      // 使用角色级别的设置
       if (data.reply_mode) {
         setReplyMode(data.reply_mode as 'novel' | 'online');
       }
       if (data.online_message_count) {
         setOnlineMessageCount(data.online_message_count);
       }
+      // 角色级别的历史消息数量和转账开关
+      setHistoryLimit(data.history_limit ?? 10);
+      setTransferEnabled(data.transfer_enabled ?? true);
     }
   };
 
@@ -565,7 +565,7 @@ const ChatPage: React.FC = () => {
     try {
       const recentMessages = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .slice(-20)
+        .slice(-historyLimit)
         .map(m => ({ role: m.role, content: m.content }));
       const body: any = { 
         messages: [...recentMessages, userMessage], 
@@ -576,7 +576,8 @@ const ChatPage: React.FC = () => {
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         replyMode: replyMode,
         onlineMessageCount: onlineMessageCount,
-        transferEnabled: transferEnabled
+        transferEnabled: transferEnabled,
+        historyLimit: historyLimit
       };
       
       // 始终传递API配置

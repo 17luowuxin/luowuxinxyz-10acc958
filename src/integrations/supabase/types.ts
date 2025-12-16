@@ -137,36 +137,42 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          history_limit: number | null
           id: string
           name: string
           online_message_count: string | null
           opening_line: string | null
           persona: string | null
           reply_mode: string | null
+          transfer_enabled: boolean | null
           updated_at: string
           user_id: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          history_limit?: number | null
           id?: string
           name: string
           online_message_count?: string | null
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          transfer_enabled?: boolean | null
           updated_at?: string
           user_id: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          history_limit?: number | null
           id?: string
           name?: string
           online_message_count?: string | null
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          transfer_enabled?: boolean | null
           updated_at?: string
           user_id?: string
         }
