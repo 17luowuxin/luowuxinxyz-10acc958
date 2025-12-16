@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,12 @@ import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
 
 const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
+];
+
+const NOVELAI_MODELS = [
+  { id: 'nai-diffusion-4-curated-preview', name: 'V4 Curated', description: '最新模型' },
+  { id: 'nai-diffusion-3', name: 'V3 Anime', description: '动漫风格' },
+  { id: 'nai-diffusion-2', name: 'V2', description: '上一代' },
 ];
 
 const SettingsPage: React.FC = () => {
@@ -26,6 +32,14 @@ const SettingsPage: React.FC = () => {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [usingDefaultApi, setUsingDefaultApi] = useState(false);
   const [defaultModel, setDefaultModel] = useState('deepseek-chat');
+  
+  // NovelAI state
+  const [novelaiKey, setNovelaiKey] = useState('');
+  const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-3');
+  const [showNovelaiKey, setShowNovelaiKey] = useState(false);
+  const [novelaiConfigured, setNovelaiConfigured] = useState(false);
+  const [testingNovelai, setTestingNovelai] = useState(false);
+  const [novelaiAutoGenerate, setNovelaiAutoGenerate] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -40,6 +54,11 @@ const SettingsPage: React.FC = () => {
       const useDefault = data.find(k => k.provider === 'use_default_api');
       const defaultModelSetting = data.find(k => k.provider === 'default_model');
       
+      // NovelAI settings
+      const novelaiKeySetting = data.find(k => k.provider === 'novelai');
+      const novelaiModelSetting = data.find(k => k.provider === 'novelai_model');
+      const novelaiAutoSetting = data.find(k => k.provider === 'novelai_auto_generate');
+      
       // 总是加载保存的自定义API配置
       if (customKey) {
         setApiKey(customKey.api_key);
@@ -52,6 +71,18 @@ const SettingsPage: React.FC = () => {
       }
       if (defaultModelSetting) {
         setDefaultModel(defaultModelSetting.api_key);
+      }
+      
+      // NovelAI config
+      if (novelaiKeySetting) {
+        setNovelaiKey(novelaiKeySetting.api_key);
+        setNovelaiConfigured(true);
+      }
+      if (novelaiModelSetting) {
+        setNovelaiModel(novelaiModelSetting.api_key);
+      }
+      if (novelaiAutoSetting) {
+        setNovelaiAutoGenerate(novelaiAutoSetting.api_key === 'true');
       }
       
       // 判断当前使用哪种API
@@ -245,6 +276,88 @@ const SettingsPage: React.FC = () => {
     
     const modelName = DEFAULT_MODELS.find(m => m.id === modelId)?.name || modelId;
     toast.success(`已切换到 ${modelName}`);
+  };
+
+  // NovelAI functions
+  const saveNovelaiSettings = async () => {
+    if (!user || !novelaiKey.trim()) {
+      toast.error('请输入NovelAI API密钥');
+      return;
+    }
+
+    // Save NovelAI API key
+    const { data: existingKey } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai')
+      .single();
+    
+    if (existingKey) {
+      await supabase.from('api_keys').update({ api_key: novelaiKey }).eq('id', existingKey.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai', api_key: novelaiKey });
+    }
+
+    // Save NovelAI model
+    const { data: existingModel } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai_model')
+      .single();
+    
+    if (existingModel) {
+      await supabase.from('api_keys').update({ api_key: novelaiModel }).eq('id', existingModel.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_model', api_key: novelaiModel });
+    }
+
+    // Save auto generate setting
+    const { data: existingAuto } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'novelai_auto_generate')
+      .single();
+    
+    if (existingAuto) {
+      await supabase.from('api_keys').update({ api_key: novelaiAutoGenerate ? 'true' : 'false' }).eq('id', existingAuto.id);
+    } else {
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' });
+    }
+
+    setNovelaiConfigured(true);
+    toast.success('NovelAI配置已保存');
+  };
+
+  const testNovelaiConnection = async () => {
+    if (!novelaiKey) {
+      toast.error('请先输入NovelAI API密钥');
+      return;
+    }
+
+    setTestingNovelai(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('novelai-models', {
+        body: { apiKey: novelaiKey },
+      });
+
+      if (error) {
+        toast.error(`连接失败: ${error.message}`);
+        return;
+      }
+
+      if (data.success) {
+        toast.success(`NovelAI连接成功！订阅等级: ${data.subscription || 'Unknown'}`);
+      } else {
+        toast.error(`连接失败: ${data.error}`);
+      }
+    } catch (error) {
+      toast.error('连接测试失败');
+    } finally {
+      setTestingNovelai(false);
+    }
   };
 
   const useCustomApiHandler = () => {
@@ -477,6 +590,122 @@ const SettingsPage: React.FC = () => {
               </Button>
             </div>
           )}
+        </div>
+
+        {/* NovelAI Configuration Card */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-pink-100/50">
+          {/* Card Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center">
+                <ImageIcon className="w-5 h-5 text-pink-500" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-800">NovelAI 画图</h2>
+                <p className="text-xs text-gray-500">
+                  配置NovelAI实现角色AI画图功能
+                </p>
+              </div>
+            </div>
+            {novelaiConfigured && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full font-medium">
+                <Check className="w-3.5 h-3.5" /> 已配置
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {/* NovelAI API Key */}
+            <div>
+              <label className="text-sm font-medium text-pink-600 mb-2 block">
+                NovelAI API Token
+              </label>
+              <div className="relative">
+                <Input
+                  type={showNovelaiKey ? 'text' : 'password'}
+                  placeholder="pst-..."
+                  value={novelaiKey}
+                  onChange={(e) => setNovelaiKey(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNovelaiKey(!showNovelaiKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showNovelaiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                在NovelAI账户设置中获取API Token
+              </p>
+            </div>
+
+            {/* NovelAI Model Selection */}
+            <div>
+              <label className="text-sm font-medium text-pink-600 mb-2 block">
+                绘图模型
+              </label>
+              <select
+                value={novelaiModel}
+                onChange={(e) => setNovelaiModel(e.target.value)}
+                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-300"
+                style={{ 
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '20px'
+                }}
+              >
+                {NOVELAI_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} - {model.description}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Auto Generate Toggle */}
+            <div className="flex items-center justify-between p-4 bg-pink-50/50 rounded-2xl">
+              <div>
+                <p className="font-medium text-gray-800">自动画图</p>
+                <p className="text-xs text-gray-500">聊天时角色根据场景自动生成图片</p>
+              </div>
+              <button
+                onClick={() => setNovelaiAutoGenerate(!novelaiAutoGenerate)}
+                className={`w-14 h-8 rounded-full transition-all ${
+                  novelaiAutoGenerate ? 'bg-pink-400' : 'bg-gray-300'
+                }`}
+              >
+                <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                  novelaiAutoGenerate ? 'translate-x-7' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+
+            {/* Test Button */}
+            <button
+              onClick={testNovelaiConnection}
+              disabled={testingNovelai || !novelaiKey}
+              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {testingNovelai ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4 text-pink-500" />
+              )}
+              测试NovelAI连接
+            </button>
+
+            {/* Save Button */}
+            <Button
+              onClick={saveNovelaiSettings}
+              disabled={!novelaiKey}
+              className="w-full py-6 rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              保存NovelAI配置
+            </Button>
+          </div>
         </div>
 
         {/* Reset All Settings Button */}
