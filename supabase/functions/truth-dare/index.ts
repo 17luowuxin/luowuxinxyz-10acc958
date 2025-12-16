@@ -95,7 +95,7 @@ async function getAICompletion(
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 800,
+      max_tokens: 1500,
       stream: false,
     }),
   });
@@ -113,7 +113,14 @@ async function getAICompletion(
 
   const data = await response.json();
   
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
+  // 检测是否被截断
+  const finishReason = data.choices?.[0]?.finish_reason;
+  console.log("Finish reason:", finishReason);
+  if (finishReason === 'length') {
+    console.warn("Response was truncated due to max_tokens limit");
+  }
+  
+  console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
   
   let content = '';
   if (data.choices?.[0]?.message?.content) {
