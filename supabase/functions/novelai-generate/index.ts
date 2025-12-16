@@ -78,15 +78,28 @@ serve(async (req) => {
       },
     };
 
-    const response = await fetch('https://image.novelai.net/ai/generate-image', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(novelaiPayload),
-    });
+    let response;
+    try {
+      response = await fetch('https://image.novelai.net/ai/generate-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/zip',
+        },
+        body: JSON.stringify(novelaiPayload),
+      });
+    } catch (fetchError) {
+      console.error('NovelAI fetch error (可能需要VPN):', fetchError);
+      return new Response(JSON.stringify({ 
+        error: '无法连接NovelAI服务器，可能需要VPN/代理访问海外服务' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('NovelAI response status:', response.status, 'content-type:', response.headers.get('content-type'));
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -104,8 +117,14 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'NovelAI请求过于频繁，请稍后再试' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
-      return new Response(JSON.stringify({ error: `NovelAI生成失败: ${response.status}` }), {
+      return new Response(JSON.stringify({ error: `NovelAI生成失败: ${response.status} - ${errorText.substring(0, 200)}` }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
