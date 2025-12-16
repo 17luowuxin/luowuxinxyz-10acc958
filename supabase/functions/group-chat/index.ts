@@ -46,7 +46,7 @@ async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boo
 async function getAICompletion(
   messages: Array<{ role: string; content: string }>,
   config: AIConfig,
-  maxTokens: number = 150
+  maxTokens: number = 500
 ): Promise<string> {
   let apiUrl: string;
   let headers: Record<string, string> = {

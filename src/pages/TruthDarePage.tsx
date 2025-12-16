@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Heart, Zap, Users, Loader2, RotateCcw, Settings } from 'lucide-react';
+import { ChevronLeft, Heart, Zap, Users, Loader2, RotateCcw, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +15,7 @@ interface Character {
   name: string;
   avatar_url: string | null;
   persona: string | null;
+  isUser?: boolean;
 }
 
 interface GameLog {
@@ -39,10 +41,25 @@ const TruthDarePage: React.FC = () => {
   const [players, setPlayers] = useState<Character[]>([]);
   const [currentChoice, setCurrentChoice] = useState<'truth' | 'dare' | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState('');
+  const [userProfile, setUserProfile] = useState<{ nickname: string; avatar_url: string | null } | null>(null);
+  const [includeUser, setIncludeUser] = useState(false);
+  const [userAnswer, setUserAnswer] = useState('');
 
   useEffect(() => {
-    if (user) fetchCharacters();
+    if (user) {
+      fetchCharacters();
+      fetchUserProfile();
+    }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('nickname, avatar_url')
+      .eq('user_id', user?.id)
+      .maybeSingle();
+    if (data) setUserProfile(data);
+  };
 
   const fetchCharacters = async () => {
     const { data } = await supabase
@@ -86,9 +103,22 @@ const TruthDarePage: React.FC = () => {
       return;
     }
     
-    const gamePlayers = characters.filter(c => selectedCharacters.includes(c.id));
+    let gamePlayers: Character[] = characters.filter(c => selectedCharacters.includes(c.id));
+    
+    // 如果用户选择参与，添加用户到玩家列表
+    if (includeUser && userProfile) {
+      const userPlayer: Character = {
+        id: 'user',
+        name: userProfile.nickname || '我',
+        avatar_url: userProfile.avatar_url,
+        persona: null,
+        isUser: true
+      };
+      gamePlayers = [userPlayer, ...gamePlayers];
+    }
+    
     if (gamePlayers.length < 3) {
-      toast.error('至少需要3个角色才能开始游戏');
+      toast.error('至少需要3个参与者才能开始游戏');
       return;
     }
     setPlayers(gamePlayers);
@@ -140,7 +170,13 @@ const TruthDarePage: React.FC = () => {
     const asker = players[currentTurn];
     const target = players[targetIndex];
 
-    // 目标回答
+    // 如果目标是用户，跳过AI回答（用户自己输入）
+    if (target.isUser) {
+      setIsLoading(false);
+      return;
+    }
+
+    // AI目标回答
     const answer = await getAIResponse(
       currentChoice === 'truth' ? 'answer_truth' : 'do_dare',
       target,
@@ -154,8 +190,34 @@ const TruthDarePage: React.FC = () => {
       content: answer
     });
 
-    // 随机一个旁观者反应
-    const observers = players.filter((_, i) => i !== currentTurn && i !== targetIndex);
+    await handleReactionAndNextTurn(answer);
+  };
+
+  const handleUserAnswer = async () => {
+    if (!userAnswer.trim()) {
+      toast.error('请输入你的回答');
+      return;
+    }
+    
+    setIsLoading(true);
+    const target = players[targetIndex];
+    
+    addLog({
+      type: 'answer',
+      asker: target.name,
+      content: userAnswer
+    });
+
+    await handleReactionAndNextTurn(userAnswer);
+    setUserAnswer('');
+  };
+
+  const handleReactionAndNextTurn = async (answer: string) => {
+    const asker = players[currentTurn];
+    const target = players[targetIndex];
+    
+    // 随机一个AI旁观者反应
+    const observers = players.filter((_, i) => i !== currentTurn && i !== targetIndex && !players[i].isUser);
     if (observers.length > 0) {
       const randomObserver = observers[Math.floor(Math.random() * observers.length)];
       const reaction = await getAIResponse(
@@ -233,10 +295,40 @@ const TruthDarePage: React.FC = () => {
 
       {gamePhase === 'setup' ? (
         <div className="space-y-4">
+          {/* 用户参与选项 */}
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIncludeUser(!includeUser)}
+            className={`bg-white/80 backdrop-blur rounded-2xl p-4 shadow-lg cursor-pointer transition-all ${
+              includeUser ? 'ring-2 ring-pink-400' : ''
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                includeUser 
+                  ? 'bg-gradient-to-br from-pink-400 to-purple-400' 
+                  : 'bg-gray-200'
+              }`}>
+                {userProfile?.avatar_url ? (
+                  <img src={userProfile.avatar_url} className="w-full h-full rounded-full object-cover" />
+                ) : (
+                  <User className={`w-6 h-6 ${includeUser ? 'text-white' : 'text-gray-500'}`} />
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">{userProfile?.nickname || '我'}</p>
+                <p className="text-xs text-gray-500">点击{includeUser ? '取消' : '加入'}游戏</p>
+              </div>
+              {includeUser && (
+                <span className="text-xs bg-pink-100 text-pink-600 px-2 py-1 rounded-full">已加入</span>
+              )}
+            </div>
+          </motion.div>
+
           <div className="bg-white/80 backdrop-blur rounded-2xl p-4 shadow-lg">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-5 h-5 text-pink-500" />
-              <span className="font-medium">选择参与的角色（至少3人）</span>
+              <span className="font-medium">选择参与的角色</span>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {characters.map(char => (
@@ -270,11 +362,11 @@ const TruthDarePage: React.FC = () => {
 
           <Button
             onClick={startGame}
-            disabled={selectedCharacters.length < 3}
+            disabled={(includeUser ? selectedCharacters.length + 1 : selectedCharacters.length) < 3}
             className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-6 text-lg rounded-xl"
           >
             <Heart className="w-5 h-5 mr-2" />
-            开始游戏 ({selectedCharacters.length}/3+)
+            开始游戏 ({(includeUser ? selectedCharacters.length + 1 : selectedCharacters.length)}/3+)
           </Button>
         </div>
       ) : (
@@ -346,17 +438,39 @@ const TruthDarePage: React.FC = () => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white/80 backdrop-blur rounded-2xl p-4 shadow-lg text-center"
+              className="bg-white/80 backdrop-blur rounded-2xl p-4 shadow-lg"
             >
-              <p className="mb-4">等待 {currentTarget?.name} 回答...</p>
-              <Button
-                onClick={handleAnswer}
-                disabled={isLoading}
-                className="bg-gradient-to-r from-green-400 to-emerald-500 text-white"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {currentTarget?.name} 回答
-              </Button>
+              {currentTarget?.isUser ? (
+                <div className="space-y-3">
+                  <p className="text-center font-medium">轮到你回答了！</p>
+                  <Input
+                    placeholder={currentChoice === 'truth' ? '输入你的真心话回答...' : '描述你完成大冒险的情况...'}
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    className="bg-white"
+                  />
+                  <Button
+                    onClick={handleUserAnswer}
+                    disabled={isLoading || !userAnswer.trim()}
+                    className="w-full bg-gradient-to-r from-green-400 to-emerald-500 text-white"
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    提交回答
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="mb-4">等待 {currentTarget?.name} 回答...</p>
+                  <Button
+                    onClick={handleAnswer}
+                    disabled={isLoading}
+                    className="bg-gradient-to-r from-green-400 to-emerald-500 text-white"
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    {currentTarget?.name} 回答
+                  </Button>
+                </div>
+              )}
             </motion.div>
           )}
 
