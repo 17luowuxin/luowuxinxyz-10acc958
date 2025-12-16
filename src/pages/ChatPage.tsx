@@ -121,7 +121,14 @@ const ChatPage: React.FC = () => {
   const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
-  const [novelaiConfig, setNovelaiConfig] = useState<{ apiKey?: string; model?: string; autoGenerate?: boolean } | null>(null);
+  const [novelaiConfig, setNovelaiConfig] = useState<{
+    apiKey?: string;
+    model?: string;
+    autoGenerate?: boolean;
+    style?: string;
+    customStylePrompt?: string;
+    triggerKeywords?: string;
+  } | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -363,12 +370,18 @@ const ChatPage: React.FC = () => {
         const novelaiKey = apiKeys.find(k => k.provider === 'novelai');
         const novelaiModel = apiKeys.find(k => k.provider === 'novelai_model');
         const novelaiAutoGenerate = apiKeys.find(k => k.provider === 'novelai_auto_generate');
+        const novelaiStyle = apiKeys.find(k => k.provider === 'novelai_style');
+        const novelaiCustomStylePrompt = apiKeys.find(k => k.provider === 'novelai_custom_style_prompt');
+        const novelaiTriggerKeywords = apiKeys.find(k => k.provider === 'novelai_trigger_keywords');
         
         if (novelaiKey) {
           setNovelaiConfig({
             apiKey: novelaiKey.api_key,
             model: novelaiModel?.api_key || 'nai-diffusion-3',
             autoGenerate: novelaiAutoGenerate?.api_key === 'true',
+            style: novelaiStyle?.api_key || 'selfie',
+            customStylePrompt: novelaiCustomStylePrompt?.api_key || '',
+            triggerKeywords: novelaiTriggerKeywords?.api_key || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子',
           });
         }
         
@@ -546,39 +559,19 @@ const ChatPage: React.FC = () => {
     userInput: string,
     aiResponse: string,
   ): { should: boolean; prompt: string } => {
-    const input = (userInput || '').trim();
+    const input = (userInput || '').trim().toLowerCase();
     const reply = (aiResponse || '').trim();
 
-    // 1) 用户显式要图（尽量宽松一点）
-    const keywordList = [
-      '画图',
-      '画一张',
-      '画一幅',
-      '画个',
-      '生成图',
-      '生成一张',
-      '来一张图',
-      '来张图',
-      '发张图',
-      '发图',
-      '发个图',
-      '发我一张',
-      '图片',
-      '照片',
-      '自拍',
-      '拍照',
-      '给我看看',
-      '看看你',
-      '你的样子',
-      '你的照片',
-    ];
+    // 1) 使用可配置的触发关键词
+    const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子';
+    const keywordList = configKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
 
     const userRequestsImage =
       keywordList.some((kw) => input.includes(kw)) ||
-      /(画|发|来|给).*?(图|图片|照片|自拍)/.test(input) ||
-      /^\s*(\/draw|\/pic|\/image)\b/i.test(input);
+      /(画|发|来|给).*?(图|图片|照片|自拍)/.test(userInput) ||
+      /^\s*(\/draw|\/pic|\/image)\b/i.test(userInput);
 
-    // 2) 自动触发：只要 AI 回复里出现 *动作* / *场景* 描述就认为“有画面”
+    // 2) 自动触发：只要 AI 回复里出现 *动作* / *场景* 描述就认为"有画面"
     const hasActionEmotes = /\*[^*]{2,}\*/.test(reply);
     const aiDescribesScene =
       hasActionEmotes ||
@@ -603,9 +596,22 @@ const ChatPage: React.FC = () => {
       }
     }
 
+    // 添加风格模板提示词
+    const stylePrompts: Record<string, string> = {
+      selfie: 'selfie, close-up, looking at viewer, front view',
+      portrait: 'upper body, portrait, looking at viewer',
+      fullbody: 'full body, standing, from front',
+      scene: 'scenic, background, detailed environment',
+      custom: novelaiConfig?.customStylePrompt || '',
+    };
+    const stylePrompt = stylePrompts[novelaiConfig?.style || 'selfie'] || stylePrompts.selfie;
+    if (stylePrompt) {
+      prompt += stylePrompt + ', ';
+    }
+
     // 用户显式要图时，把用户的描述也带上（更稳）
-    if (userRequestsImage && input) {
-      const cleaned = input
+    if (userRequestsImage && userInput) {
+      const cleaned = userInput
         .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
         .replace(/(画|发|来|给).{0,6}(图|图片|照片|自拍)/g, '')
         .trim();
