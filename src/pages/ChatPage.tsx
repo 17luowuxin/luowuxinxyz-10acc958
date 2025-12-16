@@ -1004,22 +1004,6 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
-            <div className="h-px bg-border my-1" />
-            
-            {/* 转账开关 */}
-            <button 
-              className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors ${transferEnabled ? 'text-orange-500' : 'text-muted-foreground'}`}
-              onClick={() => {
-                const newValue = !transferEnabled;
-                setTransferEnabled(newValue);
-                localStorage.setItem('transferEnabled', String(newValue));
-                toast.success(newValue ? '转账功能已开启' : '转账功能已关闭');
-                setShowMenu(false);
-              }}
-            >
-              <Gift className="w-4 h-4" />
-              {transferEnabled ? '关闭转账' : '开启转账'}
-            </button>
             
             <div className="h-px bg-border my-1" />
             
