@@ -28,6 +28,25 @@ const NOVELAI_STYLES = [
   { id: 'custom', name: '自定义', prompt: '' },
 ];
 
+const NOVELAI_SAMPLERS = [
+  { id: 'k_euler_ancestral', name: 'Euler Ancestral (推荐)' },
+  { id: 'k_euler', name: 'Euler' },
+  { id: 'k_dpmpp_2s_ancestral', name: 'DPM++ 2S Ancestral' },
+  { id: 'k_dpmpp_2m', name: 'DPM++ 2M' },
+  { id: 'k_dpmpp_sde', name: 'DPM++ SDE' },
+  { id: 'ddim', name: 'DDIM' },
+];
+
+const NOVELAI_RESOLUTIONS = [
+  { id: '832x1216', name: '竖版 (832×1216)', width: 832, height: 1216 },
+  { id: '1216x832', name: '横版 (1216×832)', width: 1216, height: 832 },
+  { id: '1024x1024', name: '正方形 (1024×1024)', width: 1024, height: 1024 },
+  { id: '640x640', name: '小正方形 (640×640)', width: 640, height: 640 },
+  { id: '512x768', name: 'V3竖版 (512×768)', width: 512, height: 768 },
+  { id: '768x512', name: 'V3横版 (768×512)', width: 768, height: 512 },
+  { id: 'custom', name: '自定义尺寸', width: 0, height: 0 },
+];
+
 const DEFAULT_TRIGGER_KEYWORDS = `画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子`;
 
 const SettingsPage: React.FC = () => {
@@ -58,6 +77,16 @@ const SettingsPage: React.FC = () => {
   const [novelaiTriggerKeywords, setNovelaiTriggerKeywords] = useState(DEFAULT_TRIGGER_KEYWORDS);
   const [triggerTestInput, setTriggerTestInput] = useState('');
   const [triggerTestResult, setTriggerTestResult] = useState<{ triggered: boolean; keyword?: string } | null>(null);
+  
+  // NovelAI advanced parameters
+  const [novelaiSteps, setNovelaiSteps] = useState(28);
+  const [novelaiScale, setNovelaiScale] = useState(6.0);
+  const [novelaiSampler, setNovelaiSampler] = useState('k_euler_ancestral');
+  const [novelaiResolution, setNovelaiResolution] = useState('832x1216');
+  const [novelaiCustomWidth, setNovelaiCustomWidth] = useState(832);
+  const [novelaiCustomHeight, setNovelaiCustomHeight] = useState(1216);
+  const [novelaiNegativePrompt, setNovelaiNegativePrompt] = useState('');
+  const [showAdvancedParams, setShowAdvancedParams] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -114,6 +143,12 @@ const SettingsPage: React.FC = () => {
       const novelaiStyleSetting = data.find(k => k.provider === 'novelai_style');
       const novelaiCustomPromptSetting = data.find(k => k.provider === 'novelai_custom_style_prompt');
       const novelaiTriggerSetting = data.find(k => k.provider === 'novelai_trigger_keywords');
+      const novelaiStepsSetting = data.find(k => k.provider === 'novelai_steps');
+      const novelaiScaleSetting = data.find(k => k.provider === 'novelai_scale');
+      const novelaiSamplerSetting = data.find(k => k.provider === 'novelai_sampler');
+      const novelaiWidthSetting = data.find(k => k.provider === 'novelai_width');
+      const novelaiHeightSetting = data.find(k => k.provider === 'novelai_height');
+      const novelaiNegativeSetting = data.find(k => k.provider === 'novelai_negative_prompt');
       
       if (novelaiStyleSetting) {
         setNovelaiStyle(novelaiStyleSetting.api_key);
@@ -123,6 +158,31 @@ const SettingsPage: React.FC = () => {
       }
       if (novelaiTriggerSetting) {
         setNovelaiTriggerKeywords(novelaiTriggerSetting.api_key);
+      }
+      if (novelaiStepsSetting) {
+        setNovelaiSteps(parseInt(novelaiStepsSetting.api_key) || 28);
+      }
+      if (novelaiScaleSetting) {
+        setNovelaiScale(parseFloat(novelaiScaleSetting.api_key) || 6.0);
+      }
+      if (novelaiSamplerSetting) {
+        setNovelaiSampler(novelaiSamplerSetting.api_key);
+      }
+      if (novelaiWidthSetting && novelaiHeightSetting) {
+        const w = parseInt(novelaiWidthSetting.api_key);
+        const h = parseInt(novelaiHeightSetting.api_key);
+        setNovelaiCustomWidth(w);
+        setNovelaiCustomHeight(h);
+        // Try to match a preset resolution
+        const preset = NOVELAI_RESOLUTIONS.find(r => r.width === w && r.height === h);
+        if (preset) {
+          setNovelaiResolution(preset.id);
+        } else {
+          setNovelaiResolution('custom');
+        }
+      }
+      if (novelaiNegativeSetting) {
+        setNovelaiNegativePrompt(novelaiNegativeSetting.api_key);
       }
       
       // 判断当前使用哪种API
@@ -413,6 +473,31 @@ const SettingsPage: React.FC = () => {
       await supabase.from('api_keys').update({ api_key: novelaiTriggerKeywords }).eq('id', existingTrigger.id);
     } else {
       await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_trigger_keywords', api_key: novelaiTriggerKeywords });
+    }
+
+    // Save advanced parameters
+    const advancedParams = [
+      { provider: 'novelai_steps', value: novelaiSteps.toString() },
+      { provider: 'novelai_scale', value: novelaiScale.toString() },
+      { provider: 'novelai_sampler', value: novelaiSampler },
+      { provider: 'novelai_width', value: (novelaiResolution === 'custom' ? novelaiCustomWidth : NOVELAI_RESOLUTIONS.find(r => r.id === novelaiResolution)?.width || 832).toString() },
+      { provider: 'novelai_height', value: (novelaiResolution === 'custom' ? novelaiCustomHeight : NOVELAI_RESOLUTIONS.find(r => r.id === novelaiResolution)?.height || 1216).toString() },
+      { provider: 'novelai_negative_prompt', value: novelaiNegativePrompt },
+    ];
+
+    for (const param of advancedParams) {
+      const { data: existing } = await supabase
+        .from('api_keys')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('provider', param.provider)
+        .single();
+      
+      if (existing) {
+        await supabase.from('api_keys').update({ api_key: param.value }).eq('id', existing.id);
+      } else if (param.value) {
+        await supabase.from('api_keys').insert({ user_id: user.id, provider: param.provider, api_key: param.value });
+      }
     }
 
     setNovelaiConfigured(true);
@@ -911,6 +996,165 @@ const SettingsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Advanced Parameters Section */}
+            <div className="p-4 bg-blue-50/50 rounded-2xl space-y-4">
+              <button
+                onClick={() => setShowAdvancedParams(!showAdvancedParams)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">高级参数设置</p>
+                  <p className="text-xs text-gray-500">自定义 Steps、Scale、Sampler 等参数</p>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showAdvancedParams ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showAdvancedParams && (
+                <div className="space-y-4 pt-3 border-t border-blue-100">
+                  {/* Steps */}
+                  <div>
+                    <label className="text-sm font-medium text-blue-600 mb-2 block">
+                      Steps (步数): {novelaiSteps}
+                    </label>
+                    <input
+                      type="range"
+                      min="10"
+                      max="50"
+                      value={novelaiSteps}
+                      onChange={(e) => setNovelaiSteps(parseInt(e.target.value))}
+                      className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>10 (快速)</span>
+                      <span>50 (精细)</span>
+                    </div>
+                  </div>
+
+                  {/* Scale */}
+                  <div>
+                    <label className="text-sm font-medium text-blue-600 mb-2 block">
+                      Scale (引导强度): {novelaiScale.toFixed(1)}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="15"
+                      step="0.5"
+                      value={novelaiScale}
+                      onChange={(e) => setNovelaiScale(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>1 (自由)</span>
+                      <span>V4推荐: 5-7</span>
+                      <span>15 (强)</span>
+                    </div>
+                  </div>
+
+                  {/* Sampler */}
+                  <div>
+                    <label className="text-sm font-medium text-blue-600 mb-2 block">
+                      Sampler (采样器)
+                    </label>
+                    <select
+                      value={novelaiSampler}
+                      onChange={(e) => setNovelaiSampler(e.target.value)}
+                      className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      style={{ 
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 12px center',
+                        backgroundSize: '20px'
+                      }}
+                    >
+                      {NOVELAI_SAMPLERS.map((sampler) => (
+                        <option key={sampler.id} value={sampler.id}>
+                          {sampler.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Resolution */}
+                  <div>
+                    <label className="text-sm font-medium text-blue-600 mb-2 block">
+                      分辨率
+                    </label>
+                    <select
+                      value={novelaiResolution}
+                      onChange={(e) => {
+                        setNovelaiResolution(e.target.value);
+                        const preset = NOVELAI_RESOLUTIONS.find(r => r.id === e.target.value);
+                        if (preset && preset.id !== 'custom') {
+                          setNovelaiCustomWidth(preset.width);
+                          setNovelaiCustomHeight(preset.height);
+                        }
+                      }}
+                      className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      style={{ 
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 12px center',
+                        backgroundSize: '20px'
+                      }}
+                    >
+                      {NOVELAI_RESOLUTIONS.map((res) => (
+                        <option key={res.id} value={res.id}>
+                          {res.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Custom Resolution */}
+                  {novelaiResolution === 'custom' && (
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-500 mb-1 block">宽度</label>
+                        <Input
+                          type="number"
+                          min="512"
+                          max="1536"
+                          step="64"
+                          value={novelaiCustomWidth}
+                          onChange={(e) => setNovelaiCustomWidth(parseInt(e.target.value) || 832)}
+                          className="rounded-2xl bg-white border-gray-200 h-10 text-gray-700"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-500 mb-1 block">高度</label>
+                        <Input
+                          type="number"
+                          min="512"
+                          max="1536"
+                          step="64"
+                          value={novelaiCustomHeight}
+                          onChange={(e) => setNovelaiCustomHeight(parseInt(e.target.value) || 1216)}
+                          className="rounded-2xl bg-white border-gray-200 h-10 text-gray-700"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Negative Prompt */}
+                  <div>
+                    <label className="text-sm font-medium text-blue-600 mb-2 block">
+                      负面提示词 (可选)
+                    </label>
+                    <textarea
+                      value={novelaiNegativePrompt}
+                      onChange={(e) => setNovelaiNegativePrompt(e.target.value)}
+                      placeholder="留空使用默认值：lowres, bad anatomy, bad hands..."
+                      className="w-full h-20 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      用于排除不想要的内容，留空使用默认负面提示词
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Test Button */}
