@@ -385,119 +385,70 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    // Save NovelAI API key
-    const { data: existingKey } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai')
-      .single();
-    
-    if (existingKey) {
-      await supabase.from('api_keys').update({ api_key: novelaiKey }).eq('id', existingKey.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai', api_key: novelaiKey });
-    }
-
     // Save NovelAI model (use custom model ID if selected)
-    const modelToSave = novelaiModel === 'custom' ? novelaiCustomModel : novelaiModel;
+    const modelToSave = novelaiModel === 'custom' ? novelaiCustomModel.trim() : novelaiModel;
     if (!modelToSave) {
       toast.error('请选择或输入模型');
       return;
     }
-    
-    const { data: existingModel } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai_model')
-      .single();
-    
-    if (existingModel) {
-      await supabase.from('api_keys').update({ api_key: modelToSave }).eq('id', existingModel.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_model', api_key: modelToSave });
-    }
 
-    // Save auto generate setting
-    const { data: existingAuto } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai_auto_generate')
-      .single();
-    
-    if (existingAuto) {
-      await supabase.from('api_keys').update({ api_key: novelaiAutoGenerate ? 'true' : 'false' }).eq('id', existingAuto.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' });
-    }
+    const selectedRes =
+      novelaiResolution === 'custom'
+        ? { width: novelaiCustomWidth, height: novelaiCustomHeight }
+        : (NOVELAI_RESOLUTIONS.find(r => r.id === novelaiResolution) || { width: 832, height: 1216 });
 
-    // Save style setting
-    const { data: existingStyle } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai_style')
-      .single();
-    
-    if (existingStyle) {
-      await supabase.from('api_keys').update({ api_key: novelaiStyle }).eq('id', existingStyle.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_style', api_key: novelaiStyle });
-    }
-
-    // Save custom style prompt
-    const { data: existingCustomPrompt } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai_custom_style_prompt')
-      .single();
-    
-    if (existingCustomPrompt) {
-      await supabase.from('api_keys').update({ api_key: novelaiCustomStylePrompt }).eq('id', existingCustomPrompt.id);
-    } else if (novelaiCustomStylePrompt) {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_custom_style_prompt', api_key: novelaiCustomStylePrompt });
-    }
-
-    // Save trigger keywords
-    const { data: existingTrigger } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'novelai_trigger_keywords')
-      .single();
-    
-    if (existingTrigger) {
-      await supabase.from('api_keys').update({ api_key: novelaiTriggerKeywords }).eq('id', existingTrigger.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_trigger_keywords', api_key: novelaiTriggerKeywords });
-    }
-
-    // Save advanced parameters
-    const advancedParams = [
-      { provider: 'novelai_steps', value: novelaiSteps.toString() },
-      { provider: 'novelai_scale', value: novelaiScale.toString() },
-      { provider: 'novelai_sampler', value: novelaiSampler },
-      { provider: 'novelai_width', value: (novelaiResolution === 'custom' ? novelaiCustomWidth : NOVELAI_RESOLUTIONS.find(r => r.id === novelaiResolution)?.width || 832).toString() },
-      { provider: 'novelai_height', value: (novelaiResolution === 'custom' ? novelaiCustomHeight : NOVELAI_RESOLUTIONS.find(r => r.id === novelaiResolution)?.height || 1216).toString() },
-      { provider: 'novelai_negative_prompt', value: novelaiNegativePrompt },
+    // 关键修复：避免 .single() 在存在重复记录时直接报错，从而越存越多
+    // 这里对 NovelAI 相关 provider 统一：先删后插，确保每个 provider 只保留一条记录。
+    const providersToReplace = [
+      'novelai',
+      'novelai_model',
+      'novelai_auto_generate',
+      'novelai_style',
+      'novelai_custom_style_prompt',
+      'novelai_trigger_keywords',
+      'novelai_steps',
+      'novelai_scale',
+      'novelai_sampler',
+      'novelai_width',
+      'novelai_height',
+      'novelai_negative_prompt',
     ];
 
-    for (const param of advancedParams) {
-      const { data: existing } = await supabase
-        .from('api_keys')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('provider', param.provider)
-        .single();
-      
-      if (existing) {
-        await supabase.from('api_keys').update({ api_key: param.value }).eq('id', existing.id);
-      } else if (param.value) {
-        await supabase.from('api_keys').insert({ user_id: user.id, provider: param.provider, api_key: param.value });
-      }
+    const { error: delErr } = await supabase
+      .from('api_keys')
+      .delete()
+      .eq('user_id', user.id)
+      .in('provider', providersToReplace);
+
+    if (delErr) {
+      toast.error('保存失败: ' + delErr.message);
+      return;
+    }
+
+    const rows: Array<{ user_id: string; provider: string; api_key: string }> = [
+      { user_id: user.id, provider: 'novelai', api_key: novelaiKey.trim() },
+      { user_id: user.id, provider: 'novelai_model', api_key: modelToSave },
+      { user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' },
+      { user_id: user.id, provider: 'novelai_style', api_key: novelaiStyle },
+      { user_id: user.id, provider: 'novelai_trigger_keywords', api_key: novelaiTriggerKeywords },
+      { user_id: user.id, provider: 'novelai_steps', api_key: novelaiSteps.toString() },
+      { user_id: user.id, provider: 'novelai_scale', api_key: novelaiScale.toString() },
+      { user_id: user.id, provider: 'novelai_sampler', api_key: novelaiSampler },
+      { user_id: user.id, provider: 'novelai_width', api_key: selectedRes.width.toString() },
+      { user_id: user.id, provider: 'novelai_height', api_key: selectedRes.height.toString() },
+    ];
+
+    if (novelaiCustomStylePrompt.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_custom_style_prompt', api_key: novelaiCustomStylePrompt.trim() });
+    }
+    if (novelaiNegativePrompt.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_negative_prompt', api_key: novelaiNegativePrompt.trim() });
+    }
+
+    const { error: insErr } = await supabase.from('api_keys').insert(rows);
+    if (insErr) {
+      toast.error('保存失败: ' + insErr.message);
+      return;
     }
 
     setNovelaiConfigured(true);
