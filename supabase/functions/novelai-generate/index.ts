@@ -26,19 +26,28 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
 
   const { data: apiSettings } = await supabase
     .from("api_keys")
-    .select("provider, api_key")
+    .select("provider, api_key, created_at")
     .eq("user_id", userId);
 
   if (!apiSettings) return null;
 
-  const novelaiKey = apiSettings.find((s) => s.provider === "novelai");
-  const novelaiModel = apiSettings.find((s) => s.provider === "novelai_model");
-  const novelaiSteps = apiSettings.find((s) => s.provider === "novelai_steps");
-  const novelaiScale = apiSettings.find((s) => s.provider === "novelai_scale");
-  const novelaiSampler = apiSettings.find((s) => s.provider === "novelai_sampler");
-  const novelaiWidth = apiSettings.find((s) => s.provider === "novelai_width");
-  const novelaiHeight = apiSettings.find((s) => s.provider === "novelai_height");
-  const novelaiNegative = apiSettings.find((s) => s.provider === "novelai_negative_prompt");
+  type Row = { provider: string; api_key: string; created_at: string };
+  const rows = apiSettings as Row[];
+
+  const pickLatest = (provider: string) =>
+    rows
+      .filter((r) => r.provider === provider)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .at(-1);
+
+  const novelaiKey = pickLatest("novelai");
+  const novelaiModel = pickLatest("novelai_model");
+  const novelaiSteps = pickLatest("novelai_steps");
+  const novelaiScale = pickLatest("novelai_scale");
+  const novelaiSampler = pickLatest("novelai_sampler");
+  const novelaiWidth = pickLatest("novelai_width");
+  const novelaiHeight = pickLatest("novelai_height");
+  const novelaiNegative = pickLatest("novelai_negative_prompt");
 
   if (!novelaiKey) return null;
 

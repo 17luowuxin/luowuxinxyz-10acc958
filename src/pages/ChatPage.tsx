@@ -727,7 +727,20 @@ const ChatPage: React.FC = () => {
       
       if (error) {
         console.error('NovelAI error:', error);
-        toast.error('画图失败: ' + error.message);
+
+        // 尽量把后端返回的具体错误展示给用户（例如：密钥无效/额度不足/请求过频/模型错误）
+        let detail = error.message;
+        const resp = (error as any)?.context?.response as Response | undefined;
+        if (resp) {
+          try {
+            const body = await resp.clone().json();
+            if (body?.error) detail = body.error;
+          } catch {
+            // ignore
+          }
+        }
+
+        toast.error('画图失败: ' + detail);
         return;
       }
       
