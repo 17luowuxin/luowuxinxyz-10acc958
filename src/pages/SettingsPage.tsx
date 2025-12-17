@@ -13,9 +13,11 @@ const DEFAULT_MODELS = [
 ];
 
 const NOVELAI_MODELS = [
-  { id: 'nai-diffusion-4-curated-preview', name: 'V4 Curated', description: '最新模型' },
+  { id: 'nai-diffusion-4-full', name: 'V4 Full', description: '最新完整版（推荐）' },
+  { id: 'nai-diffusion-4-curated-preview', name: 'V4 Curated', description: '最新精选版' },
   { id: 'nai-diffusion-3', name: 'V3 Anime', description: '动漫风格' },
   { id: 'nai-diffusion-2', name: 'V2', description: '上一代' },
+  { id: 'custom', name: '自定义模型', description: '输入自定义模型ID' },
 ];
 
 const NOVELAI_STYLES = [
@@ -45,7 +47,8 @@ const SettingsPage: React.FC = () => {
   
   // NovelAI state
   const [novelaiKey, setNovelaiKey] = useState('');
-  const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-3');
+  const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-4-full');
+  const [novelaiCustomModel, setNovelaiCustomModel] = useState('');
   const [showNovelaiKey, setShowNovelaiKey] = useState(false);
   const [novelaiConfigured, setNovelaiConfigured] = useState(false);
   const [testingNovelai, setTestingNovelai] = useState(false);
@@ -94,7 +97,14 @@ const SettingsPage: React.FC = () => {
         setNovelaiConfigured(true);
       }
       if (novelaiModelSetting) {
-        setNovelaiModel(novelaiModelSetting.api_key);
+        const savedModel = novelaiModelSetting.api_key;
+        // Check if it's a preset model or custom
+        if (NOVELAI_MODELS.some(m => m.id === savedModel && m.id !== 'custom')) {
+          setNovelaiModel(savedModel);
+        } else {
+          setNovelaiModel('custom');
+          setNovelaiCustomModel(savedModel);
+        }
       }
       if (novelaiAutoSetting) {
         setNovelaiAutoGenerate(novelaiAutoSetting.api_key === 'true');
@@ -329,7 +339,13 @@ const SettingsPage: React.FC = () => {
       await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai', api_key: novelaiKey });
     }
 
-    // Save NovelAI model
+    // Save NovelAI model (use custom model ID if selected)
+    const modelToSave = novelaiModel === 'custom' ? novelaiCustomModel : novelaiModel;
+    if (!modelToSave) {
+      toast.error('请选择或输入模型');
+      return;
+    }
+    
     const { data: existingModel } = await supabase
       .from('api_keys')
       .select('id')
@@ -338,9 +354,9 @@ const SettingsPage: React.FC = () => {
       .single();
     
     if (existingModel) {
-      await supabase.from('api_keys').update({ api_key: novelaiModel }).eq('id', existingModel.id);
+      await supabase.from('api_keys').update({ api_key: modelToSave }).eq('id', existingModel.id);
     } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_model', api_key: novelaiModel });
+      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_model', api_key: modelToSave });
     }
 
     // Save auto generate setting
@@ -760,7 +776,28 @@ const SettingsPage: React.FC = () => {
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-gray-400 mt-1.5">
+                推荐使用V4 Full获得最佳效果
+              </p>
             </div>
+
+            {/* Custom Model Input (only show when custom is selected) */}
+            {novelaiModel === 'custom' && (
+              <div>
+                <label className="text-sm font-medium text-pink-600 mb-2 block">
+                  自定义模型ID
+                </label>
+                <Input
+                  placeholder="例如: nai-diffusion-4-full"
+                  value={novelaiCustomModel}
+                  onChange={(e) => setNovelaiCustomModel(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  输入NovelAI支持的模型ID
+                </p>
+              </div>
+            )}
 
             {/* Style Template Selection */}
             <div>
