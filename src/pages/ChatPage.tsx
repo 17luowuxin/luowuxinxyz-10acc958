@@ -554,6 +554,55 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  // 智能提取场景、动作、服装描述
+  const extractSceneDetails = (text: string): string[] => {
+    const details: string[] = [];
+    
+    // 提取 *动作/场景* 描述
+    const actionMatches = text.match(/\*([^*]{2,50})\*/g);
+    if (actionMatches) {
+      details.push(...actionMatches.map(s => s.replace(/\*/g, '').trim()));
+    }
+    
+    // 服装/穿着描述
+    const clothingPatterns = [
+      /(?:穿着?|身着|身穿|套着?|戴着?)([^，。！？\n]{2,20})/g,
+      /(?:衣服|裙子|制服|校服|衬衫|外套|大衣|连衣裙|泳装|睡衣|和服|旗袍|比基尼|内衣)([^，。！？\n]{0,10})/g,
+    ];
+    clothingPatterns.forEach(pattern => {
+      const matches = text.matchAll(pattern);
+      for (const m of matches) {
+        if (m[0]) details.push(m[0].trim());
+      }
+    });
+    
+    // 场景/地点描述
+    const scenePatterns = [
+      /(?:在|来到|走进|坐在|躺在|站在)([^，。！？\n]{2,15})/g,
+      /(?:卧室|客厅|浴室|厨房|教室|办公室|海边|公园|街道|咖啡厅|餐厅|酒店|泳池|温泉)/g,
+    ];
+    scenePatterns.forEach(pattern => {
+      const matches = text.matchAll(pattern);
+      for (const m of matches) {
+        if (m[0]) details.push(m[0].trim());
+      }
+    });
+    
+    // 动作/姿势描述
+    const actionPatterns = [
+      /(?:正在|开始|继续)([^，。！？\n]{2,15})/g,
+      /(?:微笑|害羞|脸红|撒娇|生气|哭泣|大笑|眨眼|wink|pout|smile)/gi,
+    ];
+    actionPatterns.forEach(pattern => {
+      const matches = text.matchAll(pattern);
+      for (const m of matches) {
+        if (m[0]) details.push(m[0].trim());
+      }
+    });
+    
+    return [...new Set(details)];
+  };
+
   // NovelAI 画图相关
   const shouldGenerateImage = (
     userInput: string,
@@ -562,12 +611,16 @@ const ChatPage: React.FC = () => {
     const input = (userInput || '').trim().toLowerCase();
     const reply = (aiResponse || '').trim();
 
-    // 1) 使用可配置的触发关键词
+    // 1) 使用可配置的触发关键词 - 支持 * 表示任意匹配
     const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子';
     const keywordList = configKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+    
+    // 检查是否设置了 * 表示任意消息触发
+    const alwaysTrigger = keywordList.includes('*') || keywordList.includes('任意') || keywordList.includes('全部');
 
     const userRequestsImage =
-      keywordList.some((kw) => input.includes(kw)) ||
+      alwaysTrigger ||
+      keywordList.some((kw) => kw && input.includes(kw)) ||
       /(画|发|来|给).*?(图|图片|照片|自拍)/.test(userInput) ||
       /^\s*(\/draw|\/pic|\/image)\b/i.test(userInput);
 
@@ -575,7 +628,7 @@ const ChatPage: React.FC = () => {
     const hasActionEmotes = /\*[^*]{2,}\*/.test(reply);
     const aiDescribesScene =
       hasActionEmotes ||
-      ['现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发'].some((kw) =>
+      ['现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发', '穿着', '身穿', '身着'].some((kw) =>
         reply.includes(kw),
       );
 
@@ -584,15 +637,27 @@ const ChatPage: React.FC = () => {
     }
 
     // 构建画图提示词
-    let prompt = '';
+    const promptParts: string[] = [];
 
     // 从角色人设提取外观特征
     if (character?.persona) {
-      const appearanceMatch = character.persona.match(
-        /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^，。\n]+)/,
-      );
-      if (appearanceMatch) {
-        prompt += appearanceMatch[1] + ', ';
+      const appearancePatterns = [
+        /(?:外貌|外观|样貌|长相|形象|特征|appearance)[：:]\s*([^。\n]+)/i,
+        /(?:头发|发色|眼睛|眼色|瞳色)[：:]?\s*([^，。\n]+)/g,
+        /(?:身高|体型|身材)[：:]?\s*([^，。\n]+)/g,
+      ];
+      
+      for (const pattern of appearancePatterns) {
+        const matches = character.persona.matchAll(pattern);
+        for (const m of matches) {
+          if (m[1]) promptParts.push(m[1].trim());
+        }
+      }
+      
+      // 直接提取英文描述词
+      const englishDesc = character.persona.match(/\b((?:pink|blue|red|green|purple|white|black|blonde|silver|golden)\s+(?:hair|eyes?)|(?:long|short|twin\s*tails?|ponytail|bob)\s+hair|(?:big|small)\s+(?:breasts?|chest)|(?:slim|curvy|petite)\s+(?:body|figure))\b/gi);
+      if (englishDesc) {
+        promptParts.push(...englishDesc);
       }
     }
 
@@ -606,26 +671,42 @@ const ChatPage: React.FC = () => {
     };
     const stylePrompt = stylePrompts[novelaiConfig?.style || 'selfie'] || stylePrompts.selfie;
     if (stylePrompt) {
-      prompt += stylePrompt + ', ';
+      promptParts.push(stylePrompt);
     }
 
-    // 用户显式要图时，把用户的描述也带上（更稳）
-    if (userRequestsImage && userInput) {
+    // 智能提取AI回复中的场景/动作/服装
+    const sceneDetails = extractSceneDetails(reply);
+    if (sceneDetails.length > 0) {
+      const zhToEn: Record<string, string> = {
+        '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
+        '撒娇': 'cute expression', '生气': 'angry', '哭泣': 'crying', '大笑': 'laughing',
+        '卧室': 'bedroom', '客厅': 'living room', '浴室': 'bathroom', '厨房': 'kitchen',
+        '教室': 'classroom', '办公室': 'office', '海边': 'beach', '公园': 'park',
+        '泳池': 'swimming pool', '温泉': 'hot spring', '校服': 'school uniform',
+        '制服': 'uniform', '连衣裙': 'dress', '泳装': 'swimsuit', '比基尼': 'bikini',
+        '睡衣': 'pajamas', '和服': 'kimono', '旗袍': 'cheongsam',
+      };
+      
+      for (const detail of sceneDetails) {
+        const translated = zhToEn[detail] || detail;
+        promptParts.push(translated);
+      }
+    }
+
+    // 用户显式要图时，把用户的描述也带上
+    if (userRequestsImage && userInput && !alwaysTrigger) {
       const cleaned = userInput
         .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
         .replace(/(画|发|来|给).{0,6}(图|图片|照片|自拍)/g, '')
         .trim();
-      if (cleaned) prompt += cleaned + ', ';
-    }
-
-    // 从AI回复中提取 *场景描述*
-    const sceneParts = reply.match(/\*([^*]+)\*/g);
-    if (sceneParts) {
-      prompt += sceneParts.map((s) => s.replace(/\*/g, '')).join(', ') + ', ';
+      if (cleaned) promptParts.push(cleaned);
     }
 
     // 基础提示词
-    prompt += `${character?.name || 'anime girl'}, beautiful, high quality, detailed`;
+    promptParts.push(`${character?.name || 'anime girl'}, 1girl, beautiful, high quality, detailed, masterpiece`);
+
+    const prompt = [...new Set(promptParts)].join(', ');
+    console.log('Generated image prompt:', prompt);
 
     return { should: true, prompt };
   };

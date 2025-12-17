@@ -868,11 +868,11 @@ const SettingsPage: React.FC = () => {
                 <textarea
                   value={novelaiTriggerKeywords}
                   onChange={(e) => setNovelaiTriggerKeywords(e.target.value)}
-                  placeholder="画图,发张图,自拍..."
+                  placeholder="画图,发张图,自拍...（填 * 表示每条消息都触发）"
                   className="w-full h-24 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-300"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  当用户消息包含这些词时会触发画图
+                  当用户消息包含这些词时会触发画图。填写 <span className="text-purple-500 font-medium">*</span> 或 <span className="text-purple-500 font-medium">任意</span> 表示每条消息都自动画图
                 </p>
               </div>
 

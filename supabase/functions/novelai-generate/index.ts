@@ -70,40 +70,69 @@ serve(async (req) => {
     });
 
     // V4 models need different parameters
-    const baseParams = {
+    const defaultNegative = negativePrompt ||
+      "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry";
+
+    // V4 specific parameters (based on NovelAI V4 API requirements)
+    const v4Params = {
+      width: 832,
+      height: 1216,
+      n_samples: 1,
+      seed: Math.floor(Math.random() * 4294967295),
+      sampler: "k_euler_ancestral",
+      steps: 28,
+      scale: 6.0,
+      cfg_rescale: 0,
+      sm: false,
+      sm_dyn: false,
+      skip_cfg_below_sigma: 0,
+      noise_schedule: "karras",
+      legacy: false,
+      legacy_v3_extend: false,
+      negative_prompt: defaultNegative,
+      reference_strength: 0.6,
+      add_original_image: false,
+      uncond_scale: 1,
+      qualityToggle: true,
+      use_coords: false,
+      v4_prompt: {
+        caption: {
+          base_caption: prompt,
+          char_captions: []
+        },
+        use_coords: false,
+        use_order: false
+      },
+      v4_negative_prompt: {
+        caption: {
+          base_caption: defaultNegative,
+          char_captions: []
+        }
+      }
+    };
+
+    // V3 parameters
+    const v3Params = {
       width: 640,
       height: 640,
       n_samples: 1,
-      ucPreset: 0,
-      qualityToggle: true,
-      negative_prompt:
-        negativePrompt ||
-        "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-    };
-
-    // V4 uses different sampler and settings
-    const v4Params = {
-      ...baseParams,
-      sampler: "k_euler",
-      steps: 28,
-      scale: 5,
-      cfg_rescale: 0,
-      noise_schedule: "native",
-    };
-
-    const v3Params = {
-      ...baseParams,
+      seed: Math.floor(Math.random() * 4294967295),
       sampler: "k_euler_ancestral",
       steps: 28,
       scale: 7,
+      ucPreset: 0,
+      qualityToggle: true,
+      negative_prompt: defaultNegative,
     };
 
     const novelaiPayload = {
-      input: prompt,
+      input: isV4 ? "" : prompt,
       model: modelId,
       action: "generate",
       parameters: isV4 ? v4Params : v3Params,
     };
+    
+    console.log("NovelAI payload:", JSON.stringify(novelaiPayload, null, 2));
 
     let response: Response;
     try {
