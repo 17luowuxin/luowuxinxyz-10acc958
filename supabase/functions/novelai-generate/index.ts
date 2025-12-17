@@ -60,28 +60,49 @@ serve(async (req) => {
       });
     }
 
+    const modelId = config.model || "nai-diffusion-3";
+    const isV4 = modelId.includes("diffusion-4");
+    
     console.log("Generating image with NovelAI:", {
-      model: config.model,
+      model: modelId,
+      isV4,
       promptLength: prompt?.length,
     });
 
+    // V4 models need different parameters
+    const baseParams = {
+      width: 640,
+      height: 640,
+      n_samples: 1,
+      ucPreset: 0,
+      qualityToggle: true,
+      negative_prompt:
+        negativePrompt ||
+        "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+    };
+
+    // V4 uses different sampler and settings
+    const v4Params = {
+      ...baseParams,
+      sampler: "k_euler",
+      steps: 28,
+      scale: 5,
+      cfg_rescale: 0,
+      noise_schedule: "native",
+    };
+
+    const v3Params = {
+      ...baseParams,
+      sampler: "k_euler_ancestral",
+      steps: 28,
+      scale: 7,
+    };
+
     const novelaiPayload = {
       input: prompt,
-      model: config.model || "nai-diffusion-3",
+      model: modelId,
       action: "generate",
-      parameters: {
-        width: 640,
-        height: 640,
-        scale: 7,
-        sampler: "k_euler_ancestral",
-        steps: 28,
-        n_samples: 1,
-        ucPreset: 0,
-        qualityToggle: true,
-        negative_prompt:
-          negativePrompt ||
-          "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-      },
+      parameters: isV4 ? v4Params : v3Params,
     };
 
     let response: Response;
