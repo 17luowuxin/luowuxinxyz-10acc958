@@ -11,6 +11,12 @@ const corsHeaders = {
 interface NovelAIConfig {
   apiKey: string;
   model?: string;
+  steps?: number;
+  scale?: number;
+  sampler?: string;
+  width?: number;
+  height?: number;
+  negativePrompt?: string;
 }
 
 async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
@@ -27,12 +33,24 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
 
   const novelaiKey = apiSettings.find((s) => s.provider === "novelai");
   const novelaiModel = apiSettings.find((s) => s.provider === "novelai_model");
+  const novelaiSteps = apiSettings.find((s) => s.provider === "novelai_steps");
+  const novelaiScale = apiSettings.find((s) => s.provider === "novelai_scale");
+  const novelaiSampler = apiSettings.find((s) => s.provider === "novelai_sampler");
+  const novelaiWidth = apiSettings.find((s) => s.provider === "novelai_width");
+  const novelaiHeight = apiSettings.find((s) => s.provider === "novelai_height");
+  const novelaiNegative = apiSettings.find((s) => s.provider === "novelai_negative_prompt");
 
   if (!novelaiKey) return null;
 
   return {
     apiKey: novelaiKey.api_key,
-    model: novelaiModel?.api_key || "nai-diffusion-3",
+    model: novelaiModel?.api_key || "nai-diffusion-4-full",
+    steps: novelaiSteps ? parseInt(novelaiSteps.api_key) : 28,
+    scale: novelaiScale ? parseFloat(novelaiScale.api_key) : 6.0,
+    sampler: novelaiSampler?.api_key || "k_euler_ancestral",
+    width: novelaiWidth ? parseInt(novelaiWidth.api_key) : 832,
+    height: novelaiHeight ? parseInt(novelaiHeight.api_key) : 1216,
+    negativePrompt: novelaiNegative?.api_key,
   };
 }
 
@@ -60,28 +78,40 @@ serve(async (req) => {
       });
     }
 
-    const modelId = config.model || "nai-diffusion-3";
+    const modelId = config.model || "nai-diffusion-4-full";
     const isV4 = modelId.includes("diffusion-4");
+    
+    // User configurable parameters with defaults
+    const userSteps = config.steps || 28;
+    const userScale = config.scale || (isV4 ? 6.0 : 7.0);
+    const userSampler = config.sampler || "k_euler_ancestral";
+    const userWidth = config.width || (isV4 ? 832 : 640);
+    const userHeight = config.height || (isV4 ? 1216 : 640);
     
     console.log("Generating image with NovelAI:", {
       model: modelId,
       isV4,
+      steps: userSteps,
+      scale: userScale,
+      sampler: userSampler,
+      width: userWidth,
+      height: userHeight,
       promptLength: prompt?.length,
     });
 
     // V4 models need different parameters
-    const defaultNegative = negativePrompt ||
+    const defaultNegative = negativePrompt || config.negativePrompt ||
       "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry";
 
     // V4 specific parameters (based on NovelAI V4 API requirements)
     const v4Params = {
-      width: 832,
-      height: 1216,
+      width: userWidth,
+      height: userHeight,
       n_samples: 1,
       seed: Math.floor(Math.random() * 4294967295),
-      sampler: "k_euler_ancestral",
-      steps: 28,
-      scale: 6.0,
+      sampler: userSampler,
+      steps: userSteps,
+      scale: userScale,
       cfg_rescale: 0,
       sm: false,
       sm_dyn: false,
@@ -113,13 +143,13 @@ serve(async (req) => {
 
     // V3 parameters
     const v3Params = {
-      width: 640,
-      height: 640,
+      width: userWidth,
+      height: userHeight,
       n_samples: 1,
       seed: Math.floor(Math.random() * 4294967295),
-      sampler: "k_euler_ancestral",
-      steps: 28,
-      scale: 7,
+      sampler: userSampler,
+      steps: userSteps,
+      scale: userScale,
       ucPreset: 0,
       qualityToggle: true,
       negative_prompt: defaultNegative,
