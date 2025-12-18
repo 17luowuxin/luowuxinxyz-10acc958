@@ -574,15 +574,7 @@ ${transferPrompt}
     console.log("Response content-type:", contentType);
     console.log("Response status:", response.status);
 
-    // 检查是否是流式响应
-    if (contentType.includes('text/event-stream')) {
-      console.log("AI response received, streaming SSE...");
-      return new Response(response.body, {
-        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-      });
-    }
-
-    // 非SSE响应 - 读取并解析，支持自动续写
+    // 提取内容的辅助函数 - 移到前面以便流式和非流式都能使用
     const extractContent = (text: string): { content: string; finishReason: string | null } => {
       let content = '';
       let finishReason: string | null = null;
@@ -630,6 +622,126 @@ ${transferPrompt}
       return { content, finishReason };
     };
 
+    // 检查是否是流式响应 - 需要读取完整内容检查是否截断
+    if (contentType.includes('text/event-stream')) {
+      console.log("AI response received, processing SSE stream...");
+      
+      // 读取完整的流式响应
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let fullStreamContent = '';
+      let streamFinishReason: string | null = null;
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留最后一个不完整的行
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            
+            try {
+              const parsed = JSON.parse(data);
+              const deltaContent = parsed.choices?.[0]?.delta?.content || '';
+              const finishR = parsed.choices?.[0]?.finish_reason;
+              
+              fullStreamContent += deltaContent;
+              if (finishR) {
+                streamFinishReason = finishR;
+              }
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+      
+      // 处理剩余的buffer
+      if (buffer.trim()) {
+        const lines = buffer.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              const deltaContent = parsed.choices?.[0]?.delta?.content || '';
+              const finishR = parsed.choices?.[0]?.finish_reason;
+              fullStreamContent += deltaContent;
+              if (finishR) streamFinishReason = finishR;
+            } catch { /* ignore */ }
+          }
+        }
+      }
+      
+      console.log(`Stream content length: ${fullStreamContent.length}, finish_reason: ${streamFinishReason}`);
+      
+      // 如果流式响应被截断，进行自动续写
+      let continueCount = 0;
+      const maxContinue = 3;
+      
+      while (streamFinishReason === 'length' && continueCount < maxContinue && fullStreamContent.length > 0) {
+        continueCount++;
+        console.log(`Stream truncated (finish_reason=length), auto-continuing... attempt ${continueCount}`);
+        
+        const continueMessages = [
+          { role: "system", content: systemPrompt },
+          ...currentMessages,
+          { role: "assistant", content: fullStreamContent },
+          { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
+        ];
+        
+        const continueBody = {
+          model,
+          messages: continueMessages,
+          stream: false,
+          max_tokens: 2048,
+        };
+        
+        try {
+          const continueResponse = await fetch(apiUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(continueBody),
+          });
+          
+          if (continueResponse.ok) {
+            const continueText = await continueResponse.text();
+            const { content: newContent, finishReason: newFinishReason } = extractContent(continueText);
+            
+            if (newContent) {
+              fullStreamContent += newContent;
+              streamFinishReason = newFinishReason;
+              console.log(`Continuation ${continueCount} added ${newContent.length} chars, new finish_reason: ${streamFinishReason}`);
+            } else {
+              break;
+            }
+          } else {
+            console.error("Continue request failed:", continueResponse.status);
+            break;
+          }
+        } catch (continueError) {
+          console.error("Continue request error:", continueError);
+          break;
+        }
+      }
+      
+      console.log(`Final stream content length: ${fullStreamContent.length} chars, continued ${continueCount} times`);
+      
+      // 返回完整内容
+      const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: fullStreamContent } }] })}\n\ndata: [DONE]\n\n`;
+      return new Response(sseData, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // 非SSE响应 - 读取并解析，支持自动续写
     const responseText = await response.text();
     console.log("Response text (first 500 chars):", responseText.slice(0, 500));
 
