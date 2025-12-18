@@ -460,15 +460,17 @@ const ChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const baseClasses = 'relative max-w-[75%] min-w-[60px] px-3 py-2 shadow-sm whitespace-pre-wrap break-words';
+    // QQ风格：胶囊形气泡，紧凑内边距
+    const baseClasses = 'relative max-w-[70%] px-3.5 py-1.5 whitespace-pre-wrap break-words';
     
     switch (style) {
       case 'cloud':
-        return `${baseClasses} rounded-3xl ${isUser ? 'rounded-br-lg' : 'rounded-bl-lg'}`;
+        return `${baseClasses} rounded-[20px]`;
       case 'square':
-        return `${baseClasses} rounded-lg ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
+        return `${baseClasses} rounded-lg`;
       default:
-        return `${baseClasses} rounded-2xl ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
+        // 默认胶囊形状
+        return `${baseClasses} rounded-[18px]`;
     }
   };
 
@@ -1485,6 +1487,10 @@ const ChatPage: React.FC = () => {
   
   // 将hex颜色转为rgba
   const hexToRgba = (hex: string, alpha: number) => {
+    // 处理可能的非hex颜色值
+    if (!hex || !hex.startsWith('#')) {
+      return `rgba(180, 220, 255, ${alpha})`; // 默认淡蓝色
+    }
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
@@ -1494,17 +1500,18 @@ const ChatPage: React.FC = () => {
   const getUserBubbleStyle = () => {
     const frame = bubbleFramePresets[userBubbleFrame];
     if (frame) {
-      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      return { background: frame.gradient };
     }
-    // 使用背景透明度而不是元素透明度
+    // 使用背景透明度 - QQ风格半透明气泡
     return { backgroundColor: hexToRgba(userBubbleColor, bubbleOpacity) };
   };
   
   const getFriendBubbleStyle = () => {
     const frame = bubbleFramePresets[friendBubbleFrame];
     if (frame) {
-      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      return { background: frame.gradient };
     }
+    // 使用背景透明度 - QQ风格半透明气泡
     return { backgroundColor: hexToRgba(friendBubbleColor, bubbleOpacity) };
   };
   
@@ -1760,7 +1767,7 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* 文本气泡 - 应用透明度 */}
+                {/* 文本气泡 - QQ风格胶囊气泡，应用透明度 */}
                 {msg.content && (
                   <div 
                     className={getBubbleStyle(msg.role === 'user')}
@@ -1768,15 +1775,15 @@ const ChatPage: React.FC = () => {
                       ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
                       color: msg.role === 'user' ? fontColor : friendFontColor,
                       fontSize: `${bubbleSize}px`,
-                      lineHeight: '1.6'
+                      lineHeight: '1.5'
                     }}
                   >
                     {/* 三丽鸥装饰图标 */}
                     {msg.role === 'user' && getUserBubbleDecor() && (
-                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
+                      <span className="absolute -top-1.5 -right-1.5 text-xs drop-shadow-sm">{getUserBubbleDecor()}</span>
                     )}
                     {msg.role !== 'user' && getFriendBubbleDecor() && (
-                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                      <span className="absolute -top-1.5 -left-1.5 text-xs drop-shadow-sm">{getFriendBubbleDecor()}</span>
                     )}
                     {msg.content}
                   </div>
