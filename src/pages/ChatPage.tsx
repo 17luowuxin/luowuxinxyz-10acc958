@@ -659,8 +659,8 @@ const ChatPage: React.FC = () => {
     const input = (userInput || '').trim().toLowerCase();
     const reply = (aiResponse || '').trim();
 
-    // 1) 使用可配置的触发关键词 - 支持 * 表示任意匹配，增加更多默认关键词
-    const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子,图片,拍照,画画,绘画,出图,生成,来张';
+    // 1) 使用可配置的触发关键词 - 大幅放宽默认关键词
+    const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子,图片,拍照,画画,绘画,出图,生成,来张,看你,见你,图,给我看,让我看,能看,想看,拍个,来个,发一张,给一张,秀一下,秀秀,show,pic,photo,image';
     const keywordList = configKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
     
     // 检查是否设置了 * 表示任意消息触发
@@ -669,15 +669,21 @@ const ChatPage: React.FC = () => {
     const userRequestsImage =
       alwaysTrigger ||
       keywordList.some((kw) => kw && input.includes(kw)) ||
-      /(画|发|来|给|要|想看|看|拍).*?(图|图片|照片|自拍|一下|你)/.test(userInput) ||
+      /(画|发|来|给|要|想看|看|拍|秀|展示|show).*?(图|图片|照片|自拍|一下|你|pic|photo)/.test(userInput) ||
+      /(给|让|能|可以).{0,4}(我|偶).{0,4}(看|见)/.test(userInput) ||
       /^\s*(\/draw|\/pic|\/image|\/img)\b/i.test(userInput);
 
-    // 2) 自动触发：放宽条件 - AI回复有任何动作描述/场景描述/穿着描述都触发
+    // 2) 自动触发：大幅放宽条件 - AI回复有动作/场景/穿着/表情/位置描述都触发
     const hasActionEmotes = /\*[^*]{2,}\*/.test(reply);
     const hasSceneKeywords = [
       '现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发', 
       '穿着', '身穿', '身着', '换上', '脱下', '躺在', '坐在', '站在', '走到',
-      '看着你', '望着', '凑近', '抱住', '牵着', '靠在', '贴着'
+      '看着你', '望着', '凑近', '抱住', '牵着', '靠在', '贴着', '趴在', '倚在',
+      '我的脸', '我的眼', '我微笑', '我笑了', '我脸红', '害羞', '撒娇',
+      '走过来', '跑过来', '走近', '靠近', '蹲下', '弯腰', '伸手', '张开',
+      '洗澡', '泡澡', '泡温泉', '游泳', '睡觉', '睡着', '醒来', '起床',
+      '做饭', '吃饭', '喝水', '喝茶', '看书', '玩手机', '听音乐',
+      '在卧室', '在客厅', '在浴室', '在厨房', '在教室', '在办公室', '在海边', '在公园'
     ].some((kw) => reply.includes(kw));
     const aiDescribesScene = hasActionEmotes || hasSceneKeywords;
 
@@ -753,46 +759,49 @@ const ChatPage: React.FC = () => {
       genderBase = 'anime characters';
     }
     
+    // 整合所有自定义设置到提示词
+    const customParts: string[] = [];
+    
     // 添加动作/姿态
     const actionSetting = novelaiConfig?.action || 'none';
-    const actionPrompts: Record<string, string> = {
-      'none': '',
-      'standing': 'standing',
-      'sitting': 'sitting',
-      'lying': 'lying down, on bed',
-      'kneeling': 'kneeling',
-      'walking': 'walking',
-      'running': 'running',
-      'hugging': 'hugging, embrace',
-      'kissing': 'kissing',
-      'holding_hands': 'holding hands',
-      'sleeping': 'sleeping, eyes closed',
-      'stretching': 'stretching, arms up',
-      'custom': novelaiConfig?.customAction || '',
+    const actionMap: Record<string, string> = {
+      'standing': 'standing', 'sitting': 'sitting', 'lying': 'lying down, on bed',
+      'kneeling': 'kneeling', 'walking': 'walking', 'running': 'running',
+      'hugging': 'hugging, embrace', 'kissing': 'kissing', 'holding_hands': 'holding hands',
+      'sleeping': 'sleeping, eyes closed', 'stretching': 'stretching, arms up',
     };
-    if (actionPrompts[actionSetting]) {
-      promptParts.push(actionPrompts[actionSetting]);
+    if (actionSetting === 'custom' && novelaiConfig?.customAction) {
+      customParts.push(novelaiConfig.customAction);
+    } else if (actionMap[actionSetting]) {
+      customParts.push(actionMap[actionSetting]);
     }
     
     // 添加表情/神态
     const expressionSetting = novelaiConfig?.expression || 'none';
-    const expressionPrompts: Record<string, string> = {
-      'none': '',
-      'smile': 'smile, happy',
-      'blush': 'blush, shy, embarrassed',
-      'laugh': 'laughing, open mouth',
-      'cry': 'crying, tears',
-      'angry': 'angry, frown',
-      'surprised': 'surprised, wide eyes, open mouth',
-      'seductive': 'seductive, bedroom eyes, parted lips',
-      'sleepy': 'sleepy, drowsy, half-closed eyes',
-      'pout': 'pout, pouting',
-      'wink': 'wink, one eye closed',
-      'custom': novelaiConfig?.customExpression || '',
+    const expressionMap: Record<string, string> = {
+      'smile': 'smile, happy', 'blush': 'blush, shy, embarrassed', 'laugh': 'laughing, open mouth',
+      'cry': 'crying, tears', 'angry': 'angry, frown', 'surprised': 'surprised, wide eyes, open mouth',
+      'seductive': 'seductive, bedroom eyes, parted lips', 'sleepy': 'sleepy, drowsy, half-closed eyes',
+      'pout': 'pout, pouting', 'wink': 'wink, one eye closed',
     };
-    if (expressionPrompts[expressionSetting]) {
-      promptParts.push(expressionPrompts[expressionSetting]);
+    if (expressionSetting === 'custom' && novelaiConfig?.customExpression) {
+      customParts.push(novelaiConfig.customExpression);
+    } else if (expressionMap[expressionSetting]) {
+      customParts.push(expressionMap[expressionSetting]);
     }
+    
+    // 添加角色附加提示词（用户在设置中填写的固定提示词）
+    if (novelaiConfig?.characterPrompt) {
+      customParts.push(novelaiConfig.characterPrompt);
+    }
+    
+    // 添加自定义风格提示词
+    if (novelaiConfig?.style === 'custom' && novelaiConfig?.customStylePrompt) {
+      customParts.push(novelaiConfig.customStylePrompt);
+    }
+    
+    // 把自定义部分加入promptParts
+    promptParts.push(...customParts);
 
     // 从角色人设提取外观特征
     if (character?.persona) {
@@ -832,17 +841,18 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 添加风格模板提示词
-    const stylePrompts: Record<string, string> = {
-      selfie: 'selfie, close-up, looking at viewer, front view',
-      portrait: 'upper body, portrait, looking at viewer',
-      fullbody: 'full body, standing, from front',
-      scene: 'scenic, background, detailed environment',
-      custom: novelaiConfig?.customStylePrompt || '',
-    };
-    const stylePrompt = stylePrompts[novelaiConfig?.style || 'selfie'] || stylePrompts.selfie;
-    if (stylePrompt) {
-      promptParts.push(stylePrompt);
+    // 添加风格模板提示词（非自定义时）
+    if (novelaiConfig?.style !== 'custom') {
+      const stylePrompts: Record<string, string> = {
+        selfie: 'selfie, close-up, looking at viewer, front view',
+        portrait: 'upper body, portrait, looking at viewer',
+        fullbody: 'full body, standing, from front',
+        scene: 'scenic, background, detailed environment',
+      };
+      const stylePrompt = stylePrompts[novelaiConfig?.style || 'selfie'] || stylePrompts.selfie;
+      if (stylePrompt) {
+        promptParts.push(stylePrompt);
+      }
     }
 
     // 智能提取AI回复中的场景/动作/服装
@@ -868,9 +878,9 @@ const ChatPage: React.FC = () => {
     if (userRequestsImage && userInput && !alwaysTrigger) {
       const cleaned = userInput
         .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
-        .replace(/(画|发|来|给).{0,6}(图|图片|照片|自拍)/g, '')
+        .replace(/(画|发|来|给|要|想看|看|拍|秀|展示).{0,6}(图|图片|照片|自拍|一下|你)/g, '')
         .trim();
-      if (cleaned) promptParts.push(cleaned);
+      if (cleaned && cleaned.length > 1) promptParts.push(cleaned);
     }
 
     // 基础提示词 - 根据性别动态设置，添加背景防止透明
