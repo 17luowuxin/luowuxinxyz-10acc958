@@ -1707,42 +1707,42 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 <div 
-                  className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                   onTouchStart={() => handleTouchStart(msg)}
                   onTouchEnd={handleTouchEnd}
                   onMouseDown={() => handleTouchStart(msg)}
-              onMouseUp={handleTouchEnd}
-              onMouseLeave={handleTouchEnd}
-            >
-              {/* Avatar with Frame - 在消息底部对齐 */}
-              <div className="relative w-10 h-10 flex-shrink-0">
-                {msg.role === 'user' && userAvatarFrame && (
-                  <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                )}
-                {msg.role !== 'user' && friendAvatarFrame && (
-                  <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                )}
-                <div className={`absolute rounded-full overflow-hidden ${(msg.role === 'user' ? userAvatarFrame : friendAvatarFrame) ? 'inset-[15%]' : 'inset-0'}`}>
-                  {msg.role === 'user' ? (
-                    profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-[10px] text-gray-600">
-                        {profile?.nickname?.charAt(0) || '我'}
-                      </div>
-                    )
-                  ) : (
-                    character?.avatar_url ? (
-                      <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
-                        {character?.name?.charAt(0) || '?'}
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-              
+                  onMouseUp={handleTouchEnd}
+                  onMouseLeave={handleTouchEnd}
+                >
+                  {/* Avatar with Frame - QQ风格顶部对齐 */}
+                  <div className="relative w-9 h-9 flex-shrink-0 mt-0.5">
+                    {msg.role === 'user' && userAvatarFrame && (
+                      <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                    )}
+                    {msg.role !== 'user' && friendAvatarFrame && (
+                      <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                    )}
+                    <div className={`absolute rounded-full overflow-hidden ${(msg.role === 'user' ? userAvatarFrame : friendAvatarFrame) ? 'inset-[15%]' : 'inset-0'}`}>
+                      {msg.role === 'user' ? (
+                        profile?.avatar_url ? (
+                          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-[10px] text-gray-600">
+                            {profile?.nickname?.charAt(0) || '我'}
+                          </div>
+                        )
+                      ) : (
+                        character?.avatar_url ? (
+                          <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
+                            {character?.name?.charAt(0) || '?'}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                  
               {/* Bubble with Sanrio Decoration */}
               <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {/* 图片消息 - 独立容器，不透明 */}
