@@ -98,6 +98,7 @@ const SettingsPage: React.FC = () => {
   const [defaultModel, setDefaultModel] = useState('deepseek-chat');
   
   // NovelAI state
+  const [novelaiEnabled, setNovelaiEnabled] = useState(true);
   const [novelaiKey, setNovelaiKey] = useState('');
   const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-4-full');
   const [novelaiCustomModel, setNovelaiCustomModel] = useState('');
@@ -173,6 +174,10 @@ const SettingsPage: React.FC = () => {
       }
       
       // NovelAI config
+      const novelaiEnabledSetting = data.find(k => k.provider === 'novelai_enabled');
+      if (novelaiEnabledSetting) {
+        setNovelaiEnabled(novelaiEnabledSetting.api_key !== 'false');
+      }
       if (novelaiKeySetting) {
         setNovelaiKey(novelaiKeySetting.api_key);
         setNovelaiConfigured(true);
@@ -475,6 +480,7 @@ const SettingsPage: React.FC = () => {
     // 这里对 NovelAI 相关 provider 统一：先删后插，确保每个 provider 只保留一条记录。
     const providersToReplace = [
       'novelai',
+      'novelai_enabled',
       'novelai_model',
       'novelai_auto_generate',
       'novelai_style',
@@ -514,6 +520,7 @@ const SettingsPage: React.FC = () => {
 
     const rows: Array<{ user_id: string; provider: string; api_key: string }> = [
       { user_id: user.id, provider: 'novelai', api_key: novelaiKey.trim() },
+      { user_id: user.id, provider: 'novelai_enabled', api_key: novelaiEnabled ? 'true' : 'false' },
       { user_id: user.id, provider: 'novelai_model', api_key: modelToSave },
       { user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' },
       { user_id: user.id, provider: 'novelai_style', api_key: novelaiStyle },
@@ -875,7 +882,25 @@ const SettingsPage: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-4">
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-pink-50/80 to-purple-50/80 rounded-2xl mb-4">
+            <div>
+              <p className="font-medium text-gray-800">启用画图功能</p>
+              <p className="text-xs text-gray-500">关闭后将不会生成任何图片</p>
+            </div>
+            <button
+              onClick={() => setNovelaiEnabled(!novelaiEnabled)}
+              className={`w-14 h-8 rounded-full transition-all ${
+                novelaiEnabled ? 'bg-pink-400' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                novelaiEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          <div className={`space-y-4 ${!novelaiEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* NovelAI API Key */}
             <div>
               <label className="text-sm font-medium text-pink-600 mb-2 block">

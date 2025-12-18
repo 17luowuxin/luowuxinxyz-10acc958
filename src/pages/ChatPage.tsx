@@ -122,6 +122,7 @@ const ChatPage: React.FC = () => {
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
   const [novelaiConfig, setNovelaiConfig] = useState<{
+    enabled?: boolean;
     apiKey?: string;
     model?: string;
     autoGenerate?: boolean;
@@ -388,6 +389,7 @@ const ChatPage: React.FC = () => {
         const novelaiTriggerKeywords = apiKeys.find(k => k.provider === 'novelai_trigger_keywords');
         
         if (novelaiKey) {
+          const enabledSetting = apiKeys.find(k => k.provider === 'novelai_enabled');
           const genderSetting = apiKeys.find(k => k.provider === 'novelai_gender');
           const customGenderSetting = apiKeys.find(k => k.provider === 'novelai_custom_gender');
           const actionSetting = apiKeys.find(k => k.provider === 'novelai_action');
@@ -403,6 +405,7 @@ const ChatPage: React.FC = () => {
           const vibeStrengthSetting = apiKeys.find(k => k.provider === 'novelai_vibe_strength');
           
           setNovelaiConfig({
+            enabled: enabledSetting?.api_key !== 'false',
             apiKey: novelaiKey.api_key,
             model: novelaiModel?.api_key || 'nai-diffusion-3',
             autoGenerate: novelaiAutoGenerate?.api_key === 'true',
@@ -648,6 +651,11 @@ const ChatPage: React.FC = () => {
     userInput: string,
     aiResponse: string,
   ): { should: boolean; prompt: string } => {
+    // 检查画图功能是否启用
+    if (novelaiConfig?.enabled === false) {
+      return { should: false, prompt: '' };
+    }
+    
     const input = (userInput || '').trim().toLowerCase();
     const reply = (aiResponse || '').trim();
 
