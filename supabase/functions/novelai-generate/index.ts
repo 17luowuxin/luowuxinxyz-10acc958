@@ -18,6 +18,11 @@ interface NovelAIConfig {
   height?: number;
   negativePrompt?: string;
   nsfwMode?: boolean;
+  referenceImage?: string;
+  referenceStrength?: number;
+  vibeTransfer?: boolean;
+  vibeImage?: string;
+  vibeStrength?: number;
 }
 
 async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
@@ -50,6 +55,11 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
   const novelaiHeight = pickLatest("novelai_height");
   const novelaiNegative = pickLatest("novelai_negative_prompt");
   const novelaiNsfw = pickLatest("novelai_nsfw");
+  const novelaiRefImage = pickLatest("novelai_reference_image");
+  const novelaiRefStrength = pickLatest("novelai_reference_strength");
+  const novelaiVibeTransfer = pickLatest("novelai_vibe_transfer");
+  const novelaiVibeImage = pickLatest("novelai_vibe_image");
+  const novelaiVibeStrength = pickLatest("novelai_vibe_strength");
 
   if (!novelaiKey) return null;
 
@@ -63,6 +73,11 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
     height: novelaiHeight ? parseInt(novelaiHeight.api_key) : 1216,
     negativePrompt: novelaiNegative?.api_key,
     nsfwMode: novelaiNsfw?.api_key === "true",
+    referenceImage: novelaiRefImage?.api_key,
+    referenceStrength: novelaiRefStrength ? parseFloat(novelaiRefStrength.api_key) : 0.6,
+    vibeTransfer: novelaiVibeTransfer?.api_key === "true",
+    vibeImage: novelaiVibeImage?.api_key,
+    vibeStrength: novelaiVibeStrength ? parseFloat(novelaiVibeStrength.api_key) : 0.6,
   };
 }
 
@@ -109,6 +124,8 @@ serve(async (req) => {
       width: userWidth,
       height: userHeight,
       promptLength: prompt?.length,
+      hasReferenceImage: !!config.referenceImage,
+      vibeTransfer: config.vibeTransfer,
     });
 
     // V4 models need different parameters
@@ -118,8 +135,50 @@ serve(async (req) => {
     const sfwNegative = nsfwMode ? baseNegative : baseNegative + ", nsfw, nude, naked, explicit, sexual";
     const defaultNegative = negativePrompt || config.negativePrompt || sfwNegative;
 
+    // Helper function to fetch image as base64
+    const fetchImageAsBase64 = async (imageUrl: string): Promise<string | null> => {
+      try {
+        // If already base64, extract the data part
+        if (imageUrl.startsWith('data:')) {
+          return imageUrl.split(',')[1];
+        }
+        
+        const response = await fetch(imageUrl);
+        if (!response.ok) return null;
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = base64Encode(arrayBuffer);
+        return base64;
+      } catch (e) {
+        console.error("Failed to fetch image:", e);
+        return null;
+      }
+    };
+
+    // Determine action type
+    let actionType = "generate";
+    let referenceImageBase64: string | null = null;
+    let vibeImageBase64: string | null = null;
+
+    // Check for img2img reference image
+    if (config.referenceImage) {
+      referenceImageBase64 = await fetchImageAsBase64(config.referenceImage);
+      if (referenceImageBase64) {
+        actionType = "img2img";
+        console.log("Using img2img mode with reference image");
+      }
+    }
+
+    // Check for vibe transfer
+    if (config.vibeTransfer && config.vibeImage) {
+      vibeImageBase64 = await fetchImageAsBase64(config.vibeImage);
+      if (vibeImageBase64) {
+        console.log("Vibe transfer enabled with reference image");
+      }
+    }
+
     // V4 specific parameters (based on NovelAI V4 API requirements)
-    const v4Params = {
+    const v4Params: Record<string, any> = {
       width: userWidth,
       height: userHeight,
       n_samples: 1,
@@ -135,7 +194,7 @@ serve(async (req) => {
       legacy: false,
       legacy_v3_extend: false,
       negative_prompt: defaultNegative,
-      reference_strength: 0.6,
+      reference_strength: config.referenceStrength || 0.6,
       add_original_image: false,
       uncond_scale: 1,
       qualityToggle: true,
@@ -156,8 +215,23 @@ serve(async (req) => {
       }
     };
 
+    // Add img2img parameters
+    if (actionType === "img2img" && referenceImageBase64) {
+      v4Params.image = referenceImageBase64;
+      v4Params.strength = config.referenceStrength || 0.6;
+    }
+
+    // Add vibe transfer parameters (V4 only)
+    if (vibeImageBase64 && isV4) {
+      v4Params.reference_image_multiple = [{
+        image: vibeImageBase64,
+        strength: config.vibeStrength || 0.6,
+        information_extracted: 1.0,
+      }];
+    }
+
     // V3 parameters
-    const v3Params = {
+    const v3Params: Record<string, any> = {
       width: userWidth,
       height: userHeight,
       n_samples: 1,
@@ -170,10 +244,16 @@ serve(async (req) => {
       negative_prompt: defaultNegative,
     };
 
+    // Add img2img parameters for V3
+    if (actionType === "img2img" && referenceImageBase64) {
+      v3Params.image = referenceImageBase64;
+      v3Params.strength = config.referenceStrength || 0.6;
+    }
+
     const novelaiPayload = {
       input: isV4 ? "" : prompt,
       model: modelId,
-      action: "generate",
+      action: actionType,
       parameters: isV4 ? v4Params : v3Params,
     };
     
