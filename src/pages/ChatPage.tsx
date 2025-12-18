@@ -604,16 +604,16 @@ const ChatPage: React.FC = () => {
   const extractSceneDetails = (text: string): string[] => {
     const details: string[] = [];
     
-    // 提取 *动作/场景* 描述
-    const actionMatches = text.match(/\*([^*]{2,50})\*/g);
+    // 提取 *动作/场景* 描述 - 这是最重要的上下文来源
+    const actionMatches = text.match(/\*([^*]{2,100})\*/g);
     if (actionMatches) {
       details.push(...actionMatches.map(s => s.replace(/\*/g, '').trim()));
     }
     
     // 服装/穿着描述
     const clothingPatterns = [
-      /(?:穿着?|身着|身穿|套着?|戴着?)([^，。！？\n]{2,20})/g,
-      /(?:衣服|裙子|制服|校服|衬衫|外套|大衣|连衣裙|泳装|睡衣|和服|旗袍|比基尼|内衣)([^，。！？\n]{0,10})/g,
+      /(?:穿着?|身着|身穿|套着?|戴着?|换上了?|脱下了?)([^，。！？\n]{2,25})/g,
+      /(?:衣服|裙子|制服|校服|衬衫|外套|大衣|连衣裙|泳装|睡衣|和服|旗袍|比基尼|内衣|T恤|牛仔裤|短裤|长裙|短裙|吊带|背心|西装|礼服|晚礼服|婚纱|围裙|浴袍|毛巾)([^，。！？\n]{0,15})/g,
     ];
     clothingPatterns.forEach(pattern => {
       const matches = text.matchAll(pattern);
@@ -624,8 +624,8 @@ const ChatPage: React.FC = () => {
     
     // 场景/地点描述
     const scenePatterns = [
-      /(?:在|来到|走进|坐在|躺在|站在)([^，。！？\n]{2,15})/g,
-      /(?:卧室|客厅|浴室|厨房|教室|办公室|海边|公园|街道|咖啡厅|餐厅|酒店|泳池|温泉)/g,
+      /(?:在|来到|走进|坐在|躺在|站在|趴在|靠在|蹲在|跪在)([^，。！？\n]{2,20})/g,
+      /(?:卧室|客厅|浴室|厨房|教室|办公室|海边|公园|街道|咖啡厅|餐厅|酒店|泳池|温泉|花园|阳台|天台|楼顶|车里|床上|沙发|椅子|地板|窗边|门口|走廊|电梯|超市|商场|学校|图书馆|医院|公司|家里|外面|室内|室外|户外|夜晚|白天|黄昏|日落|日出|星空|月光|阳光|雨天|雪天|晴天)/g,
     ];
     scenePatterns.forEach(pattern => {
       const matches = text.matchAll(pattern);
@@ -634,12 +634,25 @@ const ChatPage: React.FC = () => {
       }
     });
     
-    // 动作/姿势描述
+    // 动作/姿势描述 - 扩展更多动作
     const actionPatterns = [
-      /(?:正在|开始|继续)([^，。！？\n]{2,15})/g,
-      /(?:微笑|害羞|脸红|撒娇|生气|哭泣|大笑|眨眼|wink|pout|smile)/gi,
+      /(?:正在|开始|继续|准备)([^，。！？\n]{2,20})/g,
+      /(?:微笑|害羞|脸红|撒娇|生气|哭泣|大笑|眨眼|闭眼|睁眼|低头|抬头|转身|回头|弯腰|伸手|张嘴|闭嘴|舔嘴|咬唇|皱眉|挑眉|wink|pout|smile|blush)/gi,
+      /(?:拥抱|牵手|亲吻|接吻|亲亲|抱抱|摸头|拍肩|握手|搭肩|靠着|贴着|挨着|抱着|搂着)/g,
+      /(?:跑步|走路|散步|跳舞|唱歌|弹琴|画画|写字|看书|玩手机|打游戏|做饭|吃饭|喝水|喝茶|喝咖啡|睡觉|起床|洗澡|化妆|梳头|换衣服)/g,
     ];
     actionPatterns.forEach(pattern => {
+      const matches = text.matchAll(pattern);
+      for (const m of matches) {
+        if (m[0]) details.push(m[0].trim());
+      }
+    });
+    
+    // 人物数量描述
+    const countPatterns = [
+      /(?:两个人|三个人|我们俩|我们两|一起|和你|跟你|陪你|带你|你我|咱俩|咱们)/g,
+    ];
+    countPatterns.forEach(pattern => {
       const matches = text.matchAll(pattern);
       for (const m of matches) {
         if (m[0]) details.push(m[0].trim());
@@ -694,11 +707,63 @@ const ChatPage: React.FC = () => {
       return { should: false, prompt: '' };
     }
 
+    // ===== 智能提取用户意图 =====
+    const userIntentParts: string[] = [];
+    
+    // 检测用户请求的构图类型
+    if (/(全身|站着|站立|full\s*body|standing)/.test(userInput)) {
+      userIntentParts.push('full body, standing');
+    } else if (/(半身|上半身|upper\s*body)/.test(userInput)) {
+      userIntentParts.push('upper body, portrait');
+    } else if (/(特写|脸|face|close[\s-]*up)/.test(userInput)) {
+      userIntentParts.push('close-up, face');
+    }
+    
+    // 检测人数（两个人、和你一起等）
+    const hasTwoPeople = /(两个人|我们俩|咱俩|你我|和你|跟你|一起|couple|together)/.test(userInput + reply);
+    if (hasTwoPeople) {
+      userIntentParts.push('2people, couple, together');
+    }
+    
+    // 检测场景类型请求
+    if (/(风景|scenery|landscape|背景|环境)/.test(userInput)) {
+      userIntentParts.push('scenic, detailed background, beautiful scenery');
+    }
+    if (/(场景|scene|地点|位置)/.test(userInput)) {
+      userIntentParts.push('detailed environment, background');
+    }
+    
+    // 检测动作请求
+    const actionKeywords: Record<string, string> = {
+      '在干嘛': 'action, doing something',
+      '在做什么': 'action, activity',
+      '躺': 'lying down, on bed',
+      '坐': 'sitting',
+      '站': 'standing',
+      '跑': 'running',
+      '走': 'walking',
+      '跳': 'jumping',
+      '飞': 'flying',
+      '游泳': 'swimming, in water',
+      '洗澡': 'bathing, wet',
+      '睡觉': 'sleeping, eyes closed, on bed',
+      '吃': 'eating',
+      '喝': 'drinking',
+      '抱': 'hugging, embrace',
+      '亲': 'kissing',
+      '牵手': 'holding hands',
+    };
+    for (const [zh, en] of Object.entries(actionKeywords)) {
+      if (userInput.includes(zh) || reply.includes(zh)) {
+        userIntentParts.push(en);
+      }
+    }
+
     // 构建画图提示词 - 从对话内容智能提取场景
-    const promptParts: string[] = [];
+    const promptParts: string[] = [...userIntentParts];
     
     // 从最近对话中提取场景描述（用户消息+AI回复）
-    const recentDialogue = messages.slice(-8);
+    const recentDialogue = messages.slice(-10);
     const dialogueContext: string[] = [];
     
     for (const msg of recentDialogue) {
@@ -706,35 +771,82 @@ const ChatPage: React.FC = () => {
       dialogueContext.push(...sceneFromMsg);
     }
     
-    // 将提取的中文场景转换为英文
+    // 大幅扩展的中英文翻译映射
     const zhToEnMap: Record<string, string> = {
+      // 表情
       '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
-      '撒娇': 'cute expression', '生气': 'angry', '哭泣': 'crying', '大笑': 'laughing',
-      '卧室': 'bedroom', '客厅': 'living room', '浴室': 'bathroom', '厨房': 'kitchen',
-      '教室': 'classroom', '办公室': 'office', '海边': 'beach', '公园': 'park',
-      '泳池': 'swimming pool', '温泉': 'hot spring', '校服': 'school uniform',
-      '制服': 'uniform', '连衣裙': 'dress', '泳装': 'swimsuit', '比基尼': 'bikini',
-      '睡衣': 'pajamas', '和服': 'kimono', '旗袍': 'cheongsam', '女仆装': 'maid outfit',
-      '护士服': 'nurse outfit', '警服': 'police uniform', '水手服': 'sailor uniform',
-      '晚礼服': 'evening dress', '婚纱': 'wedding dress', '运动服': 'sportswear',
-      '拥抱': 'hugging', '亲吻': 'kissing', '牵手': 'holding hands',
+      '撒娇': 'cute expression, pouting', '生气': 'angry', '哭泣': 'crying, tears',
+      '大笑': 'laughing', '眨眼': 'winking', '闭眼': 'eyes closed',
+      '睁眼': 'eyes open', '低头': 'looking down', '抬头': 'looking up',
+      '皱眉': 'frowning', '舔嘴': 'licking lips', '咬唇': 'biting lip',
+      // 场景/地点
+      '卧室': 'bedroom, indoor', '客厅': 'living room', '浴室': 'bathroom, wet',
+      '厨房': 'kitchen', '教室': 'classroom', '办公室': 'office',
+      '海边': 'beach, ocean, sand', '公园': 'park, outdoors', '泳池': 'swimming pool, water',
+      '温泉': 'hot spring, steam', '花园': 'garden, flowers', '阳台': 'balcony',
+      '天台': 'rooftop', '床上': 'on bed', '沙发': 'on sofa',
+      '窗边': 'by window', '夜晚': 'night, dark', '白天': 'daytime, bright',
+      '黄昏': 'sunset, dusk', '日落': 'sunset', '星空': 'starry sky, night',
+      '月光': 'moonlight', '阳光': 'sunlight', '雨天': 'rainy, rain',
+      '雪天': 'snowy, snow', '室内': 'indoor', '室外': 'outdoor',
+      // 服装
+      '校服': 'school uniform', '制服': 'uniform', '连衣裙': 'dress',
+      '泳装': 'swimsuit', '比基尼': 'bikini', '睡衣': 'pajamas, nightgown',
+      '和服': 'kimono, japanese clothes', '旗袍': 'cheongsam, chinese dress',
+      '女仆装': 'maid outfit', '护士服': 'nurse outfit', '水手服': 'sailor uniform',
+      '晚礼服': 'evening dress, gown', '婚纱': 'wedding dress, bridal',
+      '运动服': 'sportswear', 'T恤': 't-shirt', '牛仔裤': 'jeans',
+      '短裤': 'shorts', '长裙': 'long skirt', '短裙': 'short skirt, miniskirt',
+      '吊带': 'camisole', '背心': 'tank top', '西装': 'suit',
+      '围裙': 'apron', '浴袍': 'bathrobe', '毛巾': 'towel',
+      // 动作/姿势
+      '拥抱': 'hugging, embrace', '亲吻': 'kissing', '牵手': 'holding hands',
       '躺着': 'lying down', '坐着': 'sitting', '站着': 'standing',
-      '跪着': 'kneeling', '趴着': 'lying on stomach', '侧躺': 'lying on side',
+      '跪着': 'kneeling', '趴着': 'lying on stomach, prone', '侧躺': 'lying on side',
+      '弯腰': 'bending over', '伸手': 'reaching out', '张嘴': 'open mouth',
+      '跑步': 'running', '走路': 'walking', '散步': 'walking, stroll',
+      '跳舞': 'dancing', '唱歌': 'singing', '弹琴': 'playing piano',
+      '画画': 'painting, drawing', '写字': 'writing', '看书': 'reading book',
+      '玩手机': 'using phone', '打游戏': 'playing games', '做饭': 'cooking',
+      '吃饭': 'eating', '喝水': 'drinking', '喝茶': 'drinking tea',
+      '睡觉': 'sleeping', '起床': 'waking up', '洗澡': 'bathing',
+      '化妆': 'applying makeup', '梳头': 'brushing hair',
+      // 人数相关
+      '两个人': '2people, couple', '三个人': '3people, group',
+      '我们俩': '2people, together', '一起': 'together',
     };
     
-    for (const detail of [...new Set(dialogueContext)].slice(0, 8)) {
-      const translated = zhToEnMap[detail] || detail;
-      promptParts.push(translated);
+    for (const detail of [...new Set(dialogueContext)].slice(0, 12)) {
+      // 先尝试直接匹配
+      if (zhToEnMap[detail]) {
+        promptParts.push(zhToEnMap[detail]);
+      } else {
+        // 尝试部分匹配
+        let translated = detail;
+        for (const [zh, en] of Object.entries(zhToEnMap)) {
+          if (detail.includes(zh)) {
+            translated = en;
+            break;
+          }
+        }
+        promptParts.push(translated);
+      }
     }
     
-    console.log('Extracted from dialogue:', dialogueContext.slice(0, 8));
+    console.log('User intent:', userIntentParts);
+    console.log('Extracted from dialogue:', dialogueContext.slice(0, 10));
 
-    // 性别标签 - 根据设置决定
+    // 性别标签 - 根据设置决定，考虑两人场景
     let genderTag = '1girl';
     let genderBase = 'anime girl';
     
     const genderSetting = novelaiConfig?.gender || 'auto';
-    if (genderSetting === 'auto') {
+    
+    // 如果检测到两个人的场景，优先使用couple
+    if (hasTwoPeople) {
+      genderTag = '1girl, 1boy, couple';
+      genderBase = 'anime couple';
+    } else if (genderSetting === 'auto') {
       // 从角色人设判断性别
       if (character?.persona) {
         const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
@@ -765,7 +877,7 @@ const ChatPage: React.FC = () => {
     // 整合所有自定义设置到提示词
     const customParts: string[] = [];
     
-    // 添加动作/姿态
+    // 添加动作/姿态（仅当用户没有明确指定时）
     const actionSetting = novelaiConfig?.action || 'none';
     const actionMap: Record<string, string> = {
       'standing': 'standing', 'sitting': 'sitting', 'lying': 'lying down, on bed',
@@ -773,10 +885,12 @@ const ChatPage: React.FC = () => {
       'hugging': 'hugging, embrace', 'kissing': 'kissing', 'holding_hands': 'holding hands',
       'sleeping': 'sleeping, eyes closed', 'stretching': 'stretching, arms up',
     };
-    if (actionSetting === 'custom' && novelaiConfig?.customAction) {
-      customParts.push(novelaiConfig.customAction);
-    } else if (actionMap[actionSetting]) {
-      customParts.push(actionMap[actionSetting]);
+    if (!userIntentParts.some(p => /(lying|sitting|standing|walking|running|hugging|kissing)/.test(p))) {
+      if (actionSetting === 'custom' && novelaiConfig?.customAction) {
+        customParts.push(novelaiConfig.customAction);
+      } else if (actionMap[actionSetting]) {
+        customParts.push(actionMap[actionSetting]);
+      }
     }
     
     // 添加表情/神态
@@ -828,24 +942,26 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 从最近聊天记录提取上下文（最近3条）
-    const recentMessages = messages.slice(-6);
-    for (const msg of recentMessages) {
-      const sceneFromChat = extractSceneDetails(msg.content);
-      if (sceneFromChat.length > 0) {
-        const zhToEnChat: Record<string, string> = {
-          '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
-          '卧室': 'bedroom', '客厅': 'living room', '海边': 'beach',
-          '校服': 'school uniform', '泳装': 'swimsuit', '睡衣': 'pajamas',
-        };
-        for (const d of sceneFromChat.slice(0, 3)) {
-          promptParts.push(zhToEnChat[d] || d);
+    // 智能提取AI回复中的场景/动作/服装
+    const sceneDetails = extractSceneDetails(reply);
+    if (sceneDetails.length > 0) {
+      for (const detail of sceneDetails) {
+        if (zhToEnMap[detail]) {
+          promptParts.push(zhToEnMap[detail]);
+        } else {
+          // 尝试部分匹配
+          for (const [zh, en] of Object.entries(zhToEnMap)) {
+            if (detail.includes(zh)) {
+              promptParts.push(en);
+              break;
+            }
+          }
         }
       }
     }
 
-    // 添加风格模板提示词（非自定义时）
-    if (novelaiConfig?.style !== 'custom') {
+    // 添加风格模板提示词（非自定义时，且用户没有明确指定构图）
+    if (novelaiConfig?.style !== 'custom' && !userIntentParts.some(p => /(full body|upper body|close-up|scenic)/.test(p))) {
       const stylePrompts: Record<string, string> = {
         selfie: 'selfie, close-up, looking at viewer, front view',
         portrait: 'upper body, portrait, looking at viewer',
@@ -858,32 +974,23 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 智能提取AI回复中的场景/动作/服装
-    const sceneDetails = extractSceneDetails(reply);
-    if (sceneDetails.length > 0) {
-      const zhToEn: Record<string, string> = {
-        '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
-        '撒娇': 'cute expression', '生气': 'angry', '哭泣': 'crying', '大笑': 'laughing',
-        '卧室': 'bedroom', '客厅': 'living room', '浴室': 'bathroom', '厨房': 'kitchen',
-        '教室': 'classroom', '办公室': 'office', '海边': 'beach', '公园': 'park',
-        '泳池': 'swimming pool', '温泉': 'hot spring', '校服': 'school uniform',
-        '制服': 'uniform', '连衣裙': 'dress', '泳装': 'swimsuit', '比基尼': 'bikini',
-        '睡衣': 'pajamas', '和服': 'kimono', '旗袍': 'cheongsam',
-      };
-      
-      for (const detail of sceneDetails) {
-        const translated = zhToEn[detail] || detail;
-        promptParts.push(translated);
-      }
-    }
-
-    // 用户显式要图时，把用户的描述也带上
+    // 用户显式要图时，把用户的描述也带上（清理掉触发词）
     if (userRequestsImage && userInput && !alwaysTrigger) {
       const cleaned = userInput
         .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
-        .replace(/(画|发|来|给|要|想看|看|拍|秀|展示).{0,6}(图|图片|照片|自拍|一下|你)/g, '')
+        .replace(/(画|发|来|给|要|想看|看|拍|秀|展示|出|生成).{0,6}(图|图片|照片|自拍|一下|你|出来)/g, '')
+        .replace(/(全身|半身|特写|脸|风景|场景|两个人|我们俩)/g, '') // 这些已经处理过了
         .trim();
-      if (cleaned && cleaned.length > 1) promptParts.push(cleaned);
+      if (cleaned && cleaned.length > 1) {
+        // 尝试翻译用户描述
+        let translatedCleaned = cleaned;
+        for (const [zh, en] of Object.entries(zhToEnMap)) {
+          if (cleaned.includes(zh)) {
+            translatedCleaned = translatedCleaned.replace(zh, en);
+          }
+        }
+        promptParts.push(translatedCleaned);
+      }
     }
 
     // 基础提示词 - 根据性别动态设置，添加背景防止透明
