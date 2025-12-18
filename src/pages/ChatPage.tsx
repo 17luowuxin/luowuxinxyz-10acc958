@@ -676,16 +676,40 @@ const ChatPage: React.FC = () => {
       return { should: false, prompt: '' };
     }
 
-    // 构建画图提示词 - 自定义提示词放在最前面，优先级最高
+    // 构建画图提示词 - 从对话内容智能提取场景
     const promptParts: string[] = [];
     
-    // 最高优先级：用户自定义的角色外观提示词
-    const userCharacterPrompt = novelaiConfig?.characterPrompt?.trim();
-    if (userCharacterPrompt) {
-      // 直接作为最优先的提示词
-      promptParts.push(userCharacterPrompt);
-      console.log('Using custom character prompt:', userCharacterPrompt);
+    // 从最近对话中提取场景描述（用户消息+AI回复）
+    const recentDialogue = messages.slice(-8);
+    const dialogueContext: string[] = [];
+    
+    for (const msg of recentDialogue) {
+      const sceneFromMsg = extractSceneDetails(msg.content);
+      dialogueContext.push(...sceneFromMsg);
     }
+    
+    // 将提取的中文场景转换为英文
+    const zhToEnMap: Record<string, string> = {
+      '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
+      '撒娇': 'cute expression', '生气': 'angry', '哭泣': 'crying', '大笑': 'laughing',
+      '卧室': 'bedroom', '客厅': 'living room', '浴室': 'bathroom', '厨房': 'kitchen',
+      '教室': 'classroom', '办公室': 'office', '海边': 'beach', '公园': 'park',
+      '泳池': 'swimming pool', '温泉': 'hot spring', '校服': 'school uniform',
+      '制服': 'uniform', '连衣裙': 'dress', '泳装': 'swimsuit', '比基尼': 'bikini',
+      '睡衣': 'pajamas', '和服': 'kimono', '旗袍': 'cheongsam', '女仆装': 'maid outfit',
+      '护士服': 'nurse outfit', '警服': 'police uniform', '水手服': 'sailor uniform',
+      '晚礼服': 'evening dress', '婚纱': 'wedding dress', '运动服': 'sportswear',
+      '拥抱': 'hugging', '亲吻': 'kissing', '牵手': 'holding hands',
+      '躺着': 'lying down', '坐着': 'sitting', '站着': 'standing',
+      '跪着': 'kneeling', '趴着': 'lying on stomach', '侧躺': 'lying on side',
+    };
+    
+    for (const detail of [...new Set(dialogueContext)].slice(0, 8)) {
+      const translated = zhToEnMap[detail] || detail;
+      promptParts.push(translated);
+    }
+    
+    console.log('Extracted from dialogue:', dialogueContext.slice(0, 8));
 
     // 性别标签 - 根据设置决定
     let genderTag = '1girl';
