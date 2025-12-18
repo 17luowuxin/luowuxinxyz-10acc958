@@ -12,13 +12,7 @@ const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
 ];
 
-const NOVELAI_MODELS = [
-  { id: 'nai-diffusion-4-full', name: 'V4 Full', description: '最新完整版（推荐）' },
-  { id: 'nai-diffusion-4-curated-preview', name: 'V4 Curated', description: '最新精选版' },
-  { id: 'nai-diffusion-3', name: 'V3 Anime', description: '动漫风格' },
-  { id: 'nai-diffusion-2', name: 'V2', description: '上一代' },
-  { id: 'custom', name: '自定义模型', description: '输入自定义模型ID' },
-];
+// 默认使用V4 Full模型，不再显示选择器
 
 const NOVELAI_STYLES = [
   { id: 'selfie', name: '自拍', prompt: 'selfie, close-up, looking at viewer, front view' },
@@ -184,14 +178,8 @@ const SettingsPage: React.FC = () => {
         setNovelaiConfigured(true);
       }
       if (novelaiModelSetting) {
-        const savedModel = novelaiModelSetting.api_key;
-        // Check if it's a preset model or custom
-        if (NOVELAI_MODELS.some(m => m.id === savedModel && m.id !== 'custom')) {
-          setNovelaiModel(savedModel);
-        } else {
-          setNovelaiModel('custom');
-          setNovelaiCustomModel(savedModel);
-        }
+        // 直接使用保存的模型或默认V4 Full
+        setNovelaiModel(novelaiModelSetting.api_key || 'nai-diffusion-4-full');
       }
       if (novelaiAutoSetting) {
         setNovelaiAutoGenerate(novelaiAutoSetting.api_key === 'true');
@@ -475,12 +463,8 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    // Save NovelAI model (use custom model ID if selected)
-    const modelToSave = novelaiModel === 'custom' ? novelaiCustomModel.trim() : novelaiModel;
-    if (!modelToSave) {
-      toast.error('请选择或输入模型');
-      return;
-    }
+    // 固定使用V4 Full模型
+    const modelToSave = novelaiModel || 'nai-diffusion-4-full';
 
     const selectedRes =
       novelaiResolution === 'custom'
@@ -918,50 +902,7 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            {/* NovelAI Model Selection */}
-            <div>
-              <label className="text-sm font-medium text-pink-600 mb-2 block">
-                绘图模型
-              </label>
-              <select
-                value={novelaiModel}
-                onChange={(e) => setNovelaiModel(e.target.value)}
-                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-300"
-                style={{ 
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 12px center',
-                  backgroundSize: '20px'
-                }}
-              >
-                {NOVELAI_MODELS.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} - {model.description}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-1.5">
-                推荐使用V4 Full获得最佳效果
-              </p>
-            </div>
-
-            {/* Custom Model Input (only show when custom is selected) */}
-            {novelaiModel === 'custom' && (
-              <div>
-                <label className="text-sm font-medium text-pink-600 mb-2 block">
-                  自定义模型ID
-                </label>
-                <Input
-                  placeholder="例如: nai-diffusion-4-full"
-                  value={novelaiCustomModel}
-                  onChange={(e) => setNovelaiCustomModel(e.target.value)}
-                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
-                />
-                <p className="text-xs text-gray-400 mt-1.5">
-                  输入NovelAI支持的模型ID
-                </p>
-              </div>
-            )}
+            {/* 模型固定使用V4 Full，不再显示选择器 */}
 
             {/* Style Template Selection */}
             <div>
