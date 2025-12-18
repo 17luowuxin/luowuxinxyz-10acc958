@@ -367,14 +367,41 @@ serve(async (req) => {
     }
 
     const pngData = files[pngName];
-    const ab = new ArrayBuffer(pngData.byteLength);
-    new Uint8Array(ab).set(pngData);
-    const base64 = base64Encode(ab);
-    const imageUrl = `data:image/png;base64,${base64}`;
+    
+    // 上传到 Supabase Storage 而不是返回 base64，加快传输速度
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    const fileName = `novelai/${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+    
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from('chat-images')
+      .upload(fileName, pngData, {
+        contentType: 'image/png',
+        cacheControl: '31536000',
+      });
+    
+    let imageUrl: string;
+    
+    if (uploadError) {
+      // 如果上传失败，回退到 base64
+      console.error("Failed to upload to storage, falling back to base64:", uploadError);
+      const ab = new ArrayBuffer(pngData.byteLength);
+      new Uint8Array(ab).set(pngData);
+      const base64 = base64Encode(ab);
+      imageUrl = `data:image/png;base64,${base64}`;
+    } else {
+      // 获取公开URL
+      const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName);
+      imageUrl = urlData.publicUrl;
+    }
 
     console.log("Image generated successfully", {
       pngName,
       size: pngData.length,
+      uploadedToStorage: !uploadError,
     });
 
     return new Response(

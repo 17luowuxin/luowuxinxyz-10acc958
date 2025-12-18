@@ -933,11 +933,21 @@ const ChatPage: React.FC = () => {
       }
       
       if (data?.success && data?.imageUrl) {
+        // 生成描述性内容，让角色知道自己发的什么图
+        const promptDescription = prompt
+          .split(',')
+          .slice(0, 5)
+          .map(p => p.trim())
+          .filter(p => p.length > 1)
+          .join('、');
+        
+        const imageContent = `*给你发了一张图片~* ${promptDescription ? `\n*（${promptDescription}）*` : ''}`;
+        
         // 添加图片消息
         const imageMsg = {
           id: Date.now() + 1000,
           role: 'assistant',
-          content: `*给你发了一张图片~*`,
+          content: imageContent,
           image_url: data.imageUrl,
         };
         
@@ -948,7 +958,7 @@ const ChatPage: React.FC = () => {
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
-          content: imageMsg.content,
+          content: imageContent,
           image_url: data.imageUrl,
         });
         
@@ -1622,42 +1632,43 @@ const ChatPage: React.FC = () => {
               </div>
               
               {/* Bubble with Sanrio Decoration */}
-              <div 
-                className={`${getBubbleStyle(msg.role === 'user')} relative`}
-                style={{ 
-                  ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
-                  color: msg.role === 'user' ? fontColor : friendFontColor,
-                  fontSize: `${bubbleSize}px`,
-                  lineHeight: '1.5'
-                }}
-              >
-                {/* 三丽鸥装饰图标 */}
-                {msg.role === 'user' && getUserBubbleDecor() && (
-                  <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
-                )}
-                {msg.role !== 'user' && getFriendBubbleDecor() && (
-                  <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
-                )}
-                
-                {/* 图片消息 - 不继承气泡透明度 */}
+              <div className="relative">
+                {/* 图片消息 - 独立容器，不透明 */}
                 {msg.image_url && (
-                  <div 
-                    className="mb-2 rounded-lg border border-border bg-card p-1"
-                    style={{ opacity: 1 }}
-                  >
+                  <div className="mb-2 rounded-lg overflow-hidden bg-background shadow-sm">
                     <img 
                       src={msg.image_url} 
                       alt="AI生成的图片" 
                       loading="lazy"
                       decoding="async"
-                      className="aspect-square w-full rounded-md object-cover cursor-pointer hover:brightness-95 transition-all"
-                      style={{ maxHeight: '300px', opacity: 1 }}
+                      className="w-full max-w-[240px] rounded-md object-cover cursor-pointer hover:brightness-95 transition-all"
+                      style={{ maxHeight: '320px' }}
                       onClick={() => window.open(msg.image_url, '_blank')}
                     />
                   </div>
                 )}
                 
-                {msg.content}
+                {/* 文本气泡 - 应用透明度 */}
+                {msg.content && (
+                  <div 
+                    className={`${getBubbleStyle(msg.role === 'user')}`}
+                    style={{ 
+                      ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
+                      color: msg.role === 'user' ? fontColor : friendFontColor,
+                      fontSize: `${bubbleSize}px`,
+                      lineHeight: '1.5'
+                    }}
+                  >
+                    {/* 三丽鸥装饰图标 */}
+                    {msg.role === 'user' && getUserBubbleDecor() && (
+                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
+                    )}
+                    {msg.role !== 'user' && getFriendBubbleDecor() && (
+                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                    )}
+                    {msg.content}
+                  </div>
+                )}
                 
                 {/* 已读状态 - 仅用户消息显示 */}
                 {msg.role === 'user' && (
