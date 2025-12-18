@@ -659,8 +659,8 @@ const ChatPage: React.FC = () => {
     const input = (userInput || '').trim().toLowerCase();
     const reply = (aiResponse || '').trim();
 
-    // 1) 使用可配置的触发关键词 - 支持 * 表示任意匹配
-    const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子';
+    // 1) 使用可配置的触发关键词 - 支持 * 表示任意匹配，增加更多默认关键词
+    const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子,图片,拍照,画画,绘画,出图,生成,来张';
     const keywordList = configKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
     
     // 检查是否设置了 * 表示任意消息触发
@@ -669,16 +669,17 @@ const ChatPage: React.FC = () => {
     const userRequestsImage =
       alwaysTrigger ||
       keywordList.some((kw) => kw && input.includes(kw)) ||
-      /(画|发|来|给).*?(图|图片|照片|自拍)/.test(userInput) ||
-      /^\s*(\/draw|\/pic|\/image)\b/i.test(userInput);
+      /(画|发|来|给|要|想看|看|拍).*?(图|图片|照片|自拍|一下|你)/.test(userInput) ||
+      /^\s*(\/draw|\/pic|\/image|\/img)\b/i.test(userInput);
 
-    // 2) 自动触发：只要 AI 回复里出现 *动作* / *场景* 描述就认为"有画面"
+    // 2) 自动触发：放宽条件 - AI回复有任何动作描述/场景描述/穿着描述都触发
     const hasActionEmotes = /\*[^*]{2,}\*/.test(reply);
-    const aiDescribesScene =
-      hasActionEmotes ||
-      ['现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发', '穿着', '身穿', '身着'].some((kw) =>
-        reply.includes(kw),
-      );
+    const hasSceneKeywords = [
+      '现在我穿着', '我正在', '此刻我', '我的样子', '我给你看', '发你一张', '给你发', 
+      '穿着', '身穿', '身着', '换上', '脱下', '躺在', '坐在', '站在', '走到',
+      '看着你', '望着', '凑近', '抱住', '牵着', '靠在', '贴着'
+    ].some((kw) => reply.includes(kw));
+    const aiDescribesScene = hasActionEmotes || hasSceneKeywords;
 
     if (!(userRequestsImage || (novelaiConfig?.autoGenerate && aiDescribesScene))) {
       return { should: false, prompt: '' };
@@ -1224,24 +1225,24 @@ const ChatPage: React.FC = () => {
           delay += 600 + Math.random() * 600;
         }
 
-        // 线上模式也要触发画图（之前这里提前 return，导致“只成功一次/后面不发”）
-        if (novelaiConfig?.apiKey) {
-          const combinedForImage = multiMessages
-            .map((m) => removeTransferCommand(m))
-            .join(' ')
-            .trim();
-          if (combinedForImage) {
-            const { should, prompt } = shouldGenerateImage(messageContent, combinedForImage);
-            if (should) {
-              void generateNovelAIImage(prompt);
-            }
-          }
-        }
-        
-        // 等待所有消息显示完成
+        // 等待所有消息显示完成后再触发画图，避免图片插入到消息中间
         setTimeout(() => {
           setLoading(false);
-        }, delay + 300);
+          
+          // 线上模式画图：在消息全部显示完后执行
+          if (novelaiConfig?.apiKey) {
+            const combinedForImage = multiMessages
+              .map((m) => removeTransferCommand(m))
+              .join(' ')
+              .trim();
+            if (combinedForImage) {
+              const { should, prompt } = shouldGenerateImage(messageContent, combinedForImage);
+              if (should) {
+                void generateNovelAIImage(prompt);
+              }
+            }
+          }
+        }, delay + 500);
         
         return; // 提前返回，不走下面的逻辑
       }
