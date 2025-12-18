@@ -109,8 +109,9 @@ serve(async (req) => {
     });
 
     // V4 models need different parameters
+    // 添加 transparent background 到负面提示词防止生成透明图片
     const defaultNegative = negativePrompt || config.negativePrompt ||
-      "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry";
+      "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, transparent background, transparent, alpha channel";
 
     // V4 specific parameters (based on NovelAI V4 API requirements)
     const v4Params = {
