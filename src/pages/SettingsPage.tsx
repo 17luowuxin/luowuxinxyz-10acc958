@@ -137,6 +137,14 @@ const SettingsPage: React.FC = () => {
   const [novelaiNsfwMode, setNovelaiNsfwMode] = useState(false);
   const [novelaiCharacterPrompt, setNovelaiCharacterPrompt] = useState('');
   const [showCharacterParams, setShowCharacterParams] = useState(false);
+  
+  // NovelAI img2img and LoRA settings
+  const [novelaiReferenceImage, setNovelaiReferenceImage] = useState('');
+  const [novelaiReferenceStrength, setNovelaiReferenceStrength] = useState(0.6);
+  const [novelaiVibeTransfer, setNovelaiVibeTransfer] = useState(false);
+  const [novelaiVibeImage, setNovelaiVibeImage] = useState('');
+  const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(0.6);
+  const [showImg2ImgParams, setShowImg2ImgParams] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -253,6 +261,20 @@ const SettingsPage: React.FC = () => {
       if (customExpressionSetting) setNovelaiCustomExpression(customExpressionSetting.api_key);
       if (nsfwSetting) setNovelaiNsfwMode(nsfwSetting.api_key === 'true');
       if (characterPromptSetting) setNovelaiCharacterPrompt(characterPromptSetting.api_key);
+      
+      // Img2Img and Vibe Transfer settings
+      const refImageSetting = data.find(k => k.provider === 'novelai_reference_image');
+      const refStrengthSetting = data.find(k => k.provider === 'novelai_reference_strength');
+      const vibeTransferSetting = data.find(k => k.provider === 'novelai_vibe_transfer');
+      const vibeImageSetting = data.find(k => k.provider === 'novelai_vibe_image');
+      const vibeStrengthSetting = data.find(k => k.provider === 'novelai_vibe_strength');
+      
+      if (refImageSetting) setNovelaiReferenceImage(refImageSetting.api_key);
+      if (refStrengthSetting) setNovelaiReferenceStrength(parseFloat(refStrengthSetting.api_key) || 0.6);
+      if (vibeTransferSetting) setNovelaiVibeTransfer(vibeTransferSetting.api_key === 'true');
+      if (vibeImageSetting) setNovelaiVibeImage(vibeImageSetting.api_key);
+      if (vibeStrengthSetting) setNovelaiVibeStrength(parseFloat(vibeStrengthSetting.api_key) || 0.6);
+      
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
         setUsingDefaultApi(true);
@@ -488,6 +510,11 @@ const SettingsPage: React.FC = () => {
       'novelai_custom_expression',
       'novelai_nsfw',
       'novelai_character_prompt',
+      'novelai_reference_image',
+      'novelai_reference_strength',
+      'novelai_vibe_transfer',
+      'novelai_vibe_image',
+      'novelai_vibe_strength',
     ];
 
     const { error: delErr } = await supabase
@@ -536,6 +563,15 @@ const SettingsPage: React.FC = () => {
     if (novelaiCharacterPrompt.trim()) {
       rows.push({ user_id: user.id, provider: 'novelai_character_prompt', api_key: novelaiCharacterPrompt.trim() });
     }
+    if (novelaiReferenceImage.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_reference_image', api_key: novelaiReferenceImage.trim() });
+    }
+    rows.push({ user_id: user.id, provider: 'novelai_reference_strength', api_key: novelaiReferenceStrength.toString() });
+    rows.push({ user_id: user.id, provider: 'novelai_vibe_transfer', api_key: novelaiVibeTransfer ? 'true' : 'false' });
+    if (novelaiVibeImage.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_vibe_image', api_key: novelaiVibeImage.trim() });
+    }
+    rows.push({ user_id: user.id, provider: 'novelai_vibe_strength', api_key: novelaiVibeStrength.toString() });
 
     const { error: insErr } = await supabase.from('api_keys').insert(rows);
     if (insErr) {
@@ -1374,6 +1410,147 @@ const SettingsPage: React.FC = () => {
                       用于排除不想要的内容，留空使用默认负面提示词
                     </p>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Img2Img and LoRA Section */}
+            <div className="p-4 bg-indigo-50/50 rounded-2xl space-y-4">
+              <button
+                onClick={() => setShowImg2ImgParams(!showImg2ImgParams)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">🎨 图生图 & 风格迁移</p>
+                  <p className="text-xs text-gray-500">参考图生成、Vibe Transfer等高级功能</p>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showImg2ImgParams ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showImg2ImgParams && (
+                <div className="space-y-4 pt-3 border-t border-indigo-100">
+                  {/* Reference Image (Img2Img) */}
+                  <div className="p-3 bg-white rounded-xl border border-indigo-200">
+                    <p className="font-medium text-indigo-700 mb-2">📷 参考图 (Img2Img)</p>
+                    <p className="text-xs text-gray-500 mb-3">上传一张参考图，AI会基于它生成新图</p>
+                    
+                    <div className="space-y-3">
+                      <Input
+                        type="text"
+                        value={novelaiReferenceImage}
+                        onChange={(e) => setNovelaiReferenceImage(e.target.value)}
+                        placeholder="粘贴图片URL，或留空不使用"
+                        className="rounded-xl bg-gray-50 border-gray-200 h-10 text-gray-700 text-sm"
+                      />
+                      
+                      {novelaiReferenceImage && (
+                        <div className="relative">
+                          <img 
+                            src={novelaiReferenceImage} 
+                            alt="参考图预览"
+                            className="w-20 h-20 object-cover rounded-lg border"
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                          <button
+                            onClick={() => setNovelaiReferenceImage('')}
+                            className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="text-xs text-indigo-600 mb-1 block">
+                          参考强度: {novelaiReferenceStrength.toFixed(2)}
+                        </label>
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="0.99"
+                          step="0.05"
+                          value={novelaiReferenceStrength}
+                          onChange={(e) => setNovelaiReferenceStrength(parseFloat(e.target.value))}
+                          className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                          <span>0.1 (几乎原图)</span>
+                          <span>0.99 (完全重绘)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vibe Transfer */}
+                  <div className="p-3 bg-white rounded-xl border border-indigo-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="font-medium text-indigo-700">✨ Vibe Transfer (风格迁移)</p>
+                        <p className="text-xs text-gray-500">使用参考图的风格来生成新图</p>
+                      </div>
+                      <button
+                        onClick={() => setNovelaiVibeTransfer(!novelaiVibeTransfer)}
+                        className={`w-12 h-6 rounded-full transition-all ${
+                          novelaiVibeTransfer ? 'bg-indigo-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                          novelaiVibeTransfer ? 'translate-x-6' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    
+                    {novelaiVibeTransfer && (
+                      <div className="space-y-3 mt-3 pt-3 border-t border-indigo-100">
+                        <Input
+                          type="text"
+                          value={novelaiVibeImage}
+                          onChange={(e) => setNovelaiVibeImage(e.target.value)}
+                          placeholder="粘贴风格参考图URL"
+                          className="rounded-xl bg-gray-50 border-gray-200 h-10 text-gray-700 text-sm"
+                        />
+                        
+                        {novelaiVibeImage && (
+                          <div className="relative inline-block">
+                            <img 
+                              src={novelaiVibeImage} 
+                              alt="风格参考图预览"
+                              className="w-20 h-20 object-cover rounded-lg border"
+                              onError={(e) => (e.currentTarget.style.display = 'none')}
+                            />
+                            <button
+                              onClick={() => setNovelaiVibeImage('')}
+                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )}
+                        
+                        <div>
+                          <label className="text-xs text-indigo-600 mb-1 block">
+                            风格强度: {novelaiVibeStrength.toFixed(2)}
+                          </label>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1.0"
+                            step="0.05"
+                            value={novelaiVibeStrength}
+                            onChange={(e) => setNovelaiVibeStrength(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400">
+                          💡 Vibe Transfer会提取参考图的风格特征应用到新生成的图片
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-gray-400 text-center">
+                    💡 这些功能需要NovelAI订阅支持，图片URL可以使用图床或base64
+                  </p>
                 </div>
               )}
             </div>

@@ -136,6 +136,11 @@ const ChatPage: React.FC = () => {
     customExpression?: string;
     nsfwMode?: boolean;
     characterPrompt?: string;
+    referenceImage?: string;
+    referenceStrength?: number;
+    vibeTransfer?: boolean;
+    vibeImage?: string;
+    vibeStrength?: number;
   } | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -391,6 +396,11 @@ const ChatPage: React.FC = () => {
           const customExpressionSetting = apiKeys.find(k => k.provider === 'novelai_custom_expression');
           const nsfwSetting = apiKeys.find(k => k.provider === 'novelai_nsfw');
           const characterPromptSetting = apiKeys.find(k => k.provider === 'novelai_character_prompt');
+          const refImageSetting = apiKeys.find(k => k.provider === 'novelai_reference_image');
+          const refStrengthSetting = apiKeys.find(k => k.provider === 'novelai_reference_strength');
+          const vibeTransferSetting = apiKeys.find(k => k.provider === 'novelai_vibe_transfer');
+          const vibeImageSetting = apiKeys.find(k => k.provider === 'novelai_vibe_image');
+          const vibeStrengthSetting = apiKeys.find(k => k.provider === 'novelai_vibe_strength');
           
           setNovelaiConfig({
             apiKey: novelaiKey.api_key,
@@ -407,6 +417,11 @@ const ChatPage: React.FC = () => {
             customExpression: customExpressionSetting?.api_key || '',
             nsfwMode: nsfwSetting?.api_key === 'true',
             characterPrompt: characterPromptSetting?.api_key || '',
+            referenceImage: refImageSetting?.api_key || '',
+            referenceStrength: refStrengthSetting ? parseFloat(refStrengthSetting.api_key) : 0.6,
+            vibeTransfer: vibeTransferSetting?.api_key === 'true',
+            vibeImage: vibeImageSetting?.api_key || '',
+            vibeStrength: vibeStrengthSetting ? parseFloat(vibeStrengthSetting.api_key) : 0.6,
           });
         }
         
@@ -661,12 +676,15 @@ const ChatPage: React.FC = () => {
       return { should: false, prompt: '' };
     }
 
-    // 构建画图提示词
+    // 构建画图提示词 - 自定义提示词放在最前面，优先级最高
     const promptParts: string[] = [];
-
-    // 添加用户自定义的角色外观提示词
-    if (novelaiConfig?.characterPrompt) {
-      promptParts.push(novelaiConfig.characterPrompt);
+    
+    // 最高优先级：用户自定义的角色外观提示词
+    const userCharacterPrompt = novelaiConfig?.characterPrompt?.trim();
+    if (userCharacterPrompt) {
+      // 直接作为最优先的提示词
+      promptParts.push(userCharacterPrompt);
+      console.log('Using custom character prompt:', userCharacterPrompt);
     }
 
     // 性别标签 - 根据设置决定
