@@ -46,7 +46,7 @@ async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boo
 async function getAICompletion(
   messages: Array<{ role: string; content: string }>,
   config: AIConfig,
-  maxTokens: number = 500
+  maxTokens: number = 2048
 ): Promise<string> {
   let apiUrl: string;
   let headers: Record<string, string> = {
@@ -91,7 +91,7 @@ async function getAICompletion(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -123,6 +123,8 @@ async function getAICompletion(
   console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
   
   let content = '';
+  let finishReason = data.choices?.[0]?.finish_reason || null;
+  
   // 尝试多种格式提取内容
   if (data.choices?.[0]?.message?.content) {
     content = data.choices[0].message.content;
@@ -152,16 +154,66 @@ async function getAICompletion(
     content = data;
   }
   
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
+  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY', "finish_reason:", finishReason);
+  
+  // 自动续写：如果 finish_reason 是 length，说明被截断了
+  let fullContent = content;
+  let continueCount = 0;
+  const maxContinue = 3;
+  
+  while (finishReason === 'length' && continueCount < maxContinue && fullContent.length > 0) {
+    continueCount++;
+    console.log(`Content truncated (finish_reason=length), auto-continuing... attempt ${continueCount}`);
+    
+    const continueMessages = [
+      ...messages,
+      { role: "assistant", content: fullContent },
+      { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
+    ];
+    
+    try {
+      const continueResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: continueMessages,
+          max_tokens: maxTokens,
+          stream: false,
+        }),
+      });
+      
+      if (continueResponse.ok) {
+        const continueData = await continueResponse.json();
+        const newContent = continueData.choices?.[0]?.message?.content || '';
+        finishReason = continueData.choices?.[0]?.finish_reason || null;
+        
+        if (newContent) {
+          fullContent += newContent;
+          console.log(`Continuation ${continueCount} added ${newContent.length} chars, new finish_reason: ${finishReason}`);
+        } else {
+          break;
+        }
+      } else {
+        console.error("Continue request failed:", continueResponse.status);
+        break;
+      }
+    } catch (continueError) {
+      console.error("Continue request error:", continueError);
+      break;
+    }
+  }
   
   // 如果内容为空，返回更有意义的错误信息
-  if (!content || content.trim() === '') {
+  if (!fullContent || fullContent.trim() === '') {
     console.error("Empty content from API. Full response:", JSON.stringify(data));
     return '(AI暂时无法回复，请稍后再试)';
   }
   
+  console.log(`Final content length: ${fullContent.length} chars, continued ${continueCount} times`);
+  
   // 清理内容 - 移除前后空白和多余换行
-  return content.trim().replace(/^\n+|\n+$/g, '');
+  return fullContent.trim().replace(/^\n+|\n+$/g, '');
 }
 
 serve(async (req) => {

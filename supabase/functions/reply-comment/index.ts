@@ -89,16 +89,22 @@ async function getAICompletion(
     throw new Error("请先在设置中配置API密钥");
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+
   const response = await fetch(apiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 1500,
+      max_tokens: 2048,
       stream: false,
     }),
+    signal: controller.signal,
   });
+
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -114,11 +120,8 @@ async function getAICompletion(
   const data = await response.json();
   
   // 检测是否被截断
-  const finishReason = data.choices?.[0]?.finish_reason;
+  let finishReason = data.choices?.[0]?.finish_reason;
   console.log("Finish reason:", finishReason);
-  if (finishReason === 'length') {
-    console.warn("Response was truncated due to max_tokens limit");
-  }
   
   console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
   
@@ -154,13 +157,63 @@ async function getAICompletion(
   
   console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
   
-  if (!content || content.trim() === '') {
+  // 自动续写：如果 finish_reason 是 length，说明被截断了
+  let fullContent = content;
+  let continueCount = 0;
+  const maxContinue = 3;
+  
+  while (finishReason === 'length' && continueCount < maxContinue && fullContent.length > 0) {
+    continueCount++;
+    console.log(`Content truncated (finish_reason=length), auto-continuing... attempt ${continueCount}`);
+    
+    const continueMessages = [
+      ...messages,
+      { role: "assistant", content: fullContent },
+      { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
+    ];
+    
+    try {
+      const continueResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: continueMessages,
+          max_tokens: 2048,
+          stream: false,
+        }),
+      });
+      
+      if (continueResponse.ok) {
+        const continueData = await continueResponse.json();
+        const newContent = continueData.choices?.[0]?.message?.content || '';
+        finishReason = continueData.choices?.[0]?.finish_reason || null;
+        
+        if (newContent) {
+          fullContent += newContent;
+          console.log(`Continuation ${continueCount} added ${newContent.length} chars, new finish_reason: ${finishReason}`);
+        } else {
+          break;
+        }
+      } else {
+        console.error("Continue request failed:", continueResponse.status);
+        break;
+      }
+    } catch (continueError) {
+      console.error("Continue request error:", continueError);
+      break;
+    }
+  }
+  
+  if (!fullContent || fullContent.trim() === '') {
     console.error("Empty content from API. Full response:", JSON.stringify(data));
     return '(AI暂时无法回复，请稍后再试)';
   }
   
+  console.log(`Final content length: ${fullContent.length} chars, continued ${continueCount} times`);
+  
   // 清理内容 - 移除前后空白和多余换行
-  return content.trim().replace(/^\n+|\n+$/g, '');
+  return fullContent.trim().replace(/^\n+|\n+$/g, '');
 }
 
 serve(async (req) => {

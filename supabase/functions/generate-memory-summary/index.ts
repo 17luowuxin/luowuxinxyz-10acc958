@@ -69,7 +69,7 @@ async function getAICompletion(
     body = {
       model: config.model || 'gpt-3.5-turbo',
       messages,
-      max_tokens: 500,
+      max_tokens: 2048,
     };
   } else if (config.provider === 'deepseek' && config.apiKey) {
     apiUrl = 'https://api.deepseek.com/chat/completions';
@@ -80,7 +80,7 @@ async function getAICompletion(
     body = {
       model: 'deepseek-chat',
       messages,
-      max_tokens: 500,
+      max_tokens: 2048,
     };
   } else if (config.provider === 'openai' && config.apiKey) {
     apiUrl = 'https://api.openai.com/v1/chat/completions';
@@ -91,7 +91,7 @@ async function getAICompletion(
     body = {
       model: 'gpt-4o-mini',
       messages,
-      max_tokens: 500,
+      max_tokens: 2048,
     };
   } else {
     // Use default Lovable AI
@@ -107,7 +107,7 @@ async function getAICompletion(
     body = {
       model: 'google/gemini-2.5-flash',
       messages,
-      max_tokens: 500,
+      max_tokens: 2048,
     };
   }
 
