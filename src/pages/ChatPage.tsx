@@ -460,7 +460,7 @@ const ChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    const baseClasses = 'max-w-[75%] min-w-[60px] px-4 py-2.5 shadow-sm whitespace-pre-wrap break-words';
+    const baseClasses = 'relative max-w-[75%] min-w-[60px] px-3 py-2 shadow-sm whitespace-pre-wrap break-words';
     
     switch (style) {
       case 'cloud':
@@ -1739,16 +1739,16 @@ const ChatPage: React.FC = () => {
               </div>
               
               {/* Bubble with Sanrio Decoration */}
-              <div className="relative">
+              <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {/* 图片消息 - 独立容器，不透明 */}
                 {msg.image_url && (
-                  <div className="mb-2 rounded-lg overflow-hidden bg-background shadow-sm">
+                  <div className="mb-1.5 rounded-xl overflow-hidden bg-background shadow-sm max-w-[240px]">
                     <img 
                       src={msg.image_url} 
                       alt="AI生成的图片" 
                       loading="lazy"
                       decoding="async"
-                      className="w-full max-w-[240px] rounded-md object-cover cursor-pointer hover:brightness-95 transition-all"
+                      className="w-full rounded-xl object-cover cursor-pointer hover:brightness-95 transition-all"
                       style={{ maxHeight: '320px' }}
                       onClick={() => window.open(msg.image_url, '_blank')}
                     />
@@ -1758,12 +1758,12 @@ const ChatPage: React.FC = () => {
                 {/* 文本气泡 - 应用透明度 */}
                 {msg.content && (
                   <div 
-                    className={`${getBubbleStyle(msg.role === 'user')}`}
+                    className={getBubbleStyle(msg.role === 'user')}
                     style={{ 
                       ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
                       color: msg.role === 'user' ? fontColor : friendFontColor,
                       fontSize: `${bubbleSize}px`,
-                      lineHeight: '1.5'
+                      lineHeight: '1.6'
                     }}
                   >
                     {/* 三丽鸥装饰图标 */}
@@ -1779,56 +1779,56 @@ const ChatPage: React.FC = () => {
                 
                 {/* 已读状态 - 仅用户消息显示 */}
                 {msg.role === 'user' && (
-                  <span className="absolute -bottom-4 right-0 text-[10px] text-muted-foreground">
+                  <span className="text-[10px] text-muted-foreground mt-0.5">
                     已读
                   </span>
                 )}
-                
-                {/* 长按菜单 */}
-                {longPressedMsg?.id === msg.id && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-30">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 px-2 text-xs gap-1"
-                      onClick={() => quoteMessage(msg)}
-                    >
-                      <Quote className="w-3 h-3" />
-                      引用
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive">
-                          <RotateCcw className="w-3 h-3" />
-                          回溯
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>回溯删除？</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            这将删除该消息及之后的所有消息，以便重新开始对话。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel onClick={() => setLongPressedMsg(null)}>取消</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteFromMessage(msg)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                            确认删除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8"
-                      onClick={() => setLongPressedMsg(null)}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                )}
               </div>
+              
+              {/* 长按菜单 */}
+              {longPressedMsg?.id === msg.id && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-30">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 px-2 text-xs gap-1"
+                    onClick={() => quoteMessage(msg)}
+                  >
+                    <Quote className="w-3 h-3" />
+                    引用
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive">
+                        <RotateCcw className="w-3 h-3" />
+                        回溯
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>回溯删除？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          这将删除该消息及之后的所有消息，以便重新开始对话。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setLongPressedMsg(null)}>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteFromMessage(msg)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          确认删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8"
+                    onClick={() => setLongPressedMsg(null)}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
             </div>
               </React.Fragment>
             );
