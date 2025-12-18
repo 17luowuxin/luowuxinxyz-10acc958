@@ -460,17 +460,17 @@ const ChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    // QQ风格：胶囊形气泡，紧凑内边距
-    const baseClasses = 'relative max-w-[70%] px-3.5 py-1.5 whitespace-pre-wrap break-words';
+    // 恢复最初版本：圆角矩形气泡，合适的内边距
+    const baseClasses = 'relative max-w-[70%] px-3 py-2 whitespace-pre-wrap break-words';
     
     switch (style) {
       case 'cloud':
-        return `${baseClasses} rounded-[20px]`;
+        return `${baseClasses} rounded-2xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
       case 'square':
-        return `${baseClasses} rounded-lg`;
+        return `${baseClasses} rounded-lg ${isUser ? 'rounded-br-none' : 'rounded-bl-none'}`;
       default:
-        // 默认胶囊形状
-        return `${baseClasses} rounded-[18px]`;
+        // 默认圆角矩形
+        return `${baseClasses} rounded-xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
     }
   };
 
@@ -1767,7 +1767,7 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* 文本气泡 - QQ风格胶囊气泡，应用透明度 */}
+                {/* 文本气泡 - 恢复最初版本样式 */}
                 {msg.content && (
                   <div 
                     className={getBubbleStyle(msg.role === 'user')}
@@ -1778,22 +1778,20 @@ const ChatPage: React.FC = () => {
                       lineHeight: '1.5'
                     }}
                   >
-                    {/* 三丽鸥装饰图标 */}
+                    {/* 装饰图标 */}
                     {msg.role === 'user' && getUserBubbleDecor() && (
-                      <span className="absolute -top-1.5 -right-1.5 text-xs drop-shadow-sm">{getUserBubbleDecor()}</span>
+                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
                     )}
                     {msg.role !== 'user' && getFriendBubbleDecor() && (
-                      <span className="absolute -top-1.5 -left-1.5 text-xs drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
                     )}
                     {msg.content}
                   </div>
                 )}
                 
-                {/* 已读状态 - 仅用户消息显示 */}
+                {/* 已读状态 */}
                 {msg.role === 'user' && (
-                  <span className="text-[10px] text-muted-foreground mt-0.5">
-                    已读
-                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 mt-0.5">已读</span>
                 )}
               </div>
               
