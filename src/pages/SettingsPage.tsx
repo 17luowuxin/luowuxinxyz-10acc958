@@ -28,6 +28,45 @@ const NOVELAI_STYLES = [
   { id: 'custom', name: '自定义', prompt: '' },
 ];
 
+const NOVELAI_GENDERS = [
+  { id: 'female', name: '女性', tag: '1girl' },
+  { id: 'male', name: '男性', tag: '1boy' },
+  { id: 'couple', name: '情侣', tag: '1girl, 1boy, couple' },
+  { id: 'auto', name: '根据角色设定', tag: '' },
+  { id: 'custom', name: '自定义', tag: '' },
+];
+
+const NOVELAI_ACTIONS = [
+  { id: 'none', name: '无', prompt: '' },
+  { id: 'standing', name: '站立', prompt: 'standing' },
+  { id: 'sitting', name: '坐着', prompt: 'sitting' },
+  { id: 'lying', name: '躺着', prompt: 'lying down, on bed' },
+  { id: 'kneeling', name: '跪着', prompt: 'kneeling' },
+  { id: 'walking', name: '走路', prompt: 'walking' },
+  { id: 'running', name: '跑步', prompt: 'running' },
+  { id: 'hugging', name: '拥抱', prompt: 'hugging, embrace' },
+  { id: 'kissing', name: '亲吻', prompt: 'kissing' },
+  { id: 'holding_hands', name: '牵手', prompt: 'holding hands' },
+  { id: 'sleeping', name: '睡觉', prompt: 'sleeping, eyes closed' },
+  { id: 'stretching', name: '伸懒腰', prompt: 'stretching, arms up' },
+  { id: 'custom', name: '自定义', prompt: '' },
+];
+
+const NOVELAI_EXPRESSIONS = [
+  { id: 'none', name: '无', prompt: '' },
+  { id: 'smile', name: '微笑', prompt: 'smile, happy' },
+  { id: 'blush', name: '害羞', prompt: 'blush, shy, embarrassed' },
+  { id: 'laugh', name: '大笑', prompt: 'laughing, open mouth' },
+  { id: 'cry', name: '哭泣', prompt: 'crying, tears' },
+  { id: 'angry', name: '生气', prompt: 'angry, frown' },
+  { id: 'surprised', name: '惊讶', prompt: 'surprised, wide eyes, open mouth' },
+  { id: 'seductive', name: '魅惑', prompt: 'seductive, bedroom eyes, parted lips' },
+  { id: 'sleepy', name: '困倦', prompt: 'sleepy, drowsy, half-closed eyes' },
+  { id: 'pout', name: '嘟嘴', prompt: 'pout, pouting' },
+  { id: 'wink', name: '眨眼', prompt: 'wink, one eye closed' },
+  { id: 'custom', name: '自定义', prompt: '' },
+];
+
 const NOVELAI_SAMPLERS = [
   { id: 'k_euler_ancestral', name: 'Euler Ancestral (推荐)' },
   { id: 'k_euler', name: 'Euler' },
@@ -87,6 +126,17 @@ const SettingsPage: React.FC = () => {
   const [novelaiCustomHeight, setNovelaiCustomHeight] = useState(1216);
   const [novelaiNegativePrompt, setNovelaiNegativePrompt] = useState('');
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
+  
+  // NovelAI character customization
+  const [novelaiGender, setNovelaiGender] = useState('auto');
+  const [novelaiCustomGender, setNovelaiCustomGender] = useState('');
+  const [novelaiAction, setNovelaiAction] = useState('none');
+  const [novelaiCustomAction, setNovelaiCustomAction] = useState('');
+  const [novelaiExpression, setNovelaiExpression] = useState('none');
+  const [novelaiCustomExpression, setNovelaiCustomExpression] = useState('');
+  const [novelaiNsfwMode, setNovelaiNsfwMode] = useState(false);
+  const [novelaiCharacterPrompt, setNovelaiCharacterPrompt] = useState('');
+  const [showCharacterParams, setShowCharacterParams] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -185,6 +235,24 @@ const SettingsPage: React.FC = () => {
         setNovelaiNegativePrompt(novelaiNegativeSetting.api_key);
       }
       
+      // Character customization settings
+      const genderSetting = data.find(k => k.provider === 'novelai_gender');
+      const customGenderSetting = data.find(k => k.provider === 'novelai_custom_gender');
+      const actionSetting = data.find(k => k.provider === 'novelai_action');
+      const customActionSetting = data.find(k => k.provider === 'novelai_custom_action');
+      const expressionSetting = data.find(k => k.provider === 'novelai_expression');
+      const customExpressionSetting = data.find(k => k.provider === 'novelai_custom_expression');
+      const nsfwSetting = data.find(k => k.provider === 'novelai_nsfw');
+      const characterPromptSetting = data.find(k => k.provider === 'novelai_character_prompt');
+      
+      if (genderSetting) setNovelaiGender(genderSetting.api_key);
+      if (customGenderSetting) setNovelaiCustomGender(customGenderSetting.api_key);
+      if (actionSetting) setNovelaiAction(actionSetting.api_key);
+      if (customActionSetting) setNovelaiCustomAction(customActionSetting.api_key);
+      if (expressionSetting) setNovelaiExpression(expressionSetting.api_key);
+      if (customExpressionSetting) setNovelaiCustomExpression(customExpressionSetting.api_key);
+      if (nsfwSetting) setNovelaiNsfwMode(nsfwSetting.api_key === 'true');
+      if (characterPromptSetting) setNovelaiCharacterPrompt(characterPromptSetting.api_key);
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
         setUsingDefaultApi(true);
@@ -412,6 +480,14 @@ const SettingsPage: React.FC = () => {
       'novelai_width',
       'novelai_height',
       'novelai_negative_prompt',
+      'novelai_gender',
+      'novelai_custom_gender',
+      'novelai_action',
+      'novelai_custom_action',
+      'novelai_expression',
+      'novelai_custom_expression',
+      'novelai_nsfw',
+      'novelai_character_prompt',
     ];
 
     const { error: delErr } = await supabase
@@ -436,6 +512,10 @@ const SettingsPage: React.FC = () => {
       { user_id: user.id, provider: 'novelai_sampler', api_key: novelaiSampler },
       { user_id: user.id, provider: 'novelai_width', api_key: selectedRes.width.toString() },
       { user_id: user.id, provider: 'novelai_height', api_key: selectedRes.height.toString() },
+      { user_id: user.id, provider: 'novelai_gender', api_key: novelaiGender },
+      { user_id: user.id, provider: 'novelai_action', api_key: novelaiAction },
+      { user_id: user.id, provider: 'novelai_expression', api_key: novelaiExpression },
+      { user_id: user.id, provider: 'novelai_nsfw', api_key: novelaiNsfwMode ? 'true' : 'false' },
     ];
 
     if (novelaiCustomStylePrompt.trim()) {
@@ -443,6 +523,18 @@ const SettingsPage: React.FC = () => {
     }
     if (novelaiNegativePrompt.trim()) {
       rows.push({ user_id: user.id, provider: 'novelai_negative_prompt', api_key: novelaiNegativePrompt.trim() });
+    }
+    if (novelaiCustomGender.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_custom_gender', api_key: novelaiCustomGender.trim() });
+    }
+    if (novelaiCustomAction.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_custom_action', api_key: novelaiCustomAction.trim() });
+    }
+    if (novelaiCustomExpression.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_custom_expression', api_key: novelaiCustomExpression.trim() });
+    }
+    if (novelaiCharacterPrompt.trim()) {
+      rows.push({ user_id: user.id, provider: 'novelai_character_prompt', api_key: novelaiCharacterPrompt.trim() });
     }
 
     const { error: insErr } = await supabase.from('api_keys').insert(rows);
@@ -947,6 +1039,184 @@ const SettingsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Character Customization Section */}
+            <div className="p-4 bg-rose-50/50 rounded-2xl space-y-4">
+              <button
+                onClick={() => setShowCharacterParams(!showCharacterParams)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">角色生成设置</p>
+                  <p className="text-xs text-gray-500">性别、动作、表情、无限制模式</p>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showCharacterParams ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showCharacterParams && (
+                <div className="space-y-4 pt-3 border-t border-rose-100">
+                  {/* Gender Selection */}
+                  <div>
+                    <label className="text-sm font-medium text-rose-600 mb-2 block">
+                      性别
+                    </label>
+                    <select
+                      value={novelaiGender}
+                      onChange={(e) => setNovelaiGender(e.target.value)}
+                      className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-300"
+                      style={{ 
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 12px center',
+                        backgroundSize: '20px'
+                      }}
+                    >
+                      {NOVELAI_GENDERS.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    {novelaiGender !== 'auto' && novelaiGender !== 'custom' && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        标签: {NOVELAI_GENDERS.find(g => g.id === novelaiGender)?.tag}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Custom Gender */}
+                  {novelaiGender === 'custom' && (
+                    <div>
+                      <label className="text-sm font-medium text-rose-600 mb-2 block">
+                        自定义性别标签
+                      </label>
+                      <Input
+                        placeholder="例如: 2girls, yuri, 或 3boys"
+                        value={novelaiCustomGender}
+                        onChange={(e) => setNovelaiCustomGender(e.target.value)}
+                        className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Action Selection */}
+                  <div>
+                    <label className="text-sm font-medium text-rose-600 mb-2 block">
+                      动作/姿态
+                    </label>
+                    <select
+                      value={novelaiAction}
+                      onChange={(e) => setNovelaiAction(e.target.value)}
+                      className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-300"
+                      style={{ 
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 12px center',
+                        backgroundSize: '20px'
+                      }}
+                    >
+                      {NOVELAI_ACTIONS.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                    {novelaiAction !== 'none' && novelaiAction !== 'custom' && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        标签: {NOVELAI_ACTIONS.find(a => a.id === novelaiAction)?.prompt}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Custom Action */}
+                  {novelaiAction === 'custom' && (
+                    <div>
+                      <label className="text-sm font-medium text-rose-600 mb-2 block">
+                        自定义动作提示词
+                      </label>
+                      <Input
+                        placeholder="例如: straddling, cowgirl position, riding"
+                        value={novelaiCustomAction}
+                        onChange={(e) => setNovelaiCustomAction(e.target.value)}
+                        className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Expression Selection */}
+                  <div>
+                    <label className="text-sm font-medium text-rose-600 mb-2 block">
+                      表情/神态
+                    </label>
+                    <select
+                      value={novelaiExpression}
+                      onChange={(e) => setNovelaiExpression(e.target.value)}
+                      className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-300"
+                      style={{ 
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 12px center',
+                        backgroundSize: '20px'
+                      }}
+                    >
+                      {NOVELAI_EXPRESSIONS.map((e) => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                    {novelaiExpression !== 'none' && novelaiExpression !== 'custom' && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        标签: {NOVELAI_EXPRESSIONS.find(e => e.id === novelaiExpression)?.prompt}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Custom Expression */}
+                  {novelaiExpression === 'custom' && (
+                    <div>
+                      <label className="text-sm font-medium text-rose-600 mb-2 block">
+                        自定义表情提示词
+                      </label>
+                      <Input
+                        placeholder="例如: ahegao, tongue out, rolling eyes"
+                        value={novelaiCustomExpression}
+                        onChange={(e) => setNovelaiCustomExpression(e.target.value)}
+                        className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Character Appearance Prompt */}
+                  <div>
+                    <label className="text-sm font-medium text-rose-600 mb-2 block">
+                      角色外观提示词
+                    </label>
+                    <textarea
+                      value={novelaiCharacterPrompt}
+                      onChange={(e) => setNovelaiCharacterPrompt(e.target.value)}
+                      placeholder="描述角色外观，如：long pink hair, blue eyes, cat ears, maid outfit..."
+                      className="w-full h-24 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-300"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      每次画图会自动加上这些外观描述
+                    </p>
+                  </div>
+
+                  {/* NSFW Mode Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-red-50 rounded-2xl border border-red-200">
+                    <div>
+                      <p className="font-medium text-red-700">🔞 无限制模式</p>
+                      <p className="text-xs text-red-500">移除安全词限制，允许成人内容</p>
+                    </div>
+                    <button
+                      onClick={() => setNovelaiNsfwMode(!novelaiNsfwMode)}
+                      className={`w-14 h-8 rounded-full transition-all ${
+                        novelaiNsfwMode ? 'bg-red-500' : 'bg-gray-300'
+                      }`}
+                    >
+                      <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                        novelaiNsfwMode ? 'translate-x-7' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Advanced Parameters Section */}

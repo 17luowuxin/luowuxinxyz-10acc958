@@ -17,6 +17,7 @@ interface NovelAIConfig {
   width?: number;
   height?: number;
   negativePrompt?: string;
+  nsfwMode?: boolean;
 }
 
 async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
@@ -48,6 +49,7 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
   const novelaiWidth = pickLatest("novelai_width");
   const novelaiHeight = pickLatest("novelai_height");
   const novelaiNegative = pickLatest("novelai_negative_prompt");
+  const novelaiNsfw = pickLatest("novelai_nsfw");
 
   if (!novelaiKey) return null;
 
@@ -60,6 +62,7 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
     width: novelaiWidth ? parseInt(novelaiWidth.api_key) : 832,
     height: novelaiHeight ? parseInt(novelaiHeight.api_key) : 1216,
     negativePrompt: novelaiNegative?.api_key,
+    nsfwMode: novelaiNsfw?.api_key === "true",
   };
 }
 
@@ -109,9 +112,11 @@ serve(async (req) => {
     });
 
     // V4 models need different parameters
-    // 添加 transparent background 到负面提示词防止生成透明图片
-    const defaultNegative = negativePrompt || config.negativePrompt ||
-      "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, transparent background, transparent, alpha channel";
+    // 根据NSFW模式决定负面提示词
+    const nsfwMode = config.nsfwMode || false;
+    const baseNegative = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, transparent background, transparent, alpha channel";
+    const sfwNegative = nsfwMode ? baseNegative : baseNegative + ", nsfw, nude, naked, explicit, sexual";
+    const defaultNegative = negativePrompt || config.negativePrompt || sfwNegative;
 
     // V4 specific parameters (based on NovelAI V4 API requirements)
     const v4Params = {

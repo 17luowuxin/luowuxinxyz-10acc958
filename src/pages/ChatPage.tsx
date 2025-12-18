@@ -128,6 +128,14 @@ const ChatPage: React.FC = () => {
     style?: string;
     customStylePrompt?: string;
     triggerKeywords?: string;
+    gender?: string;
+    customGender?: string;
+    action?: string;
+    customAction?: string;
+    expression?: string;
+    customExpression?: string;
+    nsfwMode?: boolean;
+    characterPrompt?: string;
   } | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -375,6 +383,15 @@ const ChatPage: React.FC = () => {
         const novelaiTriggerKeywords = apiKeys.find(k => k.provider === 'novelai_trigger_keywords');
         
         if (novelaiKey) {
+          const genderSetting = apiKeys.find(k => k.provider === 'novelai_gender');
+          const customGenderSetting = apiKeys.find(k => k.provider === 'novelai_custom_gender');
+          const actionSetting = apiKeys.find(k => k.provider === 'novelai_action');
+          const customActionSetting = apiKeys.find(k => k.provider === 'novelai_custom_action');
+          const expressionSetting = apiKeys.find(k => k.provider === 'novelai_expression');
+          const customExpressionSetting = apiKeys.find(k => k.provider === 'novelai_custom_expression');
+          const nsfwSetting = apiKeys.find(k => k.provider === 'novelai_nsfw');
+          const characterPromptSetting = apiKeys.find(k => k.provider === 'novelai_character_prompt');
+          
           setNovelaiConfig({
             apiKey: novelaiKey.api_key,
             model: novelaiModel?.api_key || 'nai-diffusion-3',
@@ -382,6 +399,14 @@ const ChatPage: React.FC = () => {
             style: novelaiStyle?.api_key || 'selfie',
             customStylePrompt: novelaiCustomStylePrompt?.api_key || '',
             triggerKeywords: novelaiTriggerKeywords?.api_key || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子',
+            gender: genderSetting?.api_key || 'auto',
+            customGender: customGenderSetting?.api_key || '',
+            action: actionSetting?.api_key || 'none',
+            customAction: customActionSetting?.api_key || '',
+            expression: expressionSetting?.api_key || 'none',
+            customExpression: customExpressionSetting?.api_key || '',
+            nsfwMode: nsfwSetting?.api_key === 'true',
+            characterPrompt: characterPromptSetting?.api_key || '',
           });
         }
         
@@ -639,22 +664,83 @@ const ChatPage: React.FC = () => {
     // 构建画图提示词
     const promptParts: string[] = [];
 
-    // 从角色人设判断性别
+    // 添加用户自定义的角色外观提示词
+    if (novelaiConfig?.characterPrompt) {
+      promptParts.push(novelaiConfig.characterPrompt);
+    }
+
+    // 性别标签 - 根据设置决定
     let genderTag = '1girl';
     let genderBase = 'anime girl';
-    if (character?.persona) {
-      const persona = character.persona.toLowerCase();
-      const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
-      const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(character.persona);
-      
-      if (isMale && !isFemale) {
-        genderTag = '1boy';
-        genderBase = 'anime boy';
-      } else if (!isMale && !isFemale) {
-        // 如果无法判断，根据名字猜测或保持默认
-        genderTag = '1person';
-        genderBase = 'anime character';
+    
+    const genderSetting = novelaiConfig?.gender || 'auto';
+    if (genderSetting === 'auto') {
+      // 从角色人设判断性别
+      if (character?.persona) {
+        const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
+        const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(character.persona);
+        
+        if (isMale && !isFemale) {
+          genderTag = '1boy';
+          genderBase = 'anime boy';
+        } else if (!isMale && !isFemale) {
+          genderTag = '1person';
+          genderBase = 'anime character';
+        }
       }
+    } else if (genderSetting === 'male') {
+      genderTag = '1boy';
+      genderBase = 'anime boy';
+    } else if (genderSetting === 'female') {
+      genderTag = '1girl';
+      genderBase = 'anime girl';
+    } else if (genderSetting === 'couple') {
+      genderTag = '1girl, 1boy, couple';
+      genderBase = 'anime couple';
+    } else if (genderSetting === 'custom' && novelaiConfig?.customGender) {
+      genderTag = novelaiConfig.customGender;
+      genderBase = 'anime characters';
+    }
+    
+    // 添加动作/姿态
+    const actionSetting = novelaiConfig?.action || 'none';
+    const actionPrompts: Record<string, string> = {
+      'none': '',
+      'standing': 'standing',
+      'sitting': 'sitting',
+      'lying': 'lying down, on bed',
+      'kneeling': 'kneeling',
+      'walking': 'walking',
+      'running': 'running',
+      'hugging': 'hugging, embrace',
+      'kissing': 'kissing',
+      'holding_hands': 'holding hands',
+      'sleeping': 'sleeping, eyes closed',
+      'stretching': 'stretching, arms up',
+      'custom': novelaiConfig?.customAction || '',
+    };
+    if (actionPrompts[actionSetting]) {
+      promptParts.push(actionPrompts[actionSetting]);
+    }
+    
+    // 添加表情/神态
+    const expressionSetting = novelaiConfig?.expression || 'none';
+    const expressionPrompts: Record<string, string> = {
+      'none': '',
+      'smile': 'smile, happy',
+      'blush': 'blush, shy, embarrassed',
+      'laugh': 'laughing, open mouth',
+      'cry': 'crying, tears',
+      'angry': 'angry, frown',
+      'surprised': 'surprised, wide eyes, open mouth',
+      'seductive': 'seductive, bedroom eyes, parted lips',
+      'sleepy': 'sleepy, drowsy, half-closed eyes',
+      'pout': 'pout, pouting',
+      'wink': 'wink, one eye closed',
+      'custom': novelaiConfig?.customExpression || '',
+    };
+    if (expressionPrompts[expressionSetting]) {
+      promptParts.push(expressionPrompts[expressionSetting]);
     }
 
     // 从角色人设提取外观特征
@@ -737,7 +823,11 @@ const ChatPage: React.FC = () => {
     }
 
     // 基础提示词 - 根据性别动态设置，添加背景防止透明
-    promptParts.push(`${character?.name || genderBase}, ${genderTag}, beautiful, high quality, detailed, masterpiece, simple background, white background`);
+    const nsfwMode = novelaiConfig?.nsfwMode || false;
+    const qualityTags = nsfwMode 
+      ? 'beautiful, high quality, detailed, masterpiece'
+      : 'beautiful, high quality, detailed, masterpiece, safe, sfw';
+    promptParts.push(`${character?.name || genderBase}, ${genderTag}, ${qualityTags}, simple background, white background`);
 
     const prompt = [...new Set(promptParts)].join(', ');
     console.log('Generated image prompt:', prompt);
