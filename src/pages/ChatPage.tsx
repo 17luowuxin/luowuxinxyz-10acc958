@@ -639,6 +639,24 @@ const ChatPage: React.FC = () => {
     // 构建画图提示词
     const promptParts: string[] = [];
 
+    // 从角色人设判断性别
+    let genderTag = '1girl';
+    let genderBase = 'anime girl';
+    if (character?.persona) {
+      const persona = character.persona.toLowerCase();
+      const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
+      const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(character.persona);
+      
+      if (isMale && !isFemale) {
+        genderTag = '1boy';
+        genderBase = 'anime boy';
+      } else if (!isMale && !isFemale) {
+        // 如果无法判断，根据名字猜测或保持默认
+        genderTag = '1person';
+        genderBase = 'anime character';
+      }
+    }
+
     // 从角色人设提取外观特征
     if (character?.persona) {
       const appearancePatterns = [
@@ -655,9 +673,25 @@ const ChatPage: React.FC = () => {
       }
       
       // 直接提取英文描述词
-      const englishDesc = character.persona.match(/\b((?:pink|blue|red|green|purple|white|black|blonde|silver|golden)\s+(?:hair|eyes?)|(?:long|short|twin\s*tails?|ponytail|bob)\s+hair|(?:big|small)\s+(?:breasts?|chest)|(?:slim|curvy|petite)\s+(?:body|figure))\b/gi);
+      const englishDesc = character.persona.match(/\b((?:pink|blue|red|green|purple|white|black|blonde|silver|golden|brown)\s+(?:hair|eyes?)|(?:long|short|twin\s*tails?|ponytail|bob|spiky|messy)\s+hair|(?:big|small)\s+(?:breasts?|chest)|(?:slim|curvy|petite|muscular|tall|short)\s+(?:body|figure|build))\b/gi);
       if (englishDesc) {
         promptParts.push(...englishDesc);
+      }
+    }
+
+    // 从最近聊天记录提取上下文（最近3条）
+    const recentMessages = messages.slice(-6);
+    for (const msg of recentMessages) {
+      const sceneFromChat = extractSceneDetails(msg.content);
+      if (sceneFromChat.length > 0) {
+        const zhToEnChat: Record<string, string> = {
+          '微笑': 'smiling', '害羞': 'shy, blushing', '脸红': 'blushing',
+          '卧室': 'bedroom', '客厅': 'living room', '海边': 'beach',
+          '校服': 'school uniform', '泳装': 'swimsuit', '睡衣': 'pajamas',
+        };
+        for (const d of sceneFromChat.slice(0, 3)) {
+          promptParts.push(zhToEnChat[d] || d);
+        }
       }
     }
 
@@ -702,8 +736,8 @@ const ChatPage: React.FC = () => {
       if (cleaned) promptParts.push(cleaned);
     }
 
-    // 基础提示词
-    promptParts.push(`${character?.name || 'anime girl'}, 1girl, beautiful, high quality, detailed, masterpiece`);
+    // 基础提示词 - 根据性别动态设置，添加背景防止透明
+    promptParts.push(`${character?.name || genderBase}, ${genderTag}, beautiful, high quality, detailed, masterpiece, simple background, white background`);
 
     const prompt = [...new Set(promptParts)].join(', ');
     console.log('Generated image prompt:', prompt);
