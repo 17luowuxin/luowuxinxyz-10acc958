@@ -642,7 +642,7 @@ const ChatPage: React.FC = () => {
     // 从角色人设提取外观特征
     if (character?.persona) {
       const appearancePatterns = [
-        /(?:外貌|外观|样貌|长相|形象|特征|appearance)[：:]\s*([^。\n]+)/i,
+        /(?:外貌|外观|样貌|长相|形象|特征|appearance)[：:]\s*([^。\n]+)/ig,
         /(?:头发|发色|眼睛|眼色|瞳色)[：:]?\s*([^，。\n]+)/g,
         /(?:身高|体型|身材)[：:]?\s*([^，。\n]+)/g,
       ];
