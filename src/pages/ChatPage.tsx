@@ -602,12 +602,22 @@ const ChatPage: React.FC = () => {
 
   // 智能提取场景、动作、服装描述
   const extractSceneDetails = (text: string): string[] => {
+    if (!text) return [];
+    
+    // 过滤掉图片消息和系统消息
+    if (text.includes('给你发了一张图片') || text.startsWith('[TRANSFER') || text.startsWith('*给你发了')) {
+      return [];
+    }
+    
     const details: string[] = [];
     
-    // 提取 *动作/场景* 描述 - 这是最重要的上下文来源
+    // 提取 *动作/场景* 描述 - 这是最重要的上下文来源，但过滤掉图片相关描述
     const actionMatches = text.match(/\*([^*]{2,100})\*/g);
     if (actionMatches) {
-      details.push(...actionMatches.map(s => s.replace(/\*/g, '').trim()));
+      const filtered = actionMatches
+        .map(s => s.replace(/\*/g, '').trim())
+        .filter(s => !s.includes('发了一张图片') && !s.includes('给你发'));
+      details.push(...filtered);
     }
     
     // 服装/穿着描述
@@ -762,11 +772,13 @@ const ChatPage: React.FC = () => {
     // 构建画图提示词 - 从对话内容智能提取场景
     const promptParts: string[] = [...userIntentParts];
     
-    // 从最近对话中提取场景描述（用户消息+AI回复）
-    const recentDialogue = messages.slice(-10);
+    // 从最近对话中提取场景描述（用户消息+AI回复），过滤掉图片消息
+    const recentDialogue = messages.slice(-10).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
     const dialogueContext: string[] = [];
     
     for (const msg of recentDialogue) {
+      // 跳过系统性消息
+      if (msg.content?.startsWith('*给你发了') || msg.content?.startsWith('[TRANSFER')) continue;
       const sceneFromMsg = extractSceneDetails(msg.content);
       dialogueContext.push(...sceneFromMsg);
     }
@@ -1040,15 +1052,8 @@ const ChatPage: React.FC = () => {
       }
       
       if (data?.success && data?.imageUrl) {
-        // 生成描述性内容，让角色知道自己发的什么图
-        const promptDescription = prompt
-          .split(',')
-          .slice(0, 5)
-          .map(p => p.trim())
-          .filter(p => p.length > 1)
-          .join('、');
-        
-        const imageContent = `*给你发了一张图片~* ${promptDescription ? `\n*（${promptDescription}）*` : ''}`;
+        // 图片消息 - 只发图片，不显示提示词
+        const imageContent = '';
         
         // 添加图片消息
         const imageMsg = {
@@ -1060,7 +1065,7 @@ const ChatPage: React.FC = () => {
         
         setMessages(prev => [...prev, imageMsg]);
         
-        // 保存到数据库
+        // 保存到数据库 - content为空，只保存图片URL
         await supabase.from('chat_messages').insert({
           user_id: user.id,
           character_id: characterId,
