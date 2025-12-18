@@ -184,20 +184,23 @@ const ChatPage: React.FC = () => {
   };
 
   const fetchMessagesWithTransfers = async () => {
-    // 获取聊天消息
-    const { data: chatData } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('character_id', characterId)
-      .order('created_at');
+    // 并行获取聊天消息和转账记录
+    const [chatResult, transferResult] = await Promise.all([
+      supabase
+        .from('chat_messages')
+        .select('id, role, content, created_at, image_url')
+        .eq('character_id', characterId)
+        .order('created_at'),
+      supabase
+        .from('dream_transactions')
+        .select('*')
+        .eq('character_id', characterId)
+        .eq('user_id', user?.id)
+        .order('created_at')
+    ]);
     
-    // 获取该角色的转账记录
-    const { data: transferData } = await supabase
-      .from('dream_transactions')
-      .select('*')
-      .eq('character_id', characterId)
-      .eq('user_id', user?.id)
-      .order('created_at');
+    const chatData = chatResult.data;
+    const transferData = transferResult.data;
     
     // 合并消息和转账记录
     const allItems: any[] = [];
@@ -983,18 +986,35 @@ const ChatPage: React.FC = () => {
     }
     
     const userMessage = { role: 'user', content: messageContent };
-    const originalInput = input; // 保存原始输入用于转账检测
-    setMessages(prev => [...prev, { ...userMessage, id: Date.now(), quotedMessage }]);
+    const tempId = Date.now();
+    
+    // 先清空输入，防止重复发送
     setInput('');
     setQuotedMessage(null);
     setLoading(true);
-
-    await supabase.from('chat_messages').insert({ 
-      user_id: user?.id, 
-      character_id: characterId, 
-      role: 'user', 
-      content: messageContent 
-    });
+    
+    // 先保存到数据库，确保消息不丢失
+    const { data: savedMsg, error: saveError } = await supabase
+      .from('chat_messages')
+      .insert({ 
+        user_id: user?.id, 
+        character_id: characterId, 
+        role: 'user', 
+        content: messageContent 
+      })
+      .select()
+      .single();
+    
+    if (saveError) {
+      console.error('Save message error:', saveError);
+      toast.error('发送失败，请重试');
+      setLoading(false);
+      setInput(messageContent); // 恢复输入
+      return;
+    }
+    
+    // 消息保存成功后再更新UI
+    setMessages(prev => [...prev, { ...userMessage, id: savedMsg?.id || tempId, quotedMessage }]);
 
     try {
       const recentMessages = messages
@@ -1341,12 +1361,21 @@ const ChatPage: React.FC = () => {
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
   const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
   
+  // 将hex颜色转为rgba
+  const hexToRgba = (hex: string, alpha: number) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+  
   const getUserBubbleStyle = () => {
     const frame = bubbleFramePresets[userBubbleFrame];
     if (frame) {
       return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
     }
-    return { backgroundColor: userBubbleColor };
+    // 使用背景透明度而不是元素透明度
+    return { backgroundColor: hexToRgba(userBubbleColor, bubbleOpacity) };
   };
   
   const getFriendBubbleStyle = () => {
@@ -1354,7 +1383,7 @@ const ChatPage: React.FC = () => {
     if (frame) {
       return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
     }
-    return { backgroundColor: friendBubbleColor };
+    return { backgroundColor: hexToRgba(friendBubbleColor, bubbleOpacity) };
   };
   
   const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
@@ -1597,7 +1626,6 @@ const ChatPage: React.FC = () => {
                 className={`${getBubbleStyle(msg.role === 'user')} relative`}
                 style={{ 
                   ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
-                  opacity: bubbleOpacity,
                   color: msg.role === 'user' ? fontColor : friendFontColor,
                   fontSize: `${bubbleSize}px`,
                   lineHeight: '1.5'
@@ -1611,15 +1639,19 @@ const ChatPage: React.FC = () => {
                   <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
                 )}
                 
-                {/* 图片消息 */}
+                {/* 图片消息 - 不继承气泡透明度 */}
                 {msg.image_url && (
-                  <div className="mb-2 rounded-lg border border-border bg-card p-1">
+                  <div 
+                    className="mb-2 rounded-lg border border-border bg-card p-1"
+                    style={{ opacity: 1 }}
+                  >
                     <img 
                       src={msg.image_url} 
-                      alt="AI生成的正方形图片" 
+                      alt="AI生成的图片" 
                       loading="lazy"
-                      className="aspect-square w-full rounded-md object-cover cursor-pointer hover:opacity-90"
-                      style={{ maxHeight: '300px' }}
+                      decoding="async"
+                      className="aspect-square w-full rounded-md object-cover cursor-pointer hover:brightness-95 transition-all"
+                      style={{ maxHeight: '300px', opacity: 1 }}
                       onClick={() => window.open(msg.image_url, '_blank')}
                     />
                   </div>
