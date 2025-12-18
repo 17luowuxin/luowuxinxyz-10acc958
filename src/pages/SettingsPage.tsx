@@ -1401,28 +1401,49 @@ const SettingsPage: React.FC = () => {
                     <p className="text-xs text-gray-500 mb-3">上传一张参考图，AI会基于它生成新图</p>
                     
                     <div className="space-y-3">
-                      <Input
-                        type="text"
-                        value={novelaiReferenceImage}
-                        onChange={(e) => setNovelaiReferenceImage(e.target.value)}
-                        placeholder="粘贴图片URL，或留空不使用"
-                        className="rounded-xl bg-gray-50 border-gray-200 h-10 text-gray-700 text-sm"
-                      />
+                      <div className="flex gap-2">
+                        <label className="flex-1 cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file || !user) return;
+                              try {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  const base64 = ev.target?.result as string;
+                                  setNovelaiReferenceImage(base64);
+                                  toast.success('参考图已上传');
+                                };
+                                reader.readAsDataURL(file);
+                              } catch (err) {
+                                toast.error('上传失败');
+                              }
+                            }}
+                          />
+                          <div className="w-full py-2.5 px-4 rounded-xl bg-indigo-100 text-indigo-700 text-sm font-medium text-center hover:bg-indigo-200 transition-colors">
+                            📤 上传参考图
+                          </div>
+                        </label>
+                        {novelaiReferenceImage && (
+                          <button
+                            onClick={() => setNovelaiReferenceImage('')}
+                            className="px-4 py-2.5 rounded-xl bg-red-100 text-red-600 text-sm font-medium hover:bg-red-200"
+                          >
+                            清除
+                          </button>
+                        )}
+                      </div>
                       
                       {novelaiReferenceImage && (
-                        <div className="relative">
+                        <div className="relative inline-block">
                           <img 
                             src={novelaiReferenceImage} 
                             alt="参考图预览"
-                            className="w-20 h-20 object-cover rounded-lg border"
-                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                            className="w-24 h-24 object-cover rounded-lg border"
                           />
-                          <button
-                            onClick={() => setNovelaiReferenceImage('')}
-                            className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs"
-                          >
-                            ×
-                          </button>
                         </div>
                       )}
                       
@@ -1468,28 +1489,49 @@ const SettingsPage: React.FC = () => {
                     
                     {novelaiVibeTransfer && (
                       <div className="space-y-3 mt-3 pt-3 border-t border-indigo-100">
-                        <Input
-                          type="text"
-                          value={novelaiVibeImage}
-                          onChange={(e) => setNovelaiVibeImage(e.target.value)}
-                          placeholder="粘贴风格参考图URL"
-                          className="rounded-xl bg-gray-50 border-gray-200 h-10 text-gray-700 text-sm"
-                        />
+                        <div className="flex gap-2">
+                          <label className="flex-1 cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !user) return;
+                                try {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    const base64 = ev.target?.result as string;
+                                    setNovelaiVibeImage(base64);
+                                    toast.success('风格参考图已上传');
+                                  };
+                                  reader.readAsDataURL(file);
+                                } catch (err) {
+                                  toast.error('上传失败');
+                                }
+                              }}
+                            />
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-indigo-100 text-indigo-700 text-sm font-medium text-center hover:bg-indigo-200 transition-colors">
+                              📤 上传风格参考图
+                            </div>
+                          </label>
+                          {novelaiVibeImage && (
+                            <button
+                              onClick={() => setNovelaiVibeImage('')}
+                              className="px-4 py-2.5 rounded-xl bg-red-100 text-red-600 text-sm font-medium hover:bg-red-200"
+                            >
+                              清除
+                            </button>
+                          )}
+                        </div>
                         
                         {novelaiVibeImage && (
                           <div className="relative inline-block">
                             <img 
                               src={novelaiVibeImage} 
                               alt="风格参考图预览"
-                              className="w-20 h-20 object-cover rounded-lg border"
-                              onError={(e) => (e.currentTarget.style.display = 'none')}
+                              className="w-24 h-24 object-cover rounded-lg border"
                             />
-                            <button
-                              onClick={() => setNovelaiVibeImage('')}
-                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs"
-                            >
-                              ×
-                            </button>
                           </div>
                         )}
                         
@@ -1515,7 +1557,7 @@ const SettingsPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-gray-400 text-center">
-                    💡 这些功能需要NovelAI订阅支持，图片URL可以使用图床或base64
+                    💡 图片会转为base64直接传给NovelAI
                   </p>
                 </div>
               )}
