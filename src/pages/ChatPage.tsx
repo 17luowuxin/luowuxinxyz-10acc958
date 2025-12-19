@@ -460,18 +460,24 @@ const ChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    // 恢复最初版本：圆角矩形气泡，合适的内边距
-    const baseClasses = 'relative max-w-[70%] px-3 py-2 whitespace-pre-wrap break-words';
-    
+    // 仅控制外形；内边距由 bubble_size 动态计算，保证“气泡大小”同步
+    const baseClasses = 'relative max-w-[70%] whitespace-pre-wrap break-words';
+
     switch (style) {
       case 'cloud':
         return `${baseClasses} rounded-2xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
       case 'square':
         return `${baseClasses} rounded-lg ${isUser ? 'rounded-br-none' : 'rounded-bl-none'}`;
       default:
-        // 默认圆角矩形
         return `${baseClasses} rounded-xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
     }
+  };
+
+  const getBubblePadding = (fontSizePx: number) => {
+    const scale = Math.max(0.85, Math.min(1.35, fontSizePx / 16));
+    const px = Math.round(12 * scale);
+    const py = Math.round(8 * scale);
+    return `${py}px ${px}px`;
   };
 
   const addEmoji = (emoji: string) => {
@@ -1485,35 +1491,31 @@ const ChatPage: React.FC = () => {
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
   const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
   
-  // 将hex颜色转为rgba
-  const hexToRgba = (hex: string, alpha: number) => {
-    // 处理可能的非hex颜色值
-    if (!hex || !hex.startsWith('#')) {
-      return `rgba(180, 220, 255, ${alpha})`; // 默认淡蓝色
+  const normalizeHex = (value: string, fallback: string) => {
+    if (typeof value !== 'string') return fallback;
+    const hex = value.trim();
+    if (hex.startsWith('#') && hex.length === 7) return hex;
+    if (hex.startsWith('#') && hex.length === 4) {
+      const r = hex[1];
+      const g = hex[2];
+      const b = hex[3];
+      return `#${r}${r}${g}${g}${b}${b}`;
     }
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    return fallback;
   };
-  
-  const getUserBubbleStyle = () => {
-    const frame = bubbleFramePresets[userBubbleFrame];
-    if (frame) {
-      return { background: frame.gradient };
-    }
-    // 使用背景透明度 - QQ风格半透明气泡
-    return { backgroundColor: hexToRgba(userBubbleColor, bubbleOpacity) };
+
+  const getBubbleBackgroundStyle = (isUser: boolean) => {
+    const frameId = isUser ? userBubbleFrame : friendBubbleFrame;
+    const frame = bubbleFramePresets[frameId];
+    if (frame) return { background: frame.gradient };
+
+    const fallback = 'hsl(var(--muted))';
+    const hex = normalizeHex(isUser ? userBubbleColor : friendBubbleColor, fallback);
+    return { backgroundColor: hex };
   };
-  
-  const getFriendBubbleStyle = () => {
-    const frame = bubbleFramePresets[friendBubbleFrame];
-    if (frame) {
-      return { background: frame.gradient };
-    }
-    // 使用背景透明度 - QQ风格半透明气泡
-    return { backgroundColor: hexToRgba(friendBubbleColor, bubbleOpacity) };
-  };
+
+  const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
+  const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
   
   const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
   const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
@@ -1767,25 +1769,41 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* 文本气泡 - 恢复最初版本样式 */}
+                {/* 文本气泡 - 横排（禁用竖排），气泡大小/透明度同步美化设置 */}
                 {msg.content && (
-                  <div 
+                  <div
                     className={getBubbleStyle(msg.role === 'user')}
-                    style={{ 
-                      ...(msg.role === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
+                    style={{
                       color: msg.role === 'user' ? fontColor : friendFontColor,
                       fontSize: `${bubbleSize}px`,
-                      lineHeight: '1.5'
+                      lineHeight: '1.5',
+                      // 强制横向排版，避免出现竖排/列排
+                      writingMode: 'horizontal-tb',
+                      textOrientation: 'mixed',
+                      direction: 'ltr',
+                      // 气泡大小（内边距）随 bubble_size 同步
+                      padding: getBubblePadding(bubbleSize),
                     }}
                   >
+                    {/* 背景层：只对背景应用透明度，文字不受影响 */}
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 rounded-[inherit] z-0"
+                      style={{
+                        ...getBubbleBackgroundStyle(msg.role === 'user'),
+                        opacity: bubbleOpacity,
+                      }}
+                    />
+
                     {/* 装饰图标 */}
                     {msg.role === 'user' && getUserBubbleDecor() && (
-                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm">{getUserBubbleDecor()}</span>
+                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
                     )}
                     {msg.role !== 'user' && getFriendBubbleDecor() && (
-                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm">{getFriendBubbleDecor()}</span>
+                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
                     )}
-                    {msg.content}
+
+                    <span className="relative z-10">{msg.content}</span>
                   </div>
                 )}
                 
