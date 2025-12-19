@@ -461,7 +461,8 @@ const ChatPage: React.FC = () => {
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
     // 仅控制外形；内边距由 bubble_size 动态计算，保证“气泡大小”同步
-    const baseClasses = 'relative max-w-[70%] whitespace-pre-wrap break-words';
+    // 强制横向文本流：inline-block保证自适应宽度，min-w防止过窄导致竖排
+    const baseClasses = 'relative inline-block min-w-[2em] max-w-[70%]';
 
     switch (style) {
       case 'cloud':
@@ -1773,11 +1774,14 @@ const ChatPage: React.FC = () => {
                     style={{
                       color: msg.role === 'user' ? fontColor : friendFontColor,
                       fontSize: `${bubbleSize}px`,
-                      lineHeight: '1.5',
-                      // 强制横向排版，避免出现竖排/列排
+                      // 强制横向排版：禁用任何竖排/列排模式
                       writingMode: 'horizontal-tb',
                       textOrientation: 'mixed',
                       direction: 'ltr',
+                      textAlign: 'left',
+                      wordBreak: 'break-word',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.5,
                       // 气泡大小（内边距）随 bubble_size 同步
                       padding: getBubblePadding(bubbleSize),
                     }}
@@ -1800,7 +1804,7 @@ const ChatPage: React.FC = () => {
                       <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
                     )}
 
-                    <span className="relative z-10">{msg.content}</span>
+                    <span className="relative z-10" style={{ display: 'inline' }}>{msg.content}</span>
                   </div>
                 )}
                 
