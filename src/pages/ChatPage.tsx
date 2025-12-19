@@ -1516,9 +1516,6 @@ const ChatPage: React.FC = () => {
 
   const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
   const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
-  
-  const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
-  const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
