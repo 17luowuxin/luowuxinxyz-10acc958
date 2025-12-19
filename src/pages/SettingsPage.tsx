@@ -889,7 +889,15 @@ const SettingsPage: React.FC = () => {
               <p className="text-xs text-gray-500">关闭后将不会生成任何图片</p>
             </div>
             <button
-              onClick={() => setNovelaiEnabled(!novelaiEnabled)}
+              onClick={async () => {
+                const newVal = !novelaiEnabled;
+                setNovelaiEnabled(newVal);
+                // 立即保存开关状态到数据库，即使还没配置 API Key
+                if (user) {
+                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'novelai_enabled');
+                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_enabled', api_key: newVal ? 'true' : 'false' });
+                }
+              }}
               className={`w-14 h-8 rounded-full transition-all ${
                 novelaiEnabled ? 'bg-pink-400' : 'bg-gray-300'
               }`}

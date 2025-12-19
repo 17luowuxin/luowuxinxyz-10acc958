@@ -686,8 +686,12 @@ const ChatPage: React.FC = () => {
     userInput: string,
     aiResponse: string,
   ): { should: boolean; prompt: string } => {
-    // 检查画图功能是否启用
+    // 检查画图功能是否启用（显式设为 false 才关闭）
     if (novelaiConfig?.enabled === false) {
+      return { should: false, prompt: '' };
+    }
+    // 没有配 API Key 则也视为关闭
+    if (!novelaiConfig?.apiKey) {
       return { should: false, prompt: '' };
     }
     
