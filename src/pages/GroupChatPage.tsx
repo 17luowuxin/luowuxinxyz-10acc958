@@ -444,9 +444,9 @@ const GroupChatPage: React.FC = () => {
 
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
-    // 确保气泡有最小宽度，防止文字竖排
-    const baseClasses = `min-w-[40px] max-w-[75%] px-3 py-2 shadow-sm`;
-    
+    // 防竖排：group chat 同步 ChatPage 策略（inline-block + 外层 flex-1/min-w-0 + render 时 minWidth）
+    const baseClasses = `relative inline-block max-w-[75%] px-3 py-2 shadow-sm whitespace-pre-wrap break-words`;
+
     switch (style) {
       case 'cloud':
         return `${baseClasses} rounded-[20px] ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
@@ -641,7 +641,7 @@ const GroupChatPage: React.FC = () => {
               </div>
 
               {/* Bubble - 紧贴头像，gap-1.5 */}
-              <div className={`flex flex-col max-w-[calc(100%-48px)] ${msg.sender_type === 'user' ? 'mr-1.5 items-end' : 'ml-1.5 items-start'}`}>
+              <div className={`flex flex-col flex-1 min-w-0 max-w-[calc(100%-48px)] ${msg.sender_type === 'user' ? 'mr-1.5 items-end' : 'ml-1.5 items-start'}`}>
                 {msg.sender_type === 'character' && (
                   <p className="text-xs text-muted-foreground mb-0.5">{msg.characterName}</p>
                 )}
@@ -649,15 +649,17 @@ const GroupChatPage: React.FC = () => {
                   className={getBubbleStyle(msg.sender_type === 'user')}
                   style={{
                     ...(msg.sender_type === 'user' ? getUserBubbleStyle() : getFriendBubbleStyle()),
-                    opacity: customization.bubble_opacity || 1,
+                    opacity: customization.bubble_opacity ?? 1,
                     color: msg.sender_type === 'user' ? fontColor : friendFontColor,
                     fontSize: `${customization.bubble_size || 16}px`,
                     lineHeight: '1.5',
                     wordBreak: 'break-word',
-                    overflowWrap: 'break-word',
+                    overflowWrap: 'anywhere',
                     whiteSpace: 'pre-wrap',
                     writingMode: 'horizontal-tb',
-                    textOrientation: 'mixed'
+                    textOrientation: 'mixed',
+                    // 防止气泡被挤窄导致单字换行（看起来像竖排）
+                    minWidth: `${Math.max(140, Math.round((customization.bubble_size || 16) * 9))}px`,
                   }}
                 >
                   {msg.content}
