@@ -658,8 +658,8 @@ const GroupChatPage: React.FC = () => {
                     whiteSpace: 'pre-wrap',
                     writingMode: 'horizontal-tb',
                     textOrientation: 'mixed',
-                    // 防止气泡被挤窄导致单字换行（看起来像竖排）
-                    minWidth: `${Math.max(140, Math.round((customization.bubble_size || 16) * 9))}px`,
+                    // 气泡自适应内容宽度
+                    width: 'fit-content',
                   }}
                 >
                   {msg.content}

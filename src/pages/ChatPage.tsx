@@ -1793,8 +1793,8 @@ const ChatPage: React.FC = () => {
                       whiteSpace: 'pre-wrap',
                       lineHeight: 1.5,
 
-                      // 防止气泡被挤窄导致单字换行（看起来像竖排）
-                      minWidth: `${Math.max(140, Math.round(bubbleSize * 9))}px`,
+                      // 气泡自适应内容宽度，不设置强制最小宽度
+                      width: 'fit-content',
 
                       // 气泡大小（内边距）随 bubble_size 同步
                       padding: getBubblePadding(bubbleSize),
