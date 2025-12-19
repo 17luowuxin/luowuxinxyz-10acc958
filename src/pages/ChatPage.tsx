@@ -461,8 +461,8 @@ const ChatPage: React.FC = () => {
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
     // 仅控制外形；内边距由 bubble_size 动态计算，保证“气泡大小”同步
-    // 气泡宽度：由内容自适应，但给一个“最小可读宽度”，避免中文被挤成单字换行看起来像竖排
-    const baseClasses = 'relative max-w-[70%] whitespace-pre-wrap break-words';
+    // 防竖排：在 items-start/end 的列布局里，子元素会 shrink-to-fit，中文可能被挤成单字换行；用 inline-block + minWidth（在 render 里）兜底
+    const baseClasses = 'relative inline-block max-w-[70%] whitespace-pre-wrap break-words';
 
     switch (style) {
       case 'cloud':
@@ -1772,8 +1772,13 @@ const ChatPage: React.FC = () => {
                   <div
                     className={getBubbleStyle(msg.role === 'user')}
                     style={{
+                      // 气泡样式（背景/边框）+ 透明度：同时作用于文字与气泡背景
+                      ...getBubbleBackgroundStyle(msg.role === 'user'),
+                      opacity: bubbleOpacity,
+
                       color: msg.role === 'user' ? fontColor : friendFontColor,
                       fontSize: `${bubbleSize}px`,
+
                       // 强制横向排版：禁用任何竖排/列排模式
                       writingMode: 'horizontal-tb',
                       textOrientation: 'mixed',
@@ -1783,22 +1788,14 @@ const ChatPage: React.FC = () => {
                       overflowWrap: 'anywhere',
                       whiteSpace: 'pre-wrap',
                       lineHeight: 1.5,
+
                       // 防止气泡被挤窄导致单字换行（看起来像竖排）
-                      minWidth: `${Math.round(bubbleSize * 5)}px`,
+                      minWidth: `${Math.max(140, Math.round(bubbleSize * 9))}px`,
+
                       // 气泡大小（内边距）随 bubble_size 同步
                       padding: getBubblePadding(bubbleSize),
                     }}
                   >
-                    {/* 背景层：只对背景应用透明度，文字不受影响 */}
-                    <div
-                      aria-hidden
-                      className="absolute inset-0 rounded-[inherit] z-0"
-                      style={{
-                        ...getBubbleBackgroundStyle(msg.role === 'user'),
-                        opacity: bubbleOpacity,
-                      }}
-                    />
-
                     {/* 装饰图标 */}
                     {msg.role === 'user' && getUserBubbleDecor() && (
                       <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
