@@ -461,8 +461,8 @@ const ChatPage: React.FC = () => {
   const getBubbleStyle = (isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
     // 仅控制外形；内边距由 bubble_size 动态计算，保证“气泡大小”同步
-    // 强制横向文本流：inline-block保证自适应宽度，min-w防止过窄导致竖排
-    const baseClasses = 'relative inline-block min-w-[2em] max-w-[70%]';
+    // 气泡宽度：由内容自适应，但给一个“最小可读宽度”，避免中文被挤成单字换行看起来像竖排
+    const baseClasses = 'relative max-w-[70%] whitespace-pre-wrap break-words';
 
     switch (style) {
       case 'cloud':
@@ -1751,7 +1751,7 @@ const ChatPage: React.FC = () => {
                   </div>
                   
               {/* Bubble with Sanrio Decoration */}
-              <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`flex flex-col flex-1 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {/* 图片消息 - 独立容器，不透明 */}
                 {msg.image_url && (
                   <div className="mb-1.5 rounded-xl overflow-hidden bg-background shadow-sm max-w-[240px]">
@@ -1780,8 +1780,11 @@ const ChatPage: React.FC = () => {
                       direction: 'ltr',
                       textAlign: 'left',
                       wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
                       whiteSpace: 'pre-wrap',
                       lineHeight: 1.5,
+                      // 防止气泡被挤窄导致单字换行（看起来像竖排）
+                      minWidth: `${Math.round(bubbleSize * 5)}px`,
                       // 气泡大小（内边距）随 bubble_size 同步
                       padding: getBubblePadding(bubbleSize),
                     }}
