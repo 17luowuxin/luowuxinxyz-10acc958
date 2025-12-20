@@ -10,8 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
-// 导入图片气泡框资源
-import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -149,7 +147,7 @@ const ChatPage: React.FC = () => {
   } | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  
 
   useEffect(() => {
     if (user && characterId) {
@@ -525,19 +523,12 @@ const ChatPage: React.FC = () => {
     setLongPressedMsg(null);
   };
 
-  // 长按开始
-  const handleTouchStart = (msg: any) => {
-    longPressTimer.current = setTimeout(() => {
-      setLongPressedMsg(msg);
-    }, 500);
-  };
-
-  // 长按结束
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+  // 点击消息显示菜单
+  const handleMessageClick = (msg: any, e: React.MouseEvent | React.TouchEvent) => {
+    // 避免误触
+    e.stopPropagation();
+    if (msg.role === 'transfer') return;
+    setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
   };
 
   // 转账相关函数 - 解析 AI 返回的转账指令
@@ -1488,15 +1479,13 @@ const ChatPage: React.FC = () => {
   const userAvatarFrame = (customization as any).avatar_frame_url || '';
   const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
   
-// 气泡框预设 - 带三丽鸥装饰 + 图片气泡框 + 头像装饰
+// 气泡框预设 - 带三丽鸥装饰 + 头像装饰
   const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string; decorImage?: string }> = {
     'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
     'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
     'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
-    // 图片气泡框 - 使用导入的图片
-    'anime-gradient': { type: 'image', imageUrl: animeGradientFrame, decorIcon: '' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
@@ -1742,12 +1731,8 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 <div 
-                  className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-                  onTouchStart={() => handleTouchStart(msg)}
-                  onTouchEnd={handleTouchEnd}
-                  onMouseDown={() => handleTouchStart(msg)}
-                  onMouseUp={handleTouchEnd}
-                  onMouseLeave={handleTouchEnd}
+                  className={`flex items-start gap-2 cursor-pointer ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  onClick={(e) => handleMessageClick(msg, e)}
                 >
                   {/* Avatar with Frame - QQ风格顶部对齐 */}
                   <div className="relative w-9 h-9 flex-shrink-0 mt-0.5">
@@ -1826,13 +1811,13 @@ const ChatPage: React.FC = () => {
                   >
                     {/* 装饰图标 或 头像装饰图片 */}
                     {msg.role === 'user' && getUserBubbleDecorImage() && (
-                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
                     )}
                     {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
                       <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
                     )}
                     {msg.role !== 'user' && getFriendBubbleDecorImage() && (
-                      <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                      <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
                     )}
                     {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
                       <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>

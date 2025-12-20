@@ -9,8 +9,6 @@ import { toast } from 'sonner';
 
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
-// 预设图片气泡框
-import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -19,7 +17,7 @@ const avatarFramePresets = [
   { id: 'dream', name: '梦幻', url: dreamFrame },
 ];
 
-// CSS实现的可爱气泡样式 - 带三丽鸥装饰 + 图片气泡框
+// CSS实现的可爱气泡样式 - 带三丽鸥装饰 + 头像装饰
 const bubbleFramePresets = [
   { id: 'none', name: '无', type: 'css', gradient: '', borderColor: '', decorColor: '', decorIcon: '', decorImage: '' },
   { id: 'cute-pink', name: '樱花粉', type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE', decorIcon: '🎀', decorImage: '' },
@@ -27,8 +25,6 @@ const bubbleFramePresets = [
   { id: 'cute-yellow', name: '柠檬黄', type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D', decorIcon: '⭐', decorImage: '' },
   { id: 'cute-green', name: '薄荷绿', type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀', decorImage: '' },
   { id: 'cute-purple', name: '梦幻紫', type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜', decorImage: '' },
-  // 图片气泡框 - 支持自适应拉伸
-  { id: 'anime-gradient', name: '动漫渐变', type: 'image', imageUrl: animeGradientFrame, decorIcon: '', decorImage: '' },
   // 带卡通头像装饰的黑红渐变气泡框
   { id: 'anime-head', name: '动漫头像', type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorColor: '', decorIcon: '', decorImage: animeHeadDecor },
 ];
@@ -725,17 +721,6 @@ const CustomizePage: React.FC = () => {
                       <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
                         无
                       </div>
-                    ) : frame.type === 'image' ? (
-                      <div 
-                        className="w-full h-full rounded-lg flex items-center justify-center text-xs overflow-hidden"
-                        style={{
-                          backgroundImage: `url(${frame.imageUrl})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
-                      >
-                        <span className="text-white drop-shadow-md font-medium">{frame.name}</span>
-                      </div>
                     ) : (
                       <div 
                         className="w-full h-full rounded-lg flex items-center justify-center text-xs relative"
@@ -745,7 +730,7 @@ const CustomizePage: React.FC = () => {
                         }}
                       >
                         {frame.decorImage && (
-                          <img src={frame.decorImage} alt="" className="absolute -top-2 -left-2 w-6 h-6 object-contain z-10" />
+                          <img src={frame.decorImage} alt="" className="absolute -top-1.5 -left-1.5 w-5 h-5 object-contain z-10" />
                         )}
                         <span style={{ color: frame.decorColor || '#fff' }}>{frame.name}</span>
                       </div>
@@ -775,17 +760,6 @@ const CustomizePage: React.FC = () => {
                       <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground text-xs">
                         无
                       </div>
-                    ) : frame.type === 'image' ? (
-                      <div 
-                        className="w-full h-full rounded-lg flex items-center justify-center text-xs overflow-hidden"
-                        style={{
-                          backgroundImage: `url(${frame.imageUrl})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
-                      >
-                        <span className="text-white drop-shadow-md font-medium">{frame.name}</span>
-                      </div>
                     ) : (
                       <div 
                         className="w-full h-full rounded-lg flex items-center justify-center text-xs relative"
@@ -795,7 +769,7 @@ const CustomizePage: React.FC = () => {
                         }}
                       >
                         {frame.decorImage && (
-                          <img src={frame.decorImage} alt="" className="absolute -top-2 -left-2 w-6 h-6 object-contain z-10" />
+                          <img src={frame.decorImage} alt="" className="absolute -top-1.5 -left-1.5 w-5 h-5 object-contain z-10" />
                         )}
                         <span style={{ color: frame.decorColor || '#fff' }}>{frame.name}</span>
                       </div>
