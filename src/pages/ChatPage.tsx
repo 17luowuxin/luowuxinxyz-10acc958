@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
 // 导入图片气泡框资源
 import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
+// 头像装饰图片
+import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
 // Emoji categories with comprehensive emoji list
 const EMOJI_CATEGORIES = {
@@ -1486,8 +1488,8 @@ const ChatPage: React.FC = () => {
   const userAvatarFrame = (customization as any).avatar_frame_url || '';
   const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
   
-// 气泡框预设 - 带三丽鸥装饰 + 图片气泡框
-  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string }> = {
+// 气泡框预设 - 带三丽鸥装饰 + 图片气泡框 + 头像装饰
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string; decorImage?: string }> = {
     'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
     'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
@@ -1495,6 +1497,8 @@ const ChatPage: React.FC = () => {
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
     // 图片气泡框 - 使用导入的图片
     'anime-gradient': { type: 'image', imageUrl: animeGradientFrame, decorIcon: '' },
+    // 带卡通头像装饰的黑红渐变气泡框
+    'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
@@ -1539,6 +1543,8 @@ const ChatPage: React.FC = () => {
 
   const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
   const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
+  const getUserBubbleDecorImage = () => bubbleFramePresets[userBubbleFrame]?.decorImage;
+  const getFriendBubbleDecorImage = () => bubbleFramePresets[friendBubbleFrame]?.decorImage;
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
@@ -1818,11 +1824,17 @@ const ChatPage: React.FC = () => {
                       padding: getBubblePadding(bubbleSize),
                     }}
                   >
-                    {/* 装饰图标 */}
-                    {msg.role === 'user' && getUserBubbleDecor() && (
+                    {/* 装饰图标 或 头像装饰图片 */}
+                    {msg.role === 'user' && getUserBubbleDecorImage() && (
+                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                    )}
+                    {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
                       <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
                     )}
-                    {msg.role !== 'user' && getFriendBubbleDecor() && (
+                    {msg.role !== 'user' && getFriendBubbleDecorImage() && (
+                      <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                    )}
+                    {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
                       <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
                     )}
 
