@@ -10,6 +10,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+// 导入图片气泡框资源
+import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
 
 // Emoji categories
 const EMOJI_CATEGORIES = {
@@ -461,29 +463,49 @@ const GroupChatPage: React.FC = () => {
   const fontColor = (customization as any).font_color || '#333333';
   const friendFontColor = (customization as any).friend_font_color || '#333333';
 
-  // 气泡框预设
-  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string }> = {
-    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5' },
-    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF' },
-    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066' },
-    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8' },
-    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF' },
+// 气泡框预设 - 带图片气泡框支持
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; imageUrl?: string }> = {
+    'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5' },
+    'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF' },
+    'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066' },
+    'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8' },
+    'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF' },
+    // 图片气泡框
+    'anime-gradient': { type: 'image', imageUrl: animeGradientFrame },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
   const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
   
-  const getUserBubbleStyle = () => {
+  const getUserBubbleStyle = (): React.CSSProperties => {
     const frame = bubbleFramePresets[userBubbleFrame];
     if (frame) {
+      if (frame.type === 'image' && frame.imageUrl) {
+        return { 
+          backgroundImage: `url(${frame.imageUrl})`,
+          backgroundSize: '100% 100%',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+          backgroundColor: 'transparent',
+        };
+      }
       return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
     }
     return { backgroundColor: customization.bubble_color || '#FFB5C5' };
   };
   
-  const getFriendBubbleStyle = () => {
+  const getFriendBubbleStyle = (): React.CSSProperties => {
     const frame = bubbleFramePresets[friendBubbleFrame];
     if (frame) {
+      if (frame.type === 'image' && frame.imageUrl) {
+        return { 
+          backgroundImage: `url(${frame.imageUrl})`,
+          backgroundSize: '100% 100%',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+          backgroundColor: 'transparent',
+        };
+      }
       return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
     }
     return { backgroundColor: getCharacterBubbleColor() };
