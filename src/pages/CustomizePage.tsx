@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
 // 预设图片气泡框
 import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
+// 头像装饰图片
+import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
 const avatarFramePresets = [
   { id: 'none', name: '无', url: '' },
@@ -19,14 +21,16 @@ const avatarFramePresets = [
 
 // CSS实现的可爱气泡样式 - 带三丽鸥装饰 + 图片气泡框
 const bubbleFramePresets = [
-  { id: 'none', name: '无', type: 'css', gradient: '', borderColor: '', decorColor: '', decorIcon: '' },
-  { id: 'cute-pink', name: '樱花粉', type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE', decorIcon: '🎀' },
-  { id: 'cute-blue', name: '天空蓝', type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorColor: '#7DD8FF', decorIcon: '☁️' },
-  { id: 'cute-yellow', name: '柠檬黄', type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D', decorIcon: '⭐' },
-  { id: 'cute-green', name: '薄荷绿', type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀' },
-  { id: 'cute-purple', name: '梦幻紫', type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜' },
+  { id: 'none', name: '无', type: 'css', gradient: '', borderColor: '', decorColor: '', decorIcon: '', decorImage: '' },
+  { id: 'cute-pink', name: '樱花粉', type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorColor: '#FF9EAE', decorIcon: '🎀', decorImage: '' },
+  { id: 'cute-blue', name: '天空蓝', type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorColor: '#7DD8FF', decorIcon: '☁️', decorImage: '' },
+  { id: 'cute-yellow', name: '柠檬黄', type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D', decorIcon: '⭐', decorImage: '' },
+  { id: 'cute-green', name: '薄荷绿', type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀', decorImage: '' },
+  { id: 'cute-purple', name: '梦幻紫', type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜', decorImage: '' },
   // 图片气泡框 - 支持自适应拉伸
-  { id: 'anime-gradient', name: '动漫渐变', type: 'image', imageUrl: animeGradientFrame, decorIcon: '' },
+  { id: 'anime-gradient', name: '动漫渐变', type: 'image', imageUrl: animeGradientFrame, decorIcon: '', decorImage: '' },
+  // 带卡通头像装饰的黑红渐变气泡框
+  { id: 'anime-head', name: '动漫头像', type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorColor: '', decorIcon: '', decorImage: animeHeadDecor },
 ];
 
 // Pastel macaron colors
@@ -734,13 +738,16 @@ const CustomizePage: React.FC = () => {
                       </div>
                     ) : (
                       <div 
-                        className="w-full h-full rounded-lg flex items-center justify-center text-xs"
+                        className="w-full h-full rounded-lg flex items-center justify-center text-xs relative"
                         style={{
                           background: frame.gradient,
                           border: `2px solid ${frame.borderColor}`,
                         }}
                       >
-                        <span style={{ color: frame.decorColor }}>{frame.name}</span>
+                        {frame.decorImage && (
+                          <img src={frame.decorImage} alt="" className="absolute -top-2 -left-2 w-6 h-6 object-contain z-10" />
+                        )}
+                        <span style={{ color: frame.decorColor || '#fff' }}>{frame.name}</span>
                       </div>
                     )}
                     {((frame.id === 'none' && !bubbleFrame) || bubbleFrame === frame.id) && (
@@ -781,13 +788,16 @@ const CustomizePage: React.FC = () => {
                       </div>
                     ) : (
                       <div 
-                        className="w-full h-full rounded-lg flex items-center justify-center text-xs"
+                        className="w-full h-full rounded-lg flex items-center justify-center text-xs relative"
                         style={{
                           background: frame.gradient,
                           border: `2px solid ${frame.borderColor}`,
                         }}
                       >
-                        <span style={{ color: frame.decorColor }}>{frame.name}</span>
+                        {frame.decorImage && (
+                          <img src={frame.decorImage} alt="" className="absolute -top-2 -left-2 w-6 h-6 object-contain z-10" />
+                        )}
+                        <span style={{ color: frame.decorColor || '#fff' }}>{frame.name}</span>
                       </div>
                     )}
                     {((frame.id === 'none' && !friendBubbleFrame) || friendBubbleFrame === frame.id) && (
