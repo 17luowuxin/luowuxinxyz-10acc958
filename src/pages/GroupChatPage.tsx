@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Send, Settings, User, AtSign, Smile, Trash2, RotateCcw, MoreVertical, Upload, Image } from 'lucide-react';
+import { ChevronLeft, Send, Settings, User, AtSign, Smile, Trash2, RotateCcw, MoreVertical, Upload, Image, Quote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -10,8 +10,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-// 导入图片气泡框资源
-import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -96,7 +94,7 @@ const GroupChatPage: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  
   const bgInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -294,18 +292,10 @@ const GroupChatPage: React.FC = () => {
     }
   };
 
-  // 长按开始
-  const handleTouchStart = (msg: any) => {
-    longPressTimer.current = setTimeout(() => {
-      setLongPressedMsg(msg);
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+  // 点击消息显示菜单
+  const handleMessageClick = (msg: any, e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
   };
 
   // 上传群聊背景
@@ -472,8 +462,6 @@ const GroupChatPage: React.FC = () => {
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
     'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
-    // 图片气泡框
-    'anime-gradient': { type: 'image', imageUrl: animeGradientFrame, decorIcon: '' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
@@ -638,12 +626,8 @@ const GroupChatPage: React.FC = () => {
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.sender_type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-              onTouchStart={() => handleTouchStart(msg)}
-              onTouchEnd={handleTouchEnd}
-              onMouseDown={() => handleTouchStart(msg)}
-              onMouseUp={handleTouchEnd}
-              onMouseLeave={handleTouchEnd}
+              className={`flex cursor-pointer ${msg.sender_type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+              onClick={(e) => handleMessageClick(msg, e)}
             >
               {/* Avatar */}
               <div 
@@ -695,13 +679,13 @@ const GroupChatPage: React.FC = () => {
                 >
                   {/* 装饰图标 或 头像装饰图片 */}
                   {msg.sender_type === 'user' && getUserBubbleDecorImage() && (
-                    <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                    <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
                   )}
                   {msg.sender_type === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
                     <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
                   )}
                   {msg.sender_type !== 'user' && getFriendBubbleDecorImage() && (
-                    <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-3 -left-4 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                    <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
                   )}
                   {msg.sender_type !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
                     <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
@@ -753,11 +737,22 @@ const GroupChatPage: React.FC = () => {
               </p>
               <Button
                 variant="ghost"
+                className="w-full justify-start"
+                onClick={() => {
+                  setInput(prev => `[引用: "${longPressedMsg.content.slice(0, 30)}..."]\n${prev}`);
+                  setLongPressedMsg(null);
+                }}
+              >
+                <Quote className="w-4 h-4 mr-2" />
+                引用
+              </Button>
+              <Button
+                variant="ghost"
                 className="w-full justify-start text-destructive"
                 onClick={() => deleteFromMessage(longPressedMsg)}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                从此处回溯删除
+                回溯删除
               </Button>
               <Button
                 variant="ghost"
