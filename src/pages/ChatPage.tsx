@@ -10,6 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
+// 导入图片气泡框资源
+import animeGradientFrame from '@/assets/bubble-frames/anime-gradient-frame.png';
 
 // Emoji categories with comprehensive emoji list
 const EMOJI_CATEGORIES = {
@@ -1484,13 +1486,15 @@ const ChatPage: React.FC = () => {
   const userAvatarFrame = (customization as any).avatar_frame_url || '';
   const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
   
-  // 气泡框预设 - 带三丽鸥装饰
-  const bubbleFramePresets: Record<string, { gradient: string; borderColor: string; decorIcon: string }> = {
-    'cute-pink': { gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
-    'cute-blue': { gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
-    'cute-yellow': { gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
-    'cute-green': { gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
-    'cute-purple': { gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
+// 气泡框预设 - 带三丽鸥装饰 + 图片气泡框
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string }> = {
+    'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
+    'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
+    'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
+    'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
+    'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
+    // 图片气泡框 - 使用导入的图片
+    'anime-gradient': { type: 'image', imageUrl: animeGradientFrame, decorIcon: '' },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
@@ -1509,10 +1513,24 @@ const ChatPage: React.FC = () => {
     return fallback;
   };
 
-  const getBubbleBackgroundStyle = (isUser: boolean) => {
+  const getBubbleBackgroundStyle = (isUser: boolean): React.CSSProperties => {
     const frameId = isUser ? userBubbleFrame : friendBubbleFrame;
     const frame = bubbleFramePresets[frameId];
-    if (frame) return { background: frame.gradient };
+    
+    if (frame) {
+      if (frame.type === 'image' && frame.imageUrl) {
+        // 图片气泡框 - 使用背景图片，自适应内容大小
+        return { 
+          backgroundImage: `url(${frame.imageUrl})`,
+          backgroundSize: '100% 100%', // 拉伸适应气泡大小
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+          backgroundColor: 'transparent',
+        };
+      }
+      // CSS 渐变气泡框
+      return { background: frame.gradient };
+    }
 
     const fallback = 'hsl(var(--muted))';
     const hex = normalizeHex(isUser ? userBubbleColor : friendBubbleColor, fallback);
