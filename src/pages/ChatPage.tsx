@@ -1731,7 +1731,7 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 <div 
-                  className={`flex items-start gap-2 cursor-pointer ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  className={`relative overflow-visible flex items-start gap-2 cursor-pointer ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                   onClick={(e) => handleMessageClick(msg, e)}
                 >
                   {/* Avatar with Frame - QQ风格顶部对齐 */}
@@ -1833,9 +1833,12 @@ const ChatPage: React.FC = () => {
                 )}
               </div>
               
-              {/* 长按菜单 */}
+              {/* 点击菜单 */}
               {longPressedMsg?.id === msg.id && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-30">
+                <div
+                  className={`absolute top-full mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-50 ${msg.role === 'user' ? 'right-0' : 'left-0'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button 
                     variant="ghost" 
                     size="sm" 
