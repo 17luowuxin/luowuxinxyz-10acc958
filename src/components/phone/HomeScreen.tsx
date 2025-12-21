@@ -16,7 +16,6 @@ import {
   Camera,
   Gamepad2,
   Users,
-  Lock,
   X,
   BookOpen,
   BarChart3,
@@ -56,40 +55,24 @@ const allApps: AppConfig[] = [
 // 底部Dock固定的APP
 const dockApps = ['friends', 'group', 'music', 'settings'];
 
-// 页面布局配置 - 每页的布局模式
-interface PageLayout {
-  // 大图位置: 'top-left' | 'top-right' | 'bottom-left' 等
-  largeImagePosition: 'top-left' | 'top-right' | 'bottom-left';
-  // 这一页显示的APP数量（不含大图区域）
-  appCount: number;
-}
-
-const pageLayouts: PageLayout[] = [
-  { largeImagePosition: 'top-left', appCount: 7 },
-  { largeImagePosition: 'top-right', appCount: 8 },
-  { largeImagePosition: 'bottom-left', appCount: 8 },
-];
-
 const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [appIcons, setAppIcons] = useState<Record<string, string>>({});
-  const [pageImages, setPageImages] = useState<Record<number, string>>({});
+  const [pageImages, setPageImages] = useState<Record<string, string>>({});
   const [editMode, setEditMode] = useState(false);
   const [selectedAppForUpload, setSelectedAppForUpload] = useState<string | null>(null);
-  const [uploadingPageImage, setUploadingPageImage] = useState<number | null>(null);
+  const [uploadingImageKey, setUploadingImageKey] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pageImageInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // 排除Dock的APP，剩余的分配到各页
   const pageApps = allApps.filter(app => !dockApps.includes(app.id));
   const dockAppConfigs = allApps.filter(app => dockApps.includes(app.id));
   
-  // 计算总页数
-  const totalPages = pageLayouts.length;
+  const totalPages = 3;
 
   useEffect(() => {
     if (user) {
@@ -112,14 +95,12 @@ const HomeScreen: React.FC = () => {
       
       if (data?.app_icons && typeof data.app_icons === 'object') {
         const icons = data.app_icons as Record<string, string>;
-        // 分离普通图标和页面大图
         const regularIcons: Record<string, string> = {};
-        const images: Record<number, string> = {};
+        const images: Record<string, string> = {};
         
         Object.entries(icons).forEach(([key, value]) => {
           if (key.startsWith('page_image_')) {
-            const pageIndex = parseInt(key.replace('page_image_', ''));
-            images[pageIndex] = value;
+            images[key] = value;
           } else {
             regularIcons[key] = value;
           }
@@ -160,11 +141,7 @@ const HomeScreen: React.FC = () => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
-      // 合并普通图标和页面大图
-      const allIcons = { ...appIcons };
-      Object.entries(pageImages).forEach(([key, value]) => {
-        allIcons[`page_image_${key}`] = value;
-      });
+      const allIcons = { ...appIcons, ...pageImages };
       allIcons[selectedAppForUpload] = publicUrl;
       
       const { error: upsertError } = await supabase
@@ -192,8 +169,8 @@ const HomeScreen: React.FC = () => {
 
   const handlePageImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || uploadingPageImage === null) {
-      setUploadingPageImage(null);
+    if (!file || !user || !uploadingImageKey) {
+      setUploadingImageKey(null);
       return;
     }
 
@@ -201,7 +178,7 @@ const HomeScreen: React.FC = () => {
       toast.loading('正在上传图片...');
       
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/page-images/page-${uploadingPageImage}-${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/page-images/${uploadingImageKey}-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
@@ -217,12 +194,8 @@ const HomeScreen: React.FC = () => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
-      // 合并保存
-      const allIcons = { ...appIcons };
-      Object.entries(pageImages).forEach(([key, value]) => {
-        allIcons[`page_image_${key}`] = value;
-      });
-      allIcons[`page_image_${uploadingPageImage}`] = publicUrl;
+      const allIcons = { ...appIcons, ...pageImages };
+      allIcons[uploadingImageKey] = publicUrl;
       
       const { error: upsertError } = await supabase
         .from('customization')
@@ -234,14 +207,14 @@ const HomeScreen: React.FC = () => {
         return;
       }
 
-      setPageImages(prev => ({ ...prev, [uploadingPageImage]: publicUrl }));
+      setPageImages(prev => ({ ...prev, [uploadingImageKey]: publicUrl }));
       toast.dismiss();
       toast.success('图片已更新！');
     } catch (error) {
       toast.dismiss();
       toast.error('上传失败，请重试');
     } finally {
-      setUploadingPageImage(null);
+      setUploadingImageKey(null);
       if (pageImageInputRef.current) pageImageInputRef.current.value = '';
     }
   };
@@ -269,8 +242,8 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  const handlePageImageClick = (pageIndex: number) => {
-    setUploadingPageImage(pageIndex);
+  const handlePageImageClick = (imageKey: string) => {
+    setUploadingImageKey(imageKey);
     pageImageInputRef.current?.click();
   };
 
@@ -279,7 +252,6 @@ const HomeScreen: React.FC = () => {
     setSelectedAppForUpload(null);
   };
 
-  // 滑动切换页面
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 50;
     if (info.offset.x < -threshold && currentPage < totalPages - 1) {
@@ -289,19 +261,10 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  // 获取当前页面的APP列表
-  const getPageApps = (pageIndex: number) => {
-    let startIndex = 0;
-    for (let i = 0; i < pageIndex; i++) {
-      startIndex += pageLayouts[i].appCount;
-    }
-    return pageApps.slice(startIndex, startIndex + pageLayouts[pageIndex].appCount);
-  };
-
-  // 渲染单个APP图标
-  const renderAppIcon = (app: AppConfig, size: 'small' | 'dock' = 'small') => {
-    const iconSize = size === 'dock' ? 'w-12 h-12' : 'w-[52px] h-[52px]';
-    const innerIconSize = size === 'dock' ? 'w-5 h-5' : 'w-6 h-6';
+  // 渲染单个APP图标 - 放大尺寸
+  const renderAppIcon = (app: AppConfig, size: 'normal' | 'dock' = 'normal') => {
+    const iconSize = size === 'dock' ? 'w-14 h-14' : 'w-16 h-16';
+    const innerIconSize = size === 'dock' ? 'w-6 h-6' : 'w-7 h-7';
     
     return (
       <motion.div
@@ -323,7 +286,7 @@ const HomeScreen: React.FC = () => {
           className="relative"
         >
           {appIcons[app.id] ? (
-            <div className={`${iconSize} rounded-[14px] shadow-soft overflow-hidden ring-1 ring-white/30`}>
+            <div className={`${iconSize} rounded-[16px] shadow-soft overflow-hidden ring-1 ring-white/30`}>
               <img 
                 src={appIcons[app.id]} 
                 alt={app.name}
@@ -332,38 +295,31 @@ const HomeScreen: React.FC = () => {
               />
             </div>
           ) : (
-            <div className={`${iconSize} rounded-[14px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
+            <div className={`${iconSize} rounded-[16px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
               <app.icon className={`${innerIconSize} text-white`} strokeWidth={1.8} />
             </div>
           )}
         </motion.button>
-        <span className="text-[10px] font-medium text-foreground/80">{app.name}</span>
+        <span className="text-[11px] font-medium text-foreground/80">{app.name}</span>
       </motion.div>
     );
   };
 
   // 渲染大图上传区域
-  const renderLargeImageArea = (pageIndex: number, position: string) => {
-    const image = pageImages[pageIndex];
-    
-    // 根据位置决定大小
-    const sizeClass = position === 'top-left' 
-      ? 'col-span-2 row-span-2' 
-      : position === 'top-right' 
-        ? 'col-span-1 row-span-2'
-        : 'col-span-2 row-span-2';
+  const renderLargeImageArea = (imageKey: string, className: string) => {
+    const image = pageImages[imageKey];
     
     return (
       <motion.div
-        className={`${sizeClass} rounded-2xl overflow-hidden cursor-pointer bg-muted/50 flex items-center justify-center border border-dashed border-muted-foreground/30`}
+        className={`${className} rounded-xl overflow-hidden cursor-pointer bg-muted/40 flex items-center justify-center border border-dashed border-muted-foreground/20`}
         whileTap={{ scale: 0.98 }}
-        onClick={() => handlePageImageClick(pageIndex)}
+        onClick={() => handlePageImageClick(imageKey)}
       >
         {image ? (
           <img src={image} alt="" className="w-full h-full object-cover" />
         ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Plus className="w-8 h-8" />
+          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+            <Plus className="w-6 h-6" />
             <span className="text-xs">上传图片</span>
           </div>
         )}
@@ -371,85 +327,84 @@ const HomeScreen: React.FC = () => {
     );
   };
 
-  // 渲染单个页面
-  const renderPage = (pageIndex: number) => {
-    const layout = pageLayouts[pageIndex];
-    const apps = getPageApps(pageIndex);
+  // 渲染第一页 - 按照参考图布局
+  const renderPage1 = () => {
+    const apps = pageApps.slice(0, 11);
     
-    if (layout.largeImagePosition === 'top-left') {
-      // 布局1: 大图左上，右侧3个APP，下方4个APP
-      return (
-        <div className="grid grid-cols-4 gap-3 auto-rows-[80px]">
-          {/* 大图区域 - 左上角，占2列2行 */}
-          {renderLargeImageArea(pageIndex, 'top-left')}
+    return (
+      <div className="flex flex-col gap-3 px-4">
+        {/* 第一行: 横向大图(左侧) + 3个APP(右侧竖排) */}
+        <div className="flex gap-3">
+          {/* 横向大图 */}
+          {renderLargeImageArea('page_image_0_top', 'flex-1 h-24')}
           
-          {/* 右侧3个APP */}
-          <div className="col-span-2 row-span-2 grid grid-cols-2 gap-3 content-start">
-            {apps.slice(0, 3).map(app => (
-              <div key={app.id} className="flex justify-center">
-                {renderAppIcon(app)}
-              </div>
-            ))}
-          </div>
-          
-          {/* 下方4个APP */}
-          {apps.slice(3, 7).map(app => (
-            <div key={app.id} className="flex justify-center items-start">
-              {renderAppIcon(app)}
-            </div>
-          ))}
-        </div>
-      );
-    } else if (layout.largeImagePosition === 'top-right') {
-      // 布局2: 左侧4个APP，大图右上
-      return (
-        <div className="grid grid-cols-4 gap-3 auto-rows-[80px]">
-          {/* 左侧4个APP - 2列2行 */}
-          <div className="col-span-2 row-span-2 grid grid-cols-2 gap-3">
-            {apps.slice(0, 4).map(app => (
-              <div key={app.id} className="flex justify-center items-start">
-                {renderAppIcon(app)}
-              </div>
-            ))}
-          </div>
-          
-          {/* 大图区域 - 右上角 */}
-          <div className="col-span-2 row-span-2">
-            {renderLargeImageArea(pageIndex, 'top-right')}
-          </div>
-          
-          {/* 下方4个APP */}
-          {apps.slice(4, 8).map(app => (
-            <div key={app.id} className="flex justify-center items-start">
-              {renderAppIcon(app)}
-            </div>
-          ))}
-        </div>
-      );
-    } else {
-      // 布局3: 大图左下，右侧4个APP，上方4个APP
-      return (
-        <div className="grid grid-cols-4 gap-3 auto-rows-[80px]">
-          {/* 上方4个APP */}
-          {apps.slice(0, 4).map(app => (
-            <div key={app.id} className="flex justify-center items-start">
-              {renderAppIcon(app)}
-            </div>
-          ))}
-          
-          {/* 大图区域 - 左下角 */}
-          {renderLargeImageArea(pageIndex, 'bottom-left')}
-          
-          {/* 右侧4个APP */}
-          <div className="col-span-2 row-span-2 grid grid-cols-2 gap-3">
-            {apps.slice(4, 8).map(app => (
-              <div key={app.id} className="flex justify-center items-start">
-                {renderAppIcon(app)}
-              </div>
-            ))}
+          {/* 右侧3个APP竖排 */}
+          <div className="flex flex-col gap-2">
+            {apps.slice(0, 3).map(app => renderAppIcon(app))}
           </div>
         </div>
-      );
+        
+        {/* 第二区块: 左侧2x2 APP + 右侧2x2大图 */}
+        <div className="flex gap-3">
+          {/* 左侧2x2 APP */}
+          <div className="grid grid-cols-2 gap-3">
+            {apps.slice(3, 7).map(app => renderAppIcon(app))}
+          </div>
+          
+          {/* 右侧大图 */}
+          {renderLargeImageArea('page_image_0_mid', 'w-[140px] h-[180px]')}
+        </div>
+        
+        {/* 第三区块: 左侧2x2大图 + 右侧2x2 APP */}
+        <div className="flex gap-3">
+          {/* 左侧大图 */}
+          {renderLargeImageArea('page_image_0_bottom', 'w-[140px] h-[180px]')}
+          
+          {/* 右侧2x2 APP */}
+          <div className="grid grid-cols-2 gap-3">
+            {apps.slice(7, 11).map(app => renderAppIcon(app))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染第二页
+  const renderPage2 = () => {
+    const apps = pageApps.slice(11);
+    const fillerCount = Math.max(0, 8 - apps.length);
+    
+    return (
+      <div className="flex flex-col gap-3 px-4">
+        {/* 顶部大图 */}
+        {renderLargeImageArea('page_image_1_top', 'w-full h-32')}
+        
+        {/* APP网格 */}
+        <div className="grid grid-cols-4 gap-4">
+          {apps.map(app => renderAppIcon(app))}
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染第三页
+  const renderPage3 = () => {
+    return (
+      <div className="flex flex-col gap-3 px-4">
+        {/* 大图展示区 */}
+        {renderLargeImageArea('page_image_2_main', 'w-full h-64')}
+        
+        <p className="text-center text-muted-foreground text-sm">更多功能即将开放</p>
+      </div>
+    );
+  };
+
+  const renderCurrentPage = () => {
+    switch (currentPage) {
+      case 0: return renderPage1();
+      case 1: return renderPage2();
+      case 2: return renderPage3();
+      default: return renderPage1();
     }
   };
 
@@ -498,73 +453,69 @@ const HomeScreen: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={exitEditMode}
-            className="fixed top-10 right-4 z-20 w-8 h-8 bg-foreground/80 rounded-full flex items-center justify-center"
+            className="fixed top-16 right-4 z-20 bg-background/90 rounded-full p-2 shadow-lg"
           >
-            <X className="w-5 h-5 text-background" />
+            <X className="w-5 h-5 text-foreground" />
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* Pages container with swipe */}
-      <div className="flex-1 overflow-hidden relative z-10" ref={containerRef}>
+      {/* Main content area with swipe */}
+      <div className="flex-1 overflow-hidden relative">
         <motion.div
-          className="flex h-full"
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.1}
+          dragElastic={0.2}
           onDragEnd={handleDragEnd}
-          animate={{ x: -currentPage * (containerRef.current?.offsetWidth || 300) }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          style={{ width: `${totalPages * 100}%` }}
+          className="h-full"
         >
-          {pageLayouts.map((_, pageIndex) => (
-            <div 
-              key={pageIndex} 
-              className="px-4 pt-2"
-              style={{ width: `${100 / totalPages}%` }}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentPage}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.2 }}
+              className="relative z-20 pt-2"
             >
-              {renderPage(pageIndex)}
-            </div>
-          ))}
+              {renderCurrentPage()}
+            </motion.div>
+          </AnimatePresence>
         </motion.div>
       </div>
 
-      {/* Return to lock screen + Page indicators */}
-      <div className="flex flex-col items-center gap-2 pb-3">
-        <motion.button
-          onClick={() => navigate('/lock')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/10 backdrop-blur-sm text-foreground/70 text-xs"
-          whileTap={{ scale: 0.95 }}
+      {/* Bottom area */}
+      <div className="pb-4 flex flex-col items-center gap-3">
+        {/* Return to lock screen */}
+        <button
+          onClick={() => navigate('/?locked=true')}
+          className="text-sm text-foreground/60 hover:text-foreground/80 transition-colors"
         >
-          <Lock className="w-3 h-3" />
-          <span>返回锁屏</span>
-        </motion.button>
-        
+          返回锁屏
+        </button>
+
         {/* Page indicators */}
-        <div className="flex gap-1.5">
-          {pageLayouts.map((_, index) => (
+        <div className="flex gap-2">
+          {Array.from({ length: totalPages }).map((_, i) => (
             <button
-              key={index}
-              onClick={() => setCurrentPage(index)}
-              className={`w-1.5 h-1.5 rounded-full transition-all ${
-                currentPage === index 
-                  ? 'bg-foreground/70 w-3' 
+              key={i}
+              onClick={() => setCurrentPage(i)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                i === currentPage 
+                  ? 'bg-foreground/70 w-4' 
                   : 'bg-foreground/30'
               }`}
             />
           ))}
         </div>
-      </div>
 
-      {/* Bottom Dock */}
-      <div className="px-4 pb-6">
-        <div className="bg-background/60 backdrop-blur-xl rounded-2xl p-3 flex justify-around items-center border border-white/20 shadow-lg">
-          {dockAppConfigs.map(app => renderAppIcon(app, 'dock'))}
+        {/* Dock */}
+        <div className="bg-background/30 backdrop-blur-xl rounded-3xl px-6 py-3 mx-4">
+          <div className="flex gap-6 justify-center">
+            {dockAppConfigs.map(app => renderAppIcon(app, 'dock'))}
+          </div>
         </div>
       </div>
-
-      {/* Home indicator */}
-      <div className="fixed bottom-2 left-1/2 -translate-x-1/2 w-24 h-1 bg-foreground/15 rounded-full" />
     </div>
   );
 };
