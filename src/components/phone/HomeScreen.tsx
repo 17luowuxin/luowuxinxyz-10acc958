@@ -68,11 +68,11 @@ const HomeScreen: React.FC = () => {
   const pageImageInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // 排除Dock的APP，剩余的分配到各页
+  // 排除Dock的APP
   const pageApps = allApps.filter(app => !dockApps.includes(app.id));
   const dockAppConfigs = allApps.filter(app => dockApps.includes(app.id));
   
-  const totalPages = 3;
+  const totalPages = 2;
 
   useEffect(() => {
     if (user) {
@@ -261,15 +261,15 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  // 渲染单个APP图标 - 放大尺寸
+  // 渲染单个APP图标
   const renderAppIcon = (app: AppConfig, size: 'normal' | 'dock' = 'normal') => {
-    const iconSize = size === 'dock' ? 'w-14 h-14' : 'w-16 h-16';
-    const innerIconSize = size === 'dock' ? 'w-6 h-6' : 'w-7 h-7';
+    const iconSize = size === 'dock' ? 'w-14 h-14' : 'w-14 h-14';
+    const innerIconSize = size === 'dock' ? 'w-6 h-6' : 'w-6 h-6';
     
     return (
       <motion.div
         key={app.id}
-        className="flex flex-col items-center gap-1"
+        className="flex flex-col items-center gap-0.5"
         whileTap={{ scale: 0.9 }}
       >
         <motion.button
@@ -286,7 +286,7 @@ const HomeScreen: React.FC = () => {
           className="relative"
         >
           {appIcons[app.id] ? (
-            <div className={`${iconSize} rounded-[16px] shadow-soft overflow-hidden ring-1 ring-white/30`}>
+            <div className={`${iconSize} rounded-[14px] shadow-soft overflow-hidden ring-1 ring-white/30`}>
               <img 
                 src={appIcons[app.id]} 
                 alt={app.name}
@@ -295,12 +295,12 @@ const HomeScreen: React.FC = () => {
               />
             </div>
           ) : (
-            <div className={`${iconSize} rounded-[16px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
+            <div className={`${iconSize} rounded-[14px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
               <app.icon className={`${innerIconSize} text-white`} strokeWidth={1.8} />
             </div>
           )}
         </motion.button>
-        <span className="text-[11px] font-medium text-foreground/80">{app.name}</span>
+        <span className="text-[10px] font-medium text-foreground/80">{app.name}</span>
       </motion.div>
     );
   };
@@ -319,49 +319,40 @@ const HomeScreen: React.FC = () => {
           <img src={image} alt="" className="w-full h-full object-cover" />
         ) : (
           <div className="flex flex-col items-center gap-1 text-muted-foreground">
-            <Plus className="w-6 h-6" />
-            <span className="text-xs">上传图片</span>
+            <Plus className="w-5 h-5" />
+            <span className="text-[10px]">上传图片</span>
           </div>
         )}
       </motion.div>
     );
   };
 
-  // 渲染第一页 - 按照参考图布局
+  // 第一页布局 - 严格按照参考图
   const renderPage1 = () => {
     const apps = pageApps.slice(0, 11);
     
     return (
-      <div className="flex flex-col gap-3 px-4">
-        {/* 第一行: 横向大图(左侧) + 3个APP(右侧竖排) */}
-        <div className="flex gap-3">
-          {/* 横向大图 */}
-          {renderLargeImageArea('page_image_0_top', 'flex-1 h-24')}
-          
-          {/* 右侧3个APP竖排 */}
-          <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 px-3">
+        {/* 第一行: 横向大图 + 右侧3个APP横排 */}
+        <div className="flex gap-2 items-start">
+          {renderLargeImageArea('page_image_top', 'flex-1 h-16')}
+          <div className="flex gap-2">
             {apps.slice(0, 3).map(app => renderAppIcon(app))}
           </div>
         </div>
         
-        {/* 第二区块: 左侧2x2 APP + 右侧2x2大图 */}
-        <div className="flex gap-3">
-          {/* 左侧2x2 APP */}
-          <div className="grid grid-cols-2 gap-3">
+        {/* 第二区块: 左侧2x2 APP + 右侧方形大图 */}
+        <div className="flex gap-2 items-start">
+          <div className="grid grid-cols-2 gap-2">
             {apps.slice(3, 7).map(app => renderAppIcon(app))}
           </div>
-          
-          {/* 右侧大图 */}
-          {renderLargeImageArea('page_image_0_mid', 'w-[140px] h-[180px]')}
+          {renderLargeImageArea('page_image_mid', 'w-[120px] h-[152px]')}
         </div>
         
-        {/* 第三区块: 左侧2x2大图 + 右侧2x2 APP */}
-        <div className="flex gap-3">
-          {/* 左侧大图 */}
-          {renderLargeImageArea('page_image_0_bottom', 'w-[140px] h-[180px]')}
-          
-          {/* 右侧2x2 APP */}
-          <div className="grid grid-cols-2 gap-3">
+        {/* 第三区块: 左侧方形大图 + 右侧2x2 APP */}
+        <div className="flex gap-2 items-start">
+          {renderLargeImageArea('page_image_bottom', 'w-[120px] h-[152px]')}
+          <div className="grid grid-cols-2 gap-2">
             {apps.slice(7, 11).map(app => renderAppIcon(app))}
           </div>
         </div>
@@ -369,32 +360,18 @@ const HomeScreen: React.FC = () => {
     );
   };
 
-  // 渲染第二页
+  // 第二页 - 纯APP图标网格
   const renderPage2 = () => {
     const apps = pageApps.slice(11);
-    const fillerCount = Math.max(0, 8 - apps.length);
     
     return (
-      <div className="flex flex-col gap-3 px-4">
-        {/* 顶部大图 */}
-        {renderLargeImageArea('page_image_1_top', 'w-full h-32')}
-        
-        {/* APP网格 */}
-        <div className="grid grid-cols-4 gap-4">
+      <div className="px-3">
+        <div className="grid grid-cols-4 gap-3">
           {apps.map(app => renderAppIcon(app))}
         </div>
-      </div>
-    );
-  };
-
-  // 渲染第三页
-  const renderPage3 = () => {
-    return (
-      <div className="flex flex-col gap-3 px-4">
-        {/* 大图展示区 */}
-        {renderLargeImageArea('page_image_2_main', 'w-full h-64')}
-        
-        <p className="text-center text-muted-foreground text-sm">更多功能即将开放</p>
+        {apps.length === 0 && (
+          <p className="text-center text-muted-foreground text-sm mt-8">暂无更多应用</p>
+        )}
       </div>
     );
   };
@@ -403,7 +380,6 @@ const HomeScreen: React.FC = () => {
     switch (currentPage) {
       case 0: return renderPage1();
       case 1: return renderPage2();
-      case 2: return renderPage3();
       default: return renderPage1();
     }
   };
@@ -426,8 +402,8 @@ const HomeScreen: React.FC = () => {
       />
 
       {/* Status bar */}
-      <div className="flex justify-between items-center px-5 pt-6 pb-3">
-        <span className="text-base font-semibold text-foreground/80">
+      <div className="flex justify-between items-center px-4 pt-4 pb-2">
+        <span className="text-sm font-semibold text-foreground/80">
           {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
@@ -453,9 +429,9 @@ const HomeScreen: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={exitEditMode}
-            className="fixed top-16 right-4 z-20 bg-background/90 rounded-full p-2 shadow-lg"
+            className="fixed top-14 right-3 z-20 bg-background/90 rounded-full p-2 shadow-lg"
           >
-            <X className="w-5 h-5 text-foreground" />
+            <X className="w-4 h-4 text-foreground" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -476,7 +452,7 @@ const HomeScreen: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
               transition={{ duration: 0.2 }}
-              className="relative z-20 pt-2"
+              className="relative z-20"
             >
               {renderCurrentPage()}
             </motion.div>
@@ -485,24 +461,24 @@ const HomeScreen: React.FC = () => {
       </div>
 
       {/* Bottom area */}
-      <div className="pb-4 flex flex-col items-center gap-3">
+      <div className="pb-3 flex flex-col items-center gap-2">
         {/* Return to lock screen */}
         <button
           onClick={() => navigate('/?locked=true')}
-          className="text-sm text-foreground/60 hover:text-foreground/80 transition-colors"
+          className="text-xs text-foreground/60 hover:text-foreground/80 transition-colors"
         >
           返回锁屏
         </button>
 
         {/* Page indicators */}
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {Array.from({ length: totalPages }).map((_, i) => (
             <button
               key={i}
               onClick={() => setCurrentPage(i)}
-              className={`w-2 h-2 rounded-full transition-all ${
+              className={`w-1.5 h-1.5 rounded-full transition-all ${
                 i === currentPage 
-                  ? 'bg-foreground/70 w-4' 
+                  ? 'bg-foreground/70 w-3' 
                   : 'bg-foreground/30'
               }`}
             />
@@ -510,8 +486,8 @@ const HomeScreen: React.FC = () => {
         </div>
 
         {/* Dock */}
-        <div className="bg-background/30 backdrop-blur-xl rounded-3xl px-6 py-3 mx-4">
-          <div className="flex gap-6 justify-center">
+        <div className="bg-background/30 backdrop-blur-xl rounded-2xl px-4 py-2 mx-3">
+          <div className="flex gap-4 justify-center">
             {dockAppConfigs.map(app => renderAppIcon(app, 'dock'))}
           </div>
         </div>
