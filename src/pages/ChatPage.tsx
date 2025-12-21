@@ -1811,7 +1811,7 @@ const ChatPage: React.FC = () => {
                   >
                     {/* 装饰图标 或 头像装饰图片 */}
                     {msg.role === 'user' && getUserBubbleDecorImage() && (
-                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -right-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
                     )}
                     {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
                       <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
