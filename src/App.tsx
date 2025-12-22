@@ -31,6 +31,7 @@ import WorkshopPage from "./pages/WorkshopPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import FinancePage from "./pages/FinancePage";
+import GiftShopPage from "./pages/GiftShopPage";
 import NotFound from "./pages/NotFound";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import { useEffect } from "react";
@@ -85,6 +86,7 @@ const App = () => (
                 <Route path="/privacy" element={<WithPhoneFrame><PrivacyPage /></WithPhoneFrame>} />
                 <Route path="/terms" element={<WithPhoneFrame><TermsPage /></WithPhoneFrame>} />
                 <Route path="/finance" element={<WithPhoneFrame><FinancePage /></WithPhoneFrame>} />
+                <Route path="/gift-shop" element={<WithPhoneFrame><GiftShopPage /></WithPhoneFrame>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
