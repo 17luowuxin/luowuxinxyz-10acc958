@@ -17,15 +17,19 @@ const Index: React.FC = () => {
     }
   }, [user, loading, navigate]);
 
-  // Handle /lock route to go back to lock screen
+  // Handle lock/unlock via URL
   useEffect(() => {
-    if (location.pathname === '/lock') {
+    const params = new URLSearchParams(location.search);
+    if (params.get('locked') === 'true') {
+      setIsLocked(true);
+      navigate('/', { replace: true });
+    } else if (location.pathname === '/lock') {
       setIsLocked(true);
       navigate('/', { replace: true });
     } else if (location.pathname === '/home') {
       setIsLocked(false);
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   if (loading) {
     return (

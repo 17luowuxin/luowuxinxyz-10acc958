@@ -58,10 +58,10 @@ const dockApps: AppConfig[] = [
   { id: 'settings', name: '设置', icon: Settings, bgColor: 'bg-[#78909C]', route: '/settings' },
 ];
 
-// 第一页APP分组
-const page1Apps = allApps.slice(0, 11);
-// 第二页APP (剩余的)
-const page2Apps = allApps.slice(3);
+// 第一页APP分组 (11个)
+const page1Apps = allApps;
+// 第二页APP - 可以添加更多APP或者显示不同内容
+const page2ExtraApps: AppConfig[] = [];
 
 const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -356,17 +356,22 @@ const HomeScreen: React.FC = () => {
     </div>
   );
 
-  // 第二页布局：更大的APP图标铺满
+  // 第二页布局：所有APP以大图标显示
   const renderPage2 = () => (
-    <div className="flex flex-col gap-4 px-4">
-      {/* 顶部3个APP */}
-      <div className="flex justify-center gap-6">
-        {page2Apps.slice(0, 3).map(app => renderAppIcon(app, 'large'))}
+    <div className="flex flex-col gap-5 px-5">
+      {/* 顶部3个APP横排 */}
+      <div className="flex justify-around">
+        {allApps.slice(0, 3).map(app => renderAppIcon(app, 'large'))}
       </div>
 
-      {/* 大图标网格 */}
-      <div className="grid grid-cols-3 gap-5 mt-2">
-        {page2Apps.slice(3).map(app => renderAppIcon(app, 'large'))}
+      {/* 大图标网格 3x3 */}
+      <div className="grid grid-cols-3 gap-6 justify-items-center">
+        {allApps.slice(3, 9).map(app => renderAppIcon(app, 'large'))}
+      </div>
+
+      {/* 剩余APP */}
+      <div className="flex justify-around">
+        {allApps.slice(9).map(app => renderAppIcon(app, 'large'))}
       </div>
     </div>
   );
