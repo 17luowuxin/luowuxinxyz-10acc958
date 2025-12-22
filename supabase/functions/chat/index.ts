@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit, hasImage, imageUrl } = await req.json();
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -343,6 +343,60 @@ ${transferPrompt}
 如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。
 如果你记住了关于用户的一些信息，请自然地运用这些记忆，但不要刻意提及"我记得..."。`;
 
+    // 如果有图片，使用Lovable AI视觉模型识别图片
+    let imageDescription = '';
+    if (hasImage && imageUrl) {
+      console.log("Processing image with vision model...");
+      try {
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+        if (LOVABLE_API_KEY) {
+          const visionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
+                    },
+                    {
+                      type: "image_url",
+                      image_url: { url: imageUrl }
+                    }
+                  ]
+                }
+              ],
+            }),
+          });
+          
+          if (visionResponse.ok) {
+            const visionData = await visionResponse.json();
+            imageDescription = visionData.choices?.[0]?.message?.content || '';
+            console.log("Image description:", imageDescription.slice(0, 100));
+          } else {
+            console.error("Vision API error:", visionResponse.status);
+          }
+        }
+      } catch (visionError) {
+        console.error("Vision processing error:", visionError);
+      }
+    }
+
+    // 如果有图片描述，添加到最后一条消息
+    if (imageDescription && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'user') {
+        lastMessage.content = `[用户发送了一张图片，图片内容: ${imageDescription}]\n\n用户说: ${lastMessage.content}`;
+      }
+    }
+
     let requestBody: Record<string, unknown>;
     const isAnthropic = provider === 'anthropic' && userApiKey;
     
@@ -364,7 +418,7 @@ ${transferPrompt}
           ...messages,
         ],
         stream: true,
-        max_tokens: 2048, // 确保有足够的token生成完整回复
+        max_tokens: 2048,
       };
     }
 
@@ -372,6 +426,7 @@ ${transferPrompt}
     console.log("Request model:", model);
     console.log("API URL:", apiUrl);
     console.log("Messages count:", messages.length);
+    console.log("Has image:", hasImage);
 
     // 智能消息截断和重试函数
     const sendRequestWithRetry = async (msgs: any[], streamMode: boolean): Promise<{ response: Response; usedStream: boolean; messagesUsed: any[] }> => {

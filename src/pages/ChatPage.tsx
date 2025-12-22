@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -146,7 +146,10 @@ const ChatPage: React.FC = () => {
     vibeStrength?: number;
   } | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   
 
   useEffect(() => {
@@ -1094,8 +1097,227 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  // 图片选择处理
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // 检查文件大小（限制5MB）
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('图片大小不能超过5MB');
+      return;
+    }
+    
+    // 预览图片
+    const url = URL.createObjectURL(file);
+    setPendingImage({ url, file });
+  };
+
+  // 上传图片到存储
+  const uploadImageToStorage = async (file: File): Promise<string | null> => {
+    if (!user?.id) return null;
+    
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        return null;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Upload image error:', error);
+      return null;
+    }
+  };
+
+  // 发送带图片的消息
+  const sendMessageWithImage = async () => {
+    if (!pendingImage || loading) return;
+    
+    setUploadingImage(true);
+    setLoading(true);
+    
+    try {
+      // 上传图片
+      const imageUrl = await uploadImageToStorage(pendingImage.file);
+      if (!imageUrl) {
+        toast.error('图片上传失败');
+        setUploadingImage(false);
+        setLoading(false);
+        return;
+      }
+      
+      // 构建消息内容
+      const textContent = input.trim() || '发送了一张图片';
+      const messageContent = `[图片] ${textContent}`;
+      
+      // 保存用户消息到数据库
+      const { data: savedMsg, error: saveError } = await supabase
+        .from('chat_messages')
+        .insert({ 
+          user_id: user?.id, 
+          character_id: characterId, 
+          role: 'user', 
+          content: messageContent,
+          image_url: imageUrl
+        })
+        .select()
+        .single();
+      
+      if (saveError) {
+        toast.error('发送失败');
+        setUploadingImage(false);
+        setLoading(false);
+        return;
+      }
+      
+      // 更新UI
+      setMessages(prev => [...prev, { 
+        id: savedMsg?.id || Date.now(), 
+        role: 'user', 
+        content: messageContent,
+        image_url: imageUrl
+      }]);
+      
+      // 清理状态
+      setInput('');
+      setPendingImage(null);
+      setUploadingImage(false);
+      URL.revokeObjectURL(pendingImage.url);
+      
+      // 调用AI（带图片识别）
+      const recentMessages = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-historyLimit)
+        .map(m => ({ role: m.role, content: m.content, image_url: m.image_url }));
+      
+      const body: any = { 
+        messages: [...recentMessages, { role: 'user', content: textContent, image_url: imageUrl }], 
+        characterName: character?.name, 
+        characterId: characterId,
+        userId: user?.id,
+        persona: character?.persona,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        replyMode: replyMode,
+        onlineMessageCount: onlineMessageCount,
+        transferEnabled: transferEnabled,
+        historyLimit: historyLimit,
+        hasImage: true, // 标记有图片
+        imageUrl: imageUrl
+      };
+      
+      body.userApiKey = apiConfig.apiKey;
+      body.provider = apiConfig.provider;
+      if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
+      if (apiConfig.model) body.model = apiConfig.model;
+      
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
+        toast.error(errorData.error || 'AI服务暂时不可用');
+        setLoading(false);
+        return;
+      }
+      
+      // 解析响应（复用现有逻辑）
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode();
+      
+      let assistantContent = '';
+      
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          if (json.error) {
+            toast.error(json.error);
+            setLoading(false);
+            return;
+          }
+          assistantContent = json.choices?.[0]?.message?.content 
+            || json.choices?.[0]?.delta?.content
+            || json.content
+            || '';
+        } catch {
+          if (fullText.trim() && !fullText.includes('<!DOCTYPE')) {
+            assistantContent = fullText.trim();
+          }
+        }
+      }
+      
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (!line || line.startsWith(':')) continue;
+          
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta = json.choices?.[0]?.delta?.content 
+                || json.choices?.[0]?.message?.content
+                || '';
+              if (delta) assistantContent += delta;
+            } catch {}
+          }
+        }
+      }
+      
+      if (assistantContent.trim()) {
+        assistantContent = assistantContent.trim();
+        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
+        
+        await supabase.from('chat_messages').insert({ 
+          user_id: user?.id, 
+          character_id: characterId, 
+          role: 'assistant', 
+          content: assistantContent 
+        });
+      }
+    } catch (err) {
+      console.error('Send image error:', err);
+      toast.error('发送失败');
+    }
+    
+    setLoading(false);
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    // 如果有待发送的图片，走图片发送逻辑
+    if (pendingImage) {
+      return sendMessageWithImage();
+    }
+    
+    if (!input.trim()) return;
     
     // 检查API配置是否加载完成
     if (apiConfigLoading) {
@@ -1117,11 +1339,16 @@ const ChatPage: React.FC = () => {
     
     const userMessage = { role: 'user', content: messageContent };
     const tempId = Date.now();
+    const isWaitingForAI = loading; // 记录当前是否正在等待AI回复
     
-    // 先清空输入，防止重复发送
+    // 先清空输入，允许用户继续输入
     setInput('');
     setQuotedMessage(null);
-    setLoading(true);
+    
+    // 如果当前没有在等待AI回复，设置loading
+    if (!isWaitingForAI) {
+      setLoading(true);
+    }
     
     // 先保存到数据库，确保消息不丢失
     const { data: savedMsg, error: saveError } = await supabase
@@ -1291,7 +1518,7 @@ const ChatPage: React.FC = () => {
       // 检查是否是线上模式的多条消息（用 ||| 分隔）
       let multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
 
-      // 线上模式：严格固定条数，不足时自动补语气词
+      // 线上模式：限制最多条数，但不再强制补充语气词
       if (replyMode === 'online') {
         const fixedCount = onlineMessageCount === '1-2' ? 2 : 5;
         
@@ -1299,14 +1526,7 @@ const ChatPage: React.FC = () => {
         if (multiMessages.length > fixedCount) {
           multiMessages = multiMessages.slice(0, fixedCount);
         }
-        
-        // 不足时自动补语气词（不拆分原有消息）
-        const fillerWords = ['嗯', '哦', '呢', '呀', '嘻嘻', '😊', '❤️', '💕', '你呢', '是吧', '对吧', '哈哈', '嘿嘿', '~'];
-        let fillerIndex = 0;
-        while (multiMessages.length < fixedCount) {
-          multiMessages.push(fillerWords[fillerIndex % fillerWords.length]);
-          fillerIndex++;
-        }
+        // 不再自动补充语气词，避免出现无意义的"嗯""哦""呢""呀"
       }
       
       // 最多5条
@@ -1916,6 +2136,33 @@ const ChatPage: React.FC = () => {
         </div>
       </main>
 
+      {/* 待发送图片预览 */}
+      {pendingImage && (
+        <div className="px-3 py-2 bg-muted/80 border-t flex items-center gap-2">
+          <div className="relative">
+            <img 
+              src={pendingImage.url} 
+              alt="待发送" 
+              className="w-16 h-16 object-cover rounded-lg"
+            />
+            <Button 
+              variant="destructive"
+              size="icon" 
+              className="absolute -top-2 -right-2 w-5 h-5 rounded-full"
+              onClick={() => {
+                URL.revokeObjectURL(pendingImage.url);
+                setPendingImage(null);
+              }}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground flex-1">
+            {uploadingImage ? '上传中...' : '点击发送按钮发送图片'}
+          </span>
+        </div>
+      )}
+
       {/* 引用消息提示 */}
       {quotedMessage && (
         <div className="px-3 py-2 bg-muted/80 border-t flex items-center gap-2">
@@ -1934,8 +2181,17 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Fixed Input Bar - 完全固定在底部 */}
+      {/* Fixed Input Bar */}
       <footer className="h-14 flex-shrink-0 px-2 py-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-20">
+        {/* 隐藏的图片input */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageSelect}
+        />
+        
         <Popover open={showEmoji} onOpenChange={setShowEmoji}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
@@ -1974,17 +2230,28 @@ const ChatPage: React.FC = () => {
           </PopoverContent>
         </Popover>
         
+        {/* 图片按钮 */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={loading || uploadingImage}
+        >
+          <ImagePlus className="w-4 h-4" />
+        </Button>
+        
         <Input 
           value={input} 
           onChange={(e) => setInput(e.target.value)} 
-          placeholder="输入消息..." 
+          placeholder={pendingImage ? "添加说明..." : "输入消息..."} 
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()} 
           className="flex-1 h-9 rounded-full bg-muted border-0 text-sm" 
         />
         <Button 
           size="icon" 
           onClick={sendMessage} 
-          disabled={loading}
+          disabled={loading || uploadingImage}
           className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
         >
           <Send className="w-4 h-4" />
