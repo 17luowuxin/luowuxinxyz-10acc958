@@ -354,16 +354,24 @@ const HomeScreen: React.FC = () => {
     </div>
   );
 
-  // 第二页布局：仅显示顶部3个APP
+  // 第二页布局：梦阁入口
   const renderPage2 = () => (
-    <div className="flex flex-col h-full px-5 pt-10">
-      {/* 顶部3个APP横排 */}
-      <div className="flex justify-between px-4">
-        {allApps.slice(0, 3).map((app) => renderAppIcon(app, 'large'))}
-      </div>
-
-      {/* 留白，符合参考图 */}
-      <div className="flex-1" />
+    <div className="flex flex-col items-center justify-center h-full px-5">
+      <motion.div
+        whileTap={{ scale: 0.95 }}
+        onClick={() => navigate('/gift-shop')}
+        className="flex flex-col items-center gap-4 p-8 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-3xl backdrop-blur-sm border border-white/30"
+      >
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+          <span className="text-3xl">🎁</span>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            梦阁
+          </p>
+          <p className="text-xs text-foreground/60 mt-1">用梦境币为角色送礼物</p>
+        </div>
+      </motion.div>
     </div>
   );
 
