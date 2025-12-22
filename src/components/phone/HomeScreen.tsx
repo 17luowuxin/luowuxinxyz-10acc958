@@ -316,12 +316,12 @@ const HomeScreen: React.FC = () => {
   // 第一页布局
   const renderPage1 = () => (
     <div className="flex flex-col gap-4 px-4">
-      {/* 第一行：3:2大图 + 3个APP */}
+      {/* 第一行：3:2大图在左上 + 右侧3个APP横排 */}
       <div className="flex gap-3">
-        <div className="flex-1">
+        <div className="w-[55%]">
           {renderImageSlot('page_image_top', '3/2')}
         </div>
-        <div className="flex flex-col gap-2 justify-center">
+        <div className="flex gap-2 items-start pt-1">
           {renderAppIcon(page1Apps[0])}
           {renderAppIcon(page1Apps[1])}
           {renderAppIcon(page1Apps[2])}
