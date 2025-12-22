@@ -343,45 +343,110 @@ ${transferPrompt}
 如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。
 如果你记住了关于用户的一些信息，请自然地运用这些记忆，但不要刻意提及"我记得..."。`;
 
-    // 如果有图片，使用Lovable AI视觉模型识别图片
+    // 如果有图片，优先使用用户配置的API识别图片（如果支持视觉），否则使用Lovable AI
     let imageDescription = '';
     if (hasImage && imageUrl) {
       console.log("Processing image with vision model...");
+      
+      // 检查用户的API是否支持视觉功能
+      const visionSupportedModels = [
+        // OpenAI 视觉模型
+        'gpt-4o', 'gpt-4o-mini', 'gpt-4-vision', 'gpt-4-turbo', 'gpt-4.1',
+        'gpt-5', 'gpt-5-mini', 'gpt-5-nano',
+        // Gemini 视觉模型
+        'gemini', 'gemini-pro', 'gemini-1.5', 'gemini-2', 
+        // Claude 视觉模型
+        'claude-3', 'claude-3.5', 'claude-4',
+        // 其他常见视觉模型
+        'qwen-vl', 'qwen2-vl', 'glm-4v', 'yi-vision'
+      ];
+      
+      const modelLower = model.toLowerCase();
+      const supportsVision = visionSupportedModels.some(vm => modelLower.includes(vm.toLowerCase()));
+      
+      console.log("Model:", model, "Supports vision:", supportsVision);
+      
       try {
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (LOVABLE_API_KEY) {
-          const visionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
-              messages: [
+        if (supportsVision && apiKey) {
+          // 使用用户配置的API识别图片
+          console.log("Using user's API for vision:", apiUrl);
+          
+          const visionMessages = [
+            {
+              role: "user",
+              content: [
                 {
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
-                    },
-                    {
-                      type: "image_url",
-                      image_url: { url: imageUrl }
-                    }
-                  ]
+                  type: "text",
+                  text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: imageUrl }
                 }
-              ],
+              ]
+            }
+          ];
+          
+          const visionResponse = await fetch(apiUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              model,
+              messages: visionMessages,
+              max_tokens: 500,
             }),
           });
           
           if (visionResponse.ok) {
             const visionData = await visionResponse.json();
             imageDescription = visionData.choices?.[0]?.message?.content || '';
-            console.log("Image description:", imageDescription.slice(0, 100));
+            console.log("Image description from user API:", imageDescription.slice(0, 100));
           } else {
-            console.error("Vision API error:", visionResponse.status);
+            const errorText = await visionResponse.text();
+            console.error("User API vision error:", visionResponse.status, errorText);
+            // 如果用户API失败，回退到Lovable AI
+            console.log("Falling back to Lovable AI for vision...");
+          }
+        }
+        
+        // 如果用户API不支持视觉或失败，使用Lovable AI
+        if (!imageDescription) {
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          if (LOVABLE_API_KEY) {
+            console.log("Using Lovable AI for vision...");
+            const visionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash",
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
+                      },
+                      {
+                        type: "image_url",
+                        image_url: { url: imageUrl }
+                      }
+                    ]
+                  }
+                ],
+              }),
+            });
+            
+            if (visionResponse.ok) {
+              const visionData = await visionResponse.json();
+              imageDescription = visionData.choices?.[0]?.message?.content || '';
+              console.log("Image description from Lovable AI:", imageDescription.slice(0, 100));
+            } else {
+              console.error("Lovable AI vision error:", visionResponse.status);
+            }
           }
         }
       } catch (visionError) {
