@@ -1259,7 +1259,7 @@ const ChatPage: React.FC = () => {
         return;
       }
       
-      // 解析响应（复用现有逻辑）
+      // 解析响应（复用 sendMessage 的完整解析逻辑）
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
@@ -1273,6 +1273,7 @@ const ChatPage: React.FC = () => {
       
       let assistantContent = '';
       
+      // 1. 尝试解析为JSON（非流式响应）
       if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
         try {
           const json = JSON.parse(fullText);
@@ -1283,6 +1284,7 @@ const ChatPage: React.FC = () => {
           }
           assistantContent = json.choices?.[0]?.message?.content 
             || json.choices?.[0]?.delta?.content
+            || json.choices?.[0]?.text
             || json.content
             || '';
         } catch {
@@ -1292,10 +1294,12 @@ const ChatPage: React.FC = () => {
         }
       }
       
+      // 2. SSE格式解析
       if (!assistantContent) {
         const lines = fullText.split('\n');
         for (const rawLine of lines) {
           let line = rawLine.trim();
+          if (line.endsWith('\r')) line = line.slice(0, -1);
           if (!line || line.startsWith(':')) continue;
           
           if (line.startsWith('data: ')) {
@@ -1306,6 +1310,9 @@ const ChatPage: React.FC = () => {
               const json = JSON.parse(jsonStr);
               const delta = json.choices?.[0]?.delta?.content 
                 || json.choices?.[0]?.message?.content
+                || json.choices?.[0]?.text
+                || json.content
+                || json.delta?.content
                 || '';
               if (delta) assistantContent += delta;
             } catch {}
@@ -1313,8 +1320,22 @@ const ChatPage: React.FC = () => {
         }
       }
       
+      if (!assistantContent.trim()) {
+        console.error('Empty response from image API. Raw:', fullText.slice(0, 300));
+        toast.error('AI返回为空');
+        setLoading(false);
+        return;
+      }
+      
+      // 清理 ||| 分隔符（图片模式不分条）
+      assistantContent = assistantContent
+        .trim()
+        .replace(/^\|{2,}\s*/g, '')
+        .replace(/\s*\|{2,}$/g, '')
+        .replace(/\|{2,}/g, ' ')
+        .replace(/^\n+|\n+$/g, '');
+      
       if (assistantContent.trim()) {
-        assistantContent = assistantContent.trim();
         setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
         
         await supabase.from('chat_messages').insert({ 

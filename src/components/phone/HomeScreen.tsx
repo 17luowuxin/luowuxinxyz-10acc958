@@ -168,9 +168,31 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  // 长按相关状态
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPressing, setIsPressing] = useState(false);
+
   const handleLongPress = (appId: string) => {
     setUploadTarget({ type: 'app', key: appId });
     fileInputRef.current?.click();
+  };
+
+  // 移动端长按开始
+  const handleTouchStartIcon = (appId: string) => {
+    setIsPressing(true);
+    longPressTimerRef.current = setTimeout(() => {
+      handleLongPress(appId);
+      setIsPressing(false);
+    }, 500); // 500ms 长按触发
+  };
+
+  // 移动端触摸结束
+  const handleTouchEndIcon = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    setIsPressing(false);
   };
 
   const handleImageClick = (imageKey: string) => {
@@ -227,11 +249,14 @@ const HomeScreen: React.FC = () => {
         } : {}}
       >
         <button
-          onClick={() => !editMode && navigate(app.route)}
+          onClick={() => !editMode && !isPressing && navigate(app.route)}
           onContextMenu={(e) => {
             e.preventDefault();
             handleLongPress(app.id);
           }}
+          onTouchStart={() => handleTouchStartIcon(app.id)}
+          onTouchEnd={handleTouchEndIcon}
+          onTouchCancel={handleTouchEndIcon}
           className="relative"
         >
           {appIcons[app.id] ? (
