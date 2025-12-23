@@ -177,8 +177,10 @@ const HomeScreen: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  // 移动端长按开始
-  const handleTouchStartIcon = (appId: string) => {
+  // 移动端长按开始 - iOS需要阻止默认行为
+  const handleTouchStartIcon = (e: React.TouchEvent, appId: string) => {
+    // 阻止iOS默认的长按菜单
+    e.preventDefault();
     setIsPressing(true);
     longPressTimerRef.current = setTimeout(() => {
       handleLongPress(appId);
@@ -254,14 +256,21 @@ const HomeScreen: React.FC = () => {
             e.preventDefault();
             handleLongPress(app.id);
           }}
-          onTouchStart={() => handleTouchStartIcon(app.id)}
+          onTouchStart={(e) => handleTouchStartIcon(e, app.id)}
           onTouchEnd={handleTouchEndIcon}
           onTouchCancel={handleTouchEndIcon}
-          className="relative"
+          className="relative select-none"
+          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
         >
           {appIcons[app.id] ? (
             <div className={`${iconSize} rounded-[16px] shadow-soft overflow-hidden ring-1 ring-white/30`}>
-              <img src={appIcons[app.id]} alt={app.name} className="w-full h-full object-cover" />
+              <img 
+                src={appIcons[app.id]} 
+                alt={app.name} 
+                className="w-full h-full object-cover pointer-events-none select-none" 
+                draggable={false}
+                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+              />
             </div>
           ) : (
             <div className={`${iconSize} rounded-[16px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
