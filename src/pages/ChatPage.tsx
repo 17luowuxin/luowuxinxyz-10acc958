@@ -1395,10 +1395,15 @@ const ChatPage: React.FC = () => {
     setMessages(prev => [...prev, { ...userMessage, id: savedMsg?.id || tempId, quotedMessage }]);
 
     try {
+      // 保留历史消息中的图片URL
       const recentMessages = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .slice(-historyLimit)
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ role: m.role, content: m.content, image_url: m.image_url }));
+      
+      // 检查最近消息中是否有图片（用于上下文）
+      const hasImageInHistory = recentMessages.some(m => m.image_url);
+      
       const body: any = { 
         messages: [...recentMessages, userMessage], 
         characterName: character?.name, 
@@ -1409,7 +1414,8 @@ const ChatPage: React.FC = () => {
         replyMode: replyMode,
         onlineMessageCount: onlineMessageCount,
         transferEnabled: transferEnabled,
-        historyLimit: historyLimit
+        historyLimit: historyLimit,
+        hasImageInHistory: hasImageInHistory
       };
       
       // 始终传递API配置

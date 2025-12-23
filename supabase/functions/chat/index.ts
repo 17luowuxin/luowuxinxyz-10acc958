@@ -12,7 +12,25 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit, hasImage, imageUrl } = await req.json();
+  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit, hasImage, imageUrl, hasImageInHistory } = await req.json();
+    
+    // 从消息历史中检测图片
+    let detectedImageUrl = imageUrl;
+    let detectedHasImage = hasImage;
+    
+    // 如果没有直接传图片参数，检查消息历史中最后一条用户消息是否有图片
+    if (!detectedHasImage && messages && messages.length > 0) {
+      // 找最后一条用户消息
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role === 'user' && msg.image_url) {
+          detectedImageUrl = msg.image_url;
+          detectedHasImage = true;
+          console.log("Detected image from message history:", detectedImageUrl?.slice(0, 50));
+          break;
+        }
+      }
+    }
     
     // 获取预设、世界书和记忆摘要
     let presetsContent = '';
@@ -348,8 +366,8 @@ ${transferPrompt}
 
     // 如果有图片，优先使用用户配置的API识别图片（如果支持视觉），否则使用Lovable AI
     let imageDescription = '';
-    if (hasImage && imageUrl) {
-      console.log("Processing image with vision model...");
+    if (detectedHasImage && detectedImageUrl) {
+      console.log("Processing image with vision model...", detectedImageUrl?.slice(0, 80));
       
       // 检查用户的API是否支持视觉功能
       const visionSupportedModels = [
@@ -384,7 +402,7 @@ ${transferPrompt}
                 },
                 {
                   type: "image_url",
-                  image_url: { url: imageUrl }
+                  image_url: { url: detectedImageUrl }
                 }
               ]
             }
@@ -435,7 +453,7 @@ ${transferPrompt}
                       },
                       {
                         type: "image_url",
-                        image_url: { url: imageUrl }
+                        image_url: { url: detectedImageUrl }
                       }
                     ]
                   }
@@ -494,7 +512,7 @@ ${transferPrompt}
     console.log("Request model:", model);
     console.log("API URL:", apiUrl);
     console.log("Messages count:", messages.length);
-    console.log("Has image:", hasImage);
+    console.log("Has image:", detectedHasImage, "Image URL:", detectedImageUrl?.slice(0, 50));
 
     // 智能消息截断和重试函数
     const sendRequestWithRetry = async (msgs: any[], streamMode: boolean): Promise<{ response: Response; usedStream: boolean; messagesUsed: any[] }> => {
