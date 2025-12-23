@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -152,6 +152,36 @@ const ChatPage: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   
 
+  // 先定义 fetchProfile - 需要在 useEffect 之前
+  const fetchProfile = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    if (error) {
+      console.error('Fetch profile error:', error);
+      return;
+    }
+    if (data) {
+      console.log('Profile loaded:', data.nickname, 'avatar:', data.avatar_url?.slice(0, 50));
+      setProfile(data);
+    }
+  }, [user?.id]);
+
+  const fetchCharacter = useCallback(async () => {
+    if (!characterId) return;
+    const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
+    if (data) {
+      setCharacter(data);
+      if (data.reply_mode) {
+        setReplyMode(data.reply_mode as 'novel' | 'online');
+      }
+      if (data.online_message_count) {
+        setOnlineMessageCount(data.online_message_count);
+      }
+      setHistoryLimit(data.history_limit ?? 10);
+      setTransferEnabled(data.transfer_enabled ?? true);
+    }
+  }, [characterId]);
+
   useEffect(() => {
     if (user && characterId) {
       fetchCharacter();
@@ -160,33 +190,24 @@ const ChatPage: React.FC = () => {
       fetchProfile();
       fetchApiConfig();
     }
-  }, [user, characterId]);
+  }, [user, characterId, fetchProfile, fetchCharacter]);
 
+  // 优化滚动性能 - 使用防抖
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const fetchCharacter = async () => {
-    const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
-    if (data) {
-      setCharacter(data);
-      // 使用角色级别的设置
-      if (data.reply_mode) {
-        setReplyMode(data.reply_mode as 'novel' | 'online');
-      }
-      if (data.online_message_count) {
-        setOnlineMessageCount(data.online_message_count);
-      }
-      // 角色级别的历史消息数量和转账开关
-      setHistoryLimit(data.history_limit ?? 10);
-      setTransferEnabled(data.transfer_enabled ?? true);
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
-  };
+    scrollTimeoutRef.current = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [messages.length]); // 只在消息数量变化时滚动
 
-  const fetchProfile = async () => {
-    const { data } = await supabase.from('profiles').select('*').eq('user_id', user?.id).single();
-    if (data) setProfile(data);
-  };
 
   const fetchMessagesWithTransfers = async () => {
     // 并行获取聊天消息和转账记录
@@ -1515,18 +1536,42 @@ const ChatPage: React.FC = () => {
       // 清理内容 - 移除前后空白和多余换行
       assistantContent = assistantContent.trim().replace(/^\n+|\n+$/g, '');
       
-      // 检查是否是线上模式的多条消息（用 ||| 分隔）
-      let multiMessages = assistantContent.split('|||').map(s => s.trim()).filter(s => s.length > 0);
-
-      // 线上模式：限制最多条数，但不再强制补充语气词
+      // 健壮的多消息解析 - 处理不同API返回格式的差异
+      let multiMessages: string[] = [];
+      
       if (replyMode === 'online') {
+        // 清理常见的格式问题
+        let cleanedContent = assistantContent
+          // 移除开头和结尾的 |||
+          .replace(/^\|{2,}\s*/g, '')
+          .replace(/\s*\|{2,}$/g, '')
+          // 统一分隔符格式（有些API可能用 || 或 ||| 或 ||||）
+          .replace(/\|{2,}/g, '|||')
+          // 移除可能的换行符混杂
+          .replace(/\n\s*\|\|\|\s*\n?/g, '|||')
+          .replace(/\|\|\|\s*\n/g, '|||');
+        
+        // 按 ||| 分割
+        multiMessages = cleanedContent
+          .split('|||')
+          .map(s => s.trim())
+          .filter(s => s.length > 0 && s !== '|||');
+        
         const fixedCount = onlineMessageCount === '1-2' ? 2 : 5;
+        
+        // 如果分割后只有1条或0条，说明API没有正确使用|||分隔，当作普通回复处理
+        if (multiMessages.length <= 1) {
+          console.log('Online mode: API did not use ||| separator, treating as single message');
+          multiMessages = [assistantContent.replace(/\|{2,}/g, ' ').trim()];
+        }
         
         // 限制最多条数
         if (multiMessages.length > fixedCount) {
           multiMessages = multiMessages.slice(0, fixedCount);
         }
-        // 不再自动补充语气词，避免出现无意义的"嗯""哦""呢""呀"
+      } else {
+        // 小说模式：不分割
+        multiMessages = [assistantContent.replace(/\|\|\|/g, ' ').trim()];
       }
       
       // 最多5条
