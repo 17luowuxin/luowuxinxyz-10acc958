@@ -341,7 +341,10 @@ ${transferPrompt}
 请严格按照上述角色人设来回复用户，保持角色的性格特点、说话方式和语气。
 回复要简洁自然，像真实朋友聊天一样，同时体现角色的独特个性。
 如果角色人设中有特定的口头禅或说话习惯，请在对话中自然地使用。
-如果你记住了关于用户的一些信息，请自然地运用这些记忆，但不要刻意提及"我记得..."。`;
+如果你记住了关于用户的一些信息，请自然地运用这些记忆，但不要刻意提及"我记得..."。
+
+【重要】绝对不要输出任何思考/推理过程（例如“思考：… / analysis… / thinking… / <think>…</think>”）。只输出对用户可见的最终回复内容。`;
+
 
     // 如果有图片，优先使用用户配置的API识别图片（如果支持视觉），否则使用Lovable AI
     let imageDescription = '';
@@ -695,7 +698,39 @@ ${transferPrompt}
     console.log("Response status:", response.status);
 
     // 提取内容的辅助函数 - 移到前面以便流式和非流式都能使用
+    const sanitizeAssistantOutput = (raw: string): string => {
+      if (!raw) return raw;
+      let text = raw;
+
+      // 1) 常见标签：<think>...</think>
+      text = text.replace(/<think[^>]*>[\s\S]*?<\/think>/gi, '');
+
+      // 2) 一些聚合API会把“思考/分析/Reasoning”直接拼到内容里：尝试保留最终回答部分
+      const finalMarkers = [
+        '最终回答', '最终答案', '最终回复', '最终：', '最终:',
+        'Final Answer', 'FINAL ANSWER',
+        '回答：', '回答:', '答：', '答:', '回复：', '回复:'
+      ];
+      for (const m of finalMarkers) {
+        const idx = text.lastIndexOf(m);
+        if (idx !== -1) {
+          const after = text.slice(idx + m.length).trim();
+          if (after) {
+            text = after;
+            break;
+          }
+        }
+      }
+
+      // 3) 去掉开头的“思考/分析/推理”等段落（保守：只处理开头，并且只吃到第一个空行）
+      text = text.replace(/^(?:\s*(?:思考|分析|推理|Reasoning|Analysis|Thinking)\s*[:：][\s\S]*?)(?:\n{2,}|$)/i, '');
+
+      // 4) 清理多余空白
+      return text.replace(/^[\s\n]+|[\s\n]+$/g, '');
+    };
+
     const extractContent = (text: string): { content: string; finishReason: string | null } => {
+
       let content = '';
       let finishReason: string | null = null;
       
@@ -813,7 +848,7 @@ ${transferPrompt}
         const continueMessages = [
           { role: "system", content: systemPrompt },
           ...currentMessages,
-          { role: "assistant", content: fullStreamContent },
+          { role: "assistant", content: sanitizeAssistantOutput(fullStreamContent) },
           { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
         ];
         
@@ -853,9 +888,10 @@ ${transferPrompt}
       }
       
       console.log(`Final stream content length: ${fullStreamContent.length} chars, continued ${continueCount} times`);
-      
-      // 返回完整内容
-      const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: fullStreamContent } }] })}\n\ndata: [DONE]\n\n`;
+
+      // 返回完整内容（剔除思考/推理文本）
+      const safeStreamContent = sanitizeAssistantOutput(fullStreamContent);
+      const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: safeStreamContent } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sseData, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
       });
@@ -879,7 +915,7 @@ ${transferPrompt}
       const continueMessages = [
         { role: "system", content: systemPrompt },
         ...messages,
-        { role: "assistant", content: fullContent },
+        { role: "assistant", content: sanitizeAssistantOutput(fullContent) },
         { role: "user", content: "请接着上文继续写完，不要重复已经说过的内容，直接从断句处继续。" }
       ];
       
@@ -926,10 +962,11 @@ ${transferPrompt}
       });
     }
 
-    console.log(`Final content length: ${fullContent.length} chars, continued ${continueCount} times`);
+    const safeFullContent = sanitizeAssistantOutput(fullContent);
+    console.log(`Final content length: ${safeFullContent.length} chars, continued ${continueCount} times`);
 
     // 包装成SSE格式返回给前端
-    const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: fullContent } }] })}\n\ndata: [DONE]\n\n`;
+    const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: safeFullContent } }] })}\n\ndata: [DONE]\n\n`;
     return new Response(sseData, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
