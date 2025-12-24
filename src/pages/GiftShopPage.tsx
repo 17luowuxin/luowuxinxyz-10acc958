@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Gift, Sparkles, Heart, Star, Crown, Gem, Flower2, Music2, Cake } from 'lucide-react';
+import { 
+  ChevronLeft, Gift, Sparkles, ShoppingCart, Trash2, Plus, 
+  Heart, Star, Crown, Gem, Flower2, Music2, Cake, ImagePlus,
+  Check, X
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,29 +29,59 @@ interface GiftItem {
   price: number;
   icon: React.ReactNode;
   color: string;
+  borderColor: string;
   description: string;
+  category: 'ancient' | 'modern' | 'daily' | 'luxury';
+  customImage?: string;
 }
 
-const gifts: GiftItem[] = [
-  { id: 'rose', name: '玫瑰花', price: 1, icon: <Flower2 className="w-8 h-8" />, color: 'from-pink-400 to-rose-500', description: '一朵娇艳的玫瑰' },
-  { id: 'heart', name: '爱心', price: 5, icon: <Heart className="w-8 h-8" />, color: 'from-red-400 to-pink-500', description: '满满的爱意' },
-  { id: 'star', name: '星星', price: 10, icon: <Star className="w-8 h-8" />, color: 'from-yellow-400 to-orange-500', description: '闪闪发光的星星' },
-  { id: 'cake', name: '蛋糕', price: 20, icon: <Cake className="w-8 h-8" />, color: 'from-amber-400 to-orange-500', description: '甜蜜的蛋糕' },
-  { id: 'music', name: '音乐盒', price: 50, icon: <Music2 className="w-8 h-8" />, color: 'from-blue-400 to-indigo-500', description: '美妙的旋律' },
-  { id: 'gem', name: '宝石', price: 100, icon: <Gem className="w-8 h-8" />, color: 'from-purple-400 to-violet-500', description: '璀璨的宝石' },
-  { id: 'crown', name: '皇冠', price: 200, icon: <Crown className="w-8 h-8" />, color: 'from-yellow-500 to-amber-600', description: '尊贵的皇冠' },
-  { id: 'sparkle', name: '梦之光', price: 520, icon: <Sparkles className="w-8 h-8" />, color: 'from-pink-500 to-purple-600', description: '最珍贵的礼物' },
+interface CartItem {
+  gift: GiftItem;
+  quantity: number;
+}
+
+// 分类定义
+const categories = [
+  { id: 'ancient', name: '古风类', borderClass: 'from-pink-300 to-pink-400', bgPattern: 'ink-wash', textureClass: 'bg-gradient-to-br from-pink-50 to-rose-50' },
+  { id: 'modern', name: '现代类', borderClass: 'from-blue-300 to-blue-400', bgPattern: 'lines', textureClass: 'bg-gradient-to-br from-blue-50 to-cyan-50' },
+  { id: 'daily', name: '日常类', borderClass: 'from-yellow-300 to-amber-400', bgPattern: 'soft', textureClass: 'bg-gradient-to-br from-yellow-50 to-orange-50' },
+  { id: 'luxury', name: '豪车数码', borderClass: 'from-emerald-300 to-teal-400', bgPattern: 'tech', textureClass: 'bg-gradient-to-br from-emerald-50 to-teal-50' },
+];
+
+const defaultGifts: GiftItem[] = [
+  // 古风类
+  { id: 'rose', name: '玫瑰花', price: 1, icon: <Flower2 className="w-7 h-7" />, color: 'from-pink-400 to-rose-500', borderColor: 'from-pink-300 to-pink-400', description: '一朵娇艳的玫瑰', category: 'ancient' },
+  { id: 'heart', name: '爱心', price: 5, icon: <Heart className="w-7 h-7" />, color: 'from-red-400 to-pink-500', borderColor: 'from-pink-300 to-pink-400', description: '满满的爱意', category: 'ancient' },
+  // 现代类
+  { id: 'star', name: '星星', price: 10, icon: <Star className="w-7 h-7" />, color: 'from-blue-400 to-cyan-500', borderColor: 'from-blue-300 to-blue-400', description: '闪闪发光的星星', category: 'modern' },
+  { id: 'music', name: '音乐盒', price: 50, icon: <Music2 className="w-7 h-7" />, color: 'from-indigo-400 to-blue-500', borderColor: 'from-blue-300 to-blue-400', description: '美妙的旋律', category: 'modern' },
+  // 日常类
+  { id: 'cake', name: '蛋糕', price: 20, icon: <Cake className="w-7 h-7" />, color: 'from-yellow-400 to-orange-500', borderColor: 'from-yellow-300 to-amber-400', description: '甜蜜的蛋糕', category: 'daily' },
+  { id: 'sparkle', name: '梦之光', price: 52, icon: <Sparkles className="w-7 h-7" />, color: 'from-amber-400 to-yellow-500', borderColor: 'from-yellow-300 to-amber-400', description: '温暖的光芒', category: 'daily' },
+  // 豪车数码
+  { id: 'gem', name: '宝石', price: 100, icon: <Gem className="w-7 h-7" />, color: 'from-emerald-400 to-teal-500', borderColor: 'from-emerald-300 to-teal-400', description: '璀璨的宝石', category: 'luxury' },
+  { id: 'crown', name: '皇冠', price: 200, icon: <Crown className="w-7 h-7" />, color: 'from-teal-400 to-emerald-500', borderColor: 'from-emerald-300 to-teal-400', description: '尊贵的皇冠', category: 'luxury' },
 ];
 
 const GiftShopPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [balance, setBalance] = useState(0);
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [gifts, setGifts] = useState<GiftItem[]>(defaultGifts);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   const [showCharacterPicker, setShowCharacterPicker] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'exchange' | 'collect' | 'mine'>('exchange');
 
   useEffect(() => {
     if (user) {
@@ -81,190 +115,638 @@ const GiftShopPage: React.FC = () => {
     }
   };
 
-  const handleGiftClick = (gift: GiftItem) => {
-    if (balance < gift.price) {
+  // 播放按钮音效
+  const playClickSound = () => {
+    const audio = new Audio('data:audio/wav;base64,UklGRl4FAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YToFAACAgICAgICAgICAgICAgICAgICAgICAgJCQoKCwsMDA0NDg4PDwAAEREiIzNERVZnd4iZqrvc');
+    audio.volume = 0.3;
+    audio.play().catch(() => {});
+  };
+
+  // 添加到购物车
+  const addToCart = (gift: GiftItem) => {
+    playClickSound();
+    const existing = cart.find(item => item.gift.id === gift.id);
+    if (existing) {
+      setCart(cart.map(item => 
+        item.gift.id === gift.id 
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+    } else {
+      setCart([...cart, { gift, quantity: 1 }]);
+    }
+    toast.success('已加入购物车', { duration: 1500 });
+  };
+
+  // 从购物车移除
+  const removeFromCart = (giftId: string) => {
+    setCart(cart.filter(item => item.gift.id !== giftId));
+  };
+
+  // 计算购物车总价
+  const cartTotal = cart.reduce((sum, item) => sum + item.gift.price * item.quantity, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // 上传自定义图片
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingGiftId) return;
+
+    // 压缩图片
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      const maxSize = 256;
+      let { width, height } = img;
+      if (width > height) {
+        if (width > maxSize) { height = height * maxSize / width; width = maxSize; }
+      } else {
+        if (height > maxSize) { width = width * maxSize / height; height = maxSize; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      ctx?.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      
+      setGifts(gifts.map(g => 
+        g.id === editingGiftId ? { ...g, customImage: dataUrl } : g
+      ));
+      setEditingGiftId(null);
+      toast.success('图片已更新');
+    };
+    
+    img.src = URL.createObjectURL(file);
+    e.target.value = '';
+  };
+
+  // 打开礼物详情
+  const openGiftDetail = (gift: GiftItem) => {
+    setSelectedGift(gift);
+    setShowDetail(true);
+  };
+
+  // 直接购买
+  const handleDirectPurchase = () => {
+    if (!selectedGift) return;
+    if (balance < selectedGift.price) {
       toast.error('梦境币不足，快去和角色聊天获取吧~');
       return;
     }
-    setSelectedGift(gift);
+    setShowDetail(false);
     setShowCharacterPicker(true);
   };
 
+  // 结算购物车
+  const handleCheckout = () => {
+    if (balance < cartTotal) {
+      toast.error('梦境币不足');
+      return;
+    }
+    setShowCart(false);
+    setShowCharacterPicker(true);
+  };
+
+  // 发送礼物并触发角色回复
   const handleSendGift = async () => {
-    if (!selectedGift || !selectedCharacter || !user) return;
+    if (!selectedCharacter || !user) return;
 
-    setSending(true);
+    const giftList = selectedGift ? [{ gift: selectedGift, quantity: 1 }] : cart;
+    const totalPrice = selectedGift ? selectedGift.price : cartTotal;
 
-    // Deduct balance by creating a negative transaction
-    const { error } = await supabase
-      .from('dream_transactions')
-      .insert({
-        user_id: user.id,
-        character_id: selectedCharacter.id,
-        character_name: selectedCharacter.name,
-        amount: -selectedGift.price,
-        message: `赠送了${selectedGift.name}`,
-        is_received: true,
-      });
-
-    if (error) {
-      toast.error('赠送失败');
-      setSending(false);
+    if (balance < totalPrice) {
+      toast.error('梦境币不足');
       return;
     }
 
-    toast.success(
-      <div className="flex items-center gap-2">
-        <span>成功向 {selectedCharacter.name} 赠送了 {selectedGift.name}！</span>
-        {selectedGift.icon}
-      </div>
-    );
+    setSending(true);
 
-    setShowCharacterPicker(false);
-    setSelectedGift(null);
-    setSelectedCharacter(null);
-    setSending(false);
-    fetchBalance();
+    try {
+      // 创建交易记录
+      const giftNames = giftList.map(item => `${item.gift.name}x${item.quantity}`).join('、');
+      
+      const { error } = await supabase
+        .from('dream_transactions')
+        .insert({
+          user_id: user.id,
+          character_id: selectedCharacter.id,
+          character_name: selectedCharacter.name,
+          amount: -totalPrice,
+          message: `赠送了${giftNames}`,
+          is_received: true,
+        });
+
+      if (error) throw error;
+
+      // 发送聊天消息给角色
+      const userMessage = `我给你送了${giftNames}，希望你喜欢！💝`;
+      
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        character_id: selectedCharacter.id,
+        role: 'user',
+        content: userMessage,
+      });
+
+      // 触发角色自动回复（调用chat edge function）
+      try {
+        const { data: charData } = await supabase
+          .from('characters')
+          .select('persona, name')
+          .eq('id', selectedCharacter.id)
+          .single();
+
+        if (charData) {
+          const { data: apiKeyData } = await supabase
+            .from('api_keys')
+            .select('api_key, provider')
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+
+          const response = await supabase.functions.invoke('chat', {
+            body: {
+              message: userMessage,
+              characterName: charData.name,
+              characterPersona: charData.persona || '',
+              chatHistory: [],
+              apiKey: apiKeyData?.api_key,
+              provider: apiKeyData?.provider,
+            },
+          });
+
+          if (response.data?.reply) {
+            await supabase.from('chat_messages').insert({
+              user_id: user.id,
+              character_id: selectedCharacter.id,
+              role: 'assistant',
+              content: response.data.reply,
+            });
+          }
+        }
+      } catch (chatError) {
+        console.log('Auto reply skipped:', chatError);
+      }
+
+      // 显示成功动画
+      setShowCharacterPicker(false);
+      setShowSuccess(true);
+      
+      setTimeout(() => {
+        setShowSuccess(false);
+        setSelectedGift(null);
+        setSelectedCharacter(null);
+        setCart([]);
+        fetchBalance();
+      }, 2500);
+
+    } catch (error) {
+      toast.error('赠送失败，请重试');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // 获取分类的礼物
+  const getGiftsByCategory = (categoryId: string) => {
+    return gifts.filter(g => g.category === categoryId);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-orange-50">
-      {/* Header */}
+    <div className="min-h-screen bg-[#FFFBF5]">
+      {/* 隐藏的文件输入 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
+      {/* 顶部导航 */}
       <div className="flex items-center justify-between p-4 pb-2">
         <div className="flex items-center gap-3">
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={() => navigate('/')}
-            className="rounded-full"
+            className="rounded-full hover:bg-pink-100"
           >
-            <ChevronLeft className="w-6 h-6 text-purple-600" />
+            <ChevronLeft className="w-6 h-6 text-gray-600" />
           </Button>
+          
+          {/* 店名 - 马卡龙色带星光描边 */}
           <div className="flex items-center gap-2">
-            <Gift className="w-5 h-5 text-purple-500" />
-            <h1 className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            <div className="relative">
+              <Gift className="w-6 h-6 text-pink-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
+              <Sparkles className="w-3 h-3 text-yellow-400 absolute -top-1 -right-1 animate-pulse" />
+            </div>
+            <h1 
+              className="text-xl font-bold"
+              style={{
+                background: 'linear-gradient(135deg, #FDA4AF 0%, #A5B4FC 50%, #FDE68A 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 0 20px rgba(251,191,36,0.3)',
+              }}
+            >
               梦阁
             </h1>
           </div>
         </div>
         
-        {/* Balance */}
-        <motion.div
-          whileTap={{ scale: 0.95 }}
-          onClick={() => navigate('/finance')}
-          className="flex items-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white px-4 py-2 rounded-full shadow-lg cursor-pointer"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span className="font-bold">¥{balance.toFixed(0)}</span>
-        </motion.div>
-      </div>
-
-      {/* Description */}
-      <div className="px-4 py-2">
-        <p className="text-sm text-gray-500 text-center">
-          用角色赠送的梦境币，为TA购买心意礼物吧~
-        </p>
-      </div>
-
-      {/* Gifts Grid */}
-      <div className="p-4 grid grid-cols-2 gap-4">
-        {gifts.map((gift, index) => (
+        {/* 右侧：梦境币 + 购物车 */}
+        <div className="flex items-center gap-3">
+          {/* 梦境币 */}
           <motion.div
-            key={gift.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => handleGiftClick(gift)}
-            className={`relative bg-white rounded-3xl p-4 shadow-lg cursor-pointer overflow-hidden
-              ${balance >= gift.price ? 'hover:shadow-xl' : 'opacity-60'}`}
+            onClick={() => navigate('/finance')}
+            className="flex items-center gap-1.5 bg-white/80 backdrop-blur px-3 py-1.5 rounded-full shadow-sm cursor-pointer border border-yellow-200"
           >
-            {/* Background gradient */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${gift.color} opacity-10`} />
-            
-            <div className="relative flex flex-col items-center gap-2">
-              <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${gift.color} flex items-center justify-center text-white shadow-md`}>
-                {gift.icon}
-              </div>
-              <p className="font-bold text-gray-800">{gift.name}</p>
-              <p className="text-xs text-gray-400">{gift.description}</p>
-              <div className="flex items-center gap-1 text-orange-500 font-bold">
-                <Sparkles className="w-3 h-3" />
-                <span>¥{gift.price}</span>
-              </div>
+            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-300 to-amber-400 flex items-center justify-center shadow-inner">
+              <span className="text-[10px] font-bold text-amber-800">¥</span>
             </div>
+            <span className="font-bold text-gray-700">{balance.toFixed(0)}</span>
           </motion.div>
+
+          {/* 购物车 */}
+          <motion.div
+            whileTap={{ scale: 0.95 }}
+            onClick={() => { playClickSound(); setShowCart(true); }}
+            className="relative p-2 bg-gradient-to-br from-pink-200 to-pink-300 rounded-full shadow-md cursor-pointer"
+          >
+            <ShoppingCart className="w-5 h-5 text-pink-600" />
+            {cartCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-1 -right-1 w-5 h-5 bg-orange-400 text-white text-xs font-bold rounded-full flex items-center justify-center shadow"
+              >
+                {cartCount}
+              </motion.span>
+            )}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* 底部切换按钮 - 果冻感 */}
+      <div className="flex justify-center gap-3 px-4 py-3">
+        {[
+          { id: 'exchange', name: '兑换', color: 'from-pink-300 to-pink-400' },
+          { id: 'collect', name: '收藏', color: 'from-blue-300 to-blue-400' },
+          { id: 'mine', name: '我的', color: 'from-yellow-300 to-amber-400' },
+        ].map((tab) => (
+          <motion.button
+            key={tab.id}
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.05 }}
+            onClick={() => { playClickSound(); setActiveTab(tab.id as any); }}
+            className={`px-6 py-2 rounded-full font-medium text-sm shadow-lg transition-all duration-200
+              ${activeTab === tab.id 
+                ? `bg-gradient-to-br ${tab.color} text-white shadow-xl` 
+                : 'bg-white/80 text-gray-600 hover:bg-white'
+              }`}
+            style={{
+              boxShadow: activeTab === tab.id 
+                ? '0 4px 15px -3px rgba(0,0,0,0.15), inset 0 -2px 4px rgba(0,0,0,0.1)' 
+                : undefined
+            }}
+          >
+            {tab.name}
+          </motion.button>
         ))}
       </div>
 
-      {/* Character Picker Dialog */}
-      <Dialog open={showCharacterPicker} onOpenChange={setShowCharacterPicker}>
-        <DialogContent className="max-w-[90%] rounded-3xl">
+      {/* 主内容区 */}
+      {activeTab === 'exchange' && (
+        <div className="px-4 pb-8">
+          {/* 分类卡片 */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {categories.map((cat) => (
+              <motion.div
+                key={cat.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                className={`relative p-4 rounded-2xl cursor-pointer overflow-hidden transition-all duration-300
+                  ${selectedCategory === cat.id ? 'ring-2 ring-offset-2' : ''}`}
+                style={{
+                  background: `linear-gradient(135deg, ${cat.id === 'ancient' ? '#FDF2F8' : cat.id === 'modern' ? '#EFF6FF' : cat.id === 'daily' ? '#FFFBEB' : '#ECFDF5'} 0%, white 100%)`,
+                  boxShadow: selectedCategory === cat.id ? '0 8px 25px -5px rgba(0,0,0,0.15)' : '0 2px 10px -3px rgba(0,0,0,0.1)',
+                }}
+              >
+                {/* 渐变边框效果 */}
+                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${cat.borderClass} opacity-30 pointer-events-none`} />
+                <div className="absolute inset-[2px] rounded-xl bg-white/90 pointer-events-none" />
+                
+                {/* 纹理背景 */}
+                <div className={`absolute inset-0 ${cat.textureClass} opacity-20 pointer-events-none`} />
+                
+                <div className="relative text-center">
+                  <p className="font-bold text-gray-700">{cat.name}</p>
+                  <p className="text-xs text-gray-400 mt-1">{getGiftsByCategory(cat.id).length}件商品</p>
+                </div>
+
+                {/* 点击流光效果 */}
+                {selectedCategory === cat.id && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={{ opacity: [0, 0.5, 0], scale: [0.5, 1.5] }}
+                    transition={{ duration: 0.5 }}
+                    className={`absolute inset-0 bg-gradient-to-br ${cat.borderClass} rounded-2xl pointer-events-none`}
+                  />
+                )}
+              </motion.div>
+            ))}
+          </div>
+
+          {/* 礼物列表 */}
+          <div className="grid grid-cols-2 gap-3">
+            {(selectedCategory ? getGiftsByCategory(selectedCategory) : gifts).map((gift, index) => (
+              <motion.div
+                key={gift.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="relative bg-white rounded-2xl p-4 shadow-md overflow-hidden group"
+              >
+                {/* 渐变边框 */}
+                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${gift.borderColor} opacity-40 pointer-events-none`} />
+                <div className="absolute inset-[2px] rounded-xl bg-white pointer-events-none" />
+
+                <div className="relative flex flex-col items-center gap-2">
+                  {/* 图标/图片 */}
+                  <div 
+                    className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br ${gift.color} flex items-center justify-center text-white shadow-md overflow-hidden`}
+                    onClick={() => {
+                      setEditingGiftId(gift.id);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    {gift.customImage ? (
+                      <img src={gift.customImage} alt={gift.name} className="w-full h-full object-cover" />
+                    ) : (
+                      gift.icon
+                    )}
+                    {/* 上传按钮悬浮 */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <ImagePlus className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+
+                  <p className="font-bold text-gray-700 text-sm">{gift.name}</p>
+                  <p className="text-xs text-gray-400">{gift.description}</p>
+                  
+                  {/* 价格 */}
+                  <div className="flex items-center gap-1 text-amber-500 font-bold text-sm">
+                    <span className="w-4 h-4 rounded-full bg-gradient-to-br from-yellow-300 to-amber-400 flex items-center justify-center text-[8px] text-amber-800">¥</span>
+                    <span>{gift.price}</span>
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div className="flex gap-2 mt-1">
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => addToCart(gift)}
+                      className="px-3 py-1 bg-gradient-to-br from-blue-300 to-blue-400 text-white text-xs rounded-full shadow"
+                    >
+                      加购
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => openGiftDetail(gift)}
+                      className="px-3 py-1 bg-gradient-to-br from-yellow-300 to-amber-400 text-white text-xs rounded-full shadow"
+                    >
+                      直购
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'collect' && (
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <Heart className="w-12 h-12 mb-2 opacity-30" />
+          <p>收藏功能开发中...</p>
+        </div>
+      )}
+
+      {activeTab === 'mine' && (
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <Gift className="w-12 h-12 mb-2 opacity-30" />
+          <p>我的礼物开发中...</p>
+        </div>
+      )}
+
+      {/* 购物车弹窗 */}
+      <Dialog open={showCart} onOpenChange={setShowCart}>
+        <DialogContent className="max-w-[90%] rounded-3xl bg-[#FFFBF5]">
           <DialogHeader>
-            <DialogTitle className="text-center">
-              选择要赠送的角色
+            <DialogTitle className="flex items-center gap-2 justify-center">
+              <ShoppingCart className="w-5 h-5 text-pink-400" />
+              购物车
             </DialogTitle>
           </DialogHeader>
           
-          {characters.length === 0 ? (
+          {cart.length === 0 ? (
             <div className="text-center py-8">
-              <Gift className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-400">还没有创建角色哦~</p>
-              <Button
-                onClick={() => navigate('/friends')}
-                className="mt-4 bg-purple-500 hover:bg-purple-600"
-              >
-                去创建角色
-              </Button>
+              <ShoppingCart className="w-12 h-12 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">购物车是空的~</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3 max-h-[300px] overflow-y-auto py-2">
-              {characters.map((char) => (
-                <motion.div
-                  key={char.id}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedCharacter(char)}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl cursor-pointer transition-colors
-                    ${selectedCharacter?.id === char.id 
-                      ? 'bg-purple-100 ring-2 ring-purple-500' 
-                      : 'bg-gray-50 hover:bg-gray-100'}`}
-                >
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 overflow-hidden">
-                    {char.avatar_url ? (
-                      <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+            <div className="space-y-3 max-h-[300px] overflow-y-auto">
+              {cart.map((item) => (
+                <div key={item.gift.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-100">
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.gift.color} flex items-center justify-center text-white text-sm shadow`}>
+                    {item.gift.customImage ? (
+                      <img src={item.gift.customImage} alt="" className="w-full h-full object-cover rounded-xl" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white text-lg">
-                        {char.name[0]}
-                      </div>
+                      item.gift.icon
                     )}
                   </div>
-                  <p className="text-xs font-medium text-gray-700 truncate w-full text-center">
-                    {char.name}
-                  </p>
-                </motion.div>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-700">{item.gift.name}</p>
+                    <p className="text-xs text-gray-400">x{item.quantity}</p>
+                  </div>
+                  <p className="font-bold text-amber-500">¥{item.gift.price * item.quantity}</p>
+                  <button
+                    onClick={() => removeFromCart(item.gift.id)}
+                    className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 text-gray-400" />
+                  </button>
+                </div>
               ))}
             </div>
           )}
 
-          {selectedCharacter && selectedGift && (
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-                <span>向 <strong>{selectedCharacter.name}</strong> 赠送</span>
-                <span className={`bg-gradient-to-r ${selectedGift.color} bg-clip-text text-transparent font-bold`}>
-                  {selectedGift.name}
-                </span>
+          {cart.length > 0 && (
+            <div className="border-t border-gray-100 pt-4 mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-gray-500">总计</span>
+                <span className="text-xl font-bold text-pink-500">¥{cartTotal}</span>
               </div>
               <Button
-                onClick={handleSendGift}
-                disabled={sending}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-full"
+                onClick={handleCheckout}
+                className="w-full bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white rounded-full"
               >
-                {sending ? '赠送中...' : `确认赠送 (¥${selectedGift.price})`}
+                结算
               </Button>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 礼物详情弹窗 */}
+      <Dialog open={showDetail} onOpenChange={setShowDetail}>
+        <DialogContent className="max-w-[85%] rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50">
+          {selectedGift && (
+            <div className="text-center py-4">
+              <div className={`w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br ${selectedGift.color} flex items-center justify-center text-white shadow-lg mb-4`}>
+                {selectedGift.customImage ? (
+                  <img src={selectedGift.customImage} alt="" className="w-full h-full object-cover rounded-2xl" />
+                ) : (
+                  React.cloneElement(selectedGift.icon as React.ReactElement, { className: 'w-10 h-10' })
+                )}
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 mb-1">{selectedGift.name}</h3>
+              <p className="text-gray-500 mb-4">{selectedGift.description}</p>
+              <p className="text-2xl font-bold text-amber-500 mb-6">¥{selectedGift.price}</p>
+              
+              <div className="flex gap-3 justify-center">
+                <Button
+                  onClick={() => { addToCart(selectedGift); setShowDetail(false); }}
+                  className="bg-gradient-to-br from-blue-300 to-blue-400 hover:from-blue-400 hover:to-blue-500 text-white rounded-full px-6"
+                >
+                  加入购物车
+                </Button>
+                <Button
+                  onClick={handleDirectPurchase}
+                  className="bg-gradient-to-br from-yellow-300 to-amber-400 hover:from-yellow-400 hover:to-amber-500 text-white rounded-full px-6"
+                >
+                  立即购买
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 角色选择弹窗 */}
+      <Dialog open={showCharacterPicker} onOpenChange={setShowCharacterPicker}>
+        <DialogContent className="max-w-[90%] rounded-3xl bg-[#FFFBF5]">
+          <DialogHeader>
+            <DialogTitle className="text-center">选择要赠送的角色</DialogTitle>
+          </DialogHeader>
+          
+          {characters.length === 0 ? (
+            <div className="text-center py-8">
+              <Gift className="w-12 h-12 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">还没有创建角色哦~</p>
+              <Button
+                onClick={() => navigate('/friends')}
+                className="mt-4 bg-gradient-to-r from-pink-400 to-purple-400"
+              >
+                去创建角色
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 max-h-[250px] overflow-y-auto py-2">
+              {characters.map((char) => (
+                <motion.div
+                  key={char.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSelectedCharacter(char)}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl cursor-pointer transition-all
+                    ${selectedCharacter?.id === char.id 
+                      ? 'bg-gradient-to-br from-pink-100 to-purple-100 ring-2 ring-pink-400' 
+                      : 'bg-white hover:bg-gray-50'}`}
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-pink-300 to-purple-300 shadow">
+                    {char.avatar_url ? (
+                      <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                        {char.name[0]}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium text-gray-600 truncate w-full text-center">{char.name}</p>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {selectedCharacter && (
+            <div className="mt-4">
+              <Button
+                onClick={handleSendGift}
+                disabled={sending}
+                className="w-full bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 hover:from-pink-500 hover:via-purple-500 hover:to-blue-500 text-white rounded-full shadow-lg"
+              >
+                {sending ? '赠送中...' : `确认赠送给 ${selectedCharacter.name}`}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 成功动画 */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              className="relative"
+            >
+              {/* 星光炸开效果 */}
+              {[...Array(12)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0, opacity: 1 }}
+                  animate={{ 
+                    scale: [0, 2],
+                    opacity: [1, 0],
+                    x: Math.cos(i * 30 * Math.PI / 180) * 100,
+                    y: Math.sin(i * 30 * Math.PI / 180) * 100,
+                  }}
+                  transition={{ duration: 0.8, delay: i * 0.05 }}
+                  className={`absolute w-4 h-4 rounded-full ${
+                    i % 3 === 0 ? 'bg-pink-400' : i % 3 === 1 ? 'bg-blue-400' : 'bg-yellow-400'
+                  }`}
+                  style={{ left: '50%', top: '50%', marginLeft: -8, marginTop: -8 }}
+                />
+              ))}
+              
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.2, 1] }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="bg-white rounded-3xl p-8 shadow-2xl text-center"
+              >
+                <motion.div
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 0.5, repeat: 2 }}
+                >
+                  <Gift className="w-16 h-16 text-pink-400 mx-auto mb-4" />
+                </motion.div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">兑换成功</h3>
+                <p className="text-gray-500">礼物已送达~</p>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
