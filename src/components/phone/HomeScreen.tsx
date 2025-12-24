@@ -112,6 +112,44 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  // 图片压缩函数
+  const compressImage = (file: File, maxWidth = 256, quality = 0.8): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = document.createElement('img');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      img.onload = () => {
+        let { width, height } = img;
+        
+        // 计算压缩后的尺寸
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('压缩失败'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      img.onerror = () => reject(new Error('图片加载失败'));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !uploadTarget) {
@@ -122,12 +160,18 @@ const HomeScreen: React.FC = () => {
     try {
       toast.loading('上传中...');
       
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${uploadTarget.type}/${uploadTarget.key}-${Date.now()}.${fileExt}`;
+      // 根据类型决定压缩尺寸：APP图标用小尺寸，背景图用大尺寸
+      const maxWidth = uploadTarget.type === 'app' ? 256 : 800;
+      const compressedBlob = await compressImage(file, maxWidth, 0.85);
+      
+      const fileName = `${user.id}/${uploadTarget.type}/${uploadTarget.key}-${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, compressedBlob, { 
+          upsert: true,
+          contentType: 'image/jpeg'
+        });
 
       if (uploadError) {
         toast.dismiss();
@@ -172,16 +216,31 @@ const HomeScreen: React.FC = () => {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isPressing, setIsPressing] = useState(false);
 
-  const handleLongPress = (appId: string) => {
-    setUploadTarget({ type: 'app', key: appId });
-    fileInputRef.current?.click();
+  // 编辑模式下单击选择图片
+  const handleIconClick = (app: AppConfig) => {
+    if (editMode) {
+      // 编辑模式：单击选择图片
+      setUploadTarget({ type: 'app', key: app.id });
+      fileInputRef.current?.click();
+    } else if (!isPressing) {
+      // 正常模式：导航
+      navigate(app.route);
+    }
   };
 
-  // 移动端长按开始
-  const handleTouchStartIcon = (appId: string) => {
+  // 长按仅进入编辑模式
+  const handleLongPress = () => {
+    if (!editMode) {
+      setEditMode(true);
+      toast.success('编辑模式：点击图标更换图片');
+    }
+  };
+
+  // 移动端长按开始 - 仅用于进入编辑模式
+  const handleTouchStartIcon = () => {
     setIsPressing(true);
     longPressTimerRef.current = setTimeout(() => {
-      handleLongPress(appId);
+      handleLongPress();
       setIsPressing(false);
     }, 500);
   };
@@ -257,12 +316,12 @@ const HomeScreen: React.FC = () => {
         } : {}}
       >
         <button
-          onClick={() => !editMode && !isPressing && navigate(app.route)}
+          onClick={() => handleIconClick(app)}
           onContextMenu={(e) => {
             e.preventDefault();
-            handleLongPress(app.id);
+            handleLongPress();
           }}
-          onTouchStart={() => handleTouchStartIcon(app.id)}
+          onTouchStart={handleTouchStartIcon}
           onTouchEnd={handleTouchEndIcon}
           onTouchMove={handleTouchMoveIcon}
           onTouchCancel={handleTouchEndIcon}
@@ -284,8 +343,8 @@ const HomeScreen: React.FC = () => {
             </div>
           )}
           {editMode && (
-            <div className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full flex items-center justify-center">
-              <X className="w-3 h-3 text-white" />
+            <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+              <Plus className="w-3 h-3 text-primary-foreground" />
             </div>
           )}
         </button>
@@ -435,7 +494,7 @@ const HomeScreen: React.FC = () => {
         <button
           onClick={() => {
             setEditMode(!editMode);
-            if (!editMode) toast.success('编辑模式：长按图标更换，点击图片区域上传');
+            if (!editMode) toast.success('编辑模式：点击图标更换图片');
           }}
           className={`p-2 rounded-full transition-colors ${
             editMode ? 'bg-primary text-primary-foreground' : 'bg-muted/50'
