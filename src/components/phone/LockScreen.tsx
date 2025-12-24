@@ -58,18 +58,19 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   }, [videoBgUrl]);
 
   const fetchCustomization = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('customization')
       .select('lock_screen_bg_url, lock_screen_video_url')
       .eq('user_id', user!.id)
-      .single();
-    
-    if (data?.lock_screen_bg_url) {
-      setBgUrl(data.lock_screen_bg_url);
+      .maybeSingle();
+
+    if (error) {
+      console.error('Fetch lock screen customization error:', error);
+      return;
     }
-    if ((data as any)?.lock_screen_video_url) {
-      setVideoBgUrl((data as any).lock_screen_video_url);
-    }
+
+    setBgUrl(data?.lock_screen_bg_url ?? null);
+    setVideoBgUrl(((data as any)?.lock_screen_video_url as string | null) ?? null);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,10 +86,14 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/lockscreen-${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+        .upload(fileName, file, {
+          cacheControl: '0',
+          upsert: true,
+          contentType: file.type,
+        });
 
       if (uploadError) throw uploadError;
 
@@ -96,20 +101,32 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
+      const nextUrl = publicUrl + '?t=' + Date.now();
+
+      // 上传图片时：自动清空历史视频（否则会一直优先显示视频）
       await supabase
         .from('customization')
-        .upsert({ 
-          user_id: user.id,
-          lock_screen_bg_url: publicUrl + '?t=' + Date.now()
-        }, { onConflict: 'user_id' });
+        .upsert(
+          {
+            user_id: user.id,
+            lock_screen_bg_url: nextUrl,
+            lock_screen_video_url: null,
+          },
+          { onConflict: 'user_id' }
+        );
 
-      setBgUrl(publicUrl + '?t=' + Date.now());
+      setBgUrl(nextUrl);
+      setVideoBgUrl(null);
+      setVideoLoaded(false);
+      setVideoError(false);
+
       toast.success('锁屏背景已更新');
     } catch (error) {
       console.error('Lock screen upload error:', error);
       toast.error('上传失败，请重试');
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -118,7 +135,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     if (!file || !user) return;
 
     if (!file.type.startsWith('video/')) {
-      toast.error('请选择视频文件 (MP4/WebM)');
+      toast.error('请选择视频文件 (MP4/MOV/WebM)');
       return;
     }
 
@@ -130,14 +147,18 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
     setUploading(true);
     toast.loading('上传中...');
-    
+
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/lockscreen-video-${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+        .upload(fileName, file, {
+          cacheControl: '0',
+          upsert: true,
+          contentType: file.type,
+        });
 
       if (uploadError) throw uploadError;
 
@@ -145,14 +166,23 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         .from('backgrounds')
         .getPublicUrl(fileName);
 
+      const nextUrl = publicUrl + '?t=' + Date.now();
+
+      // 上传视频时：自动清空历史图片
       await supabase
         .from('customization')
-        .upsert({ 
-          user_id: user.id,
-          lock_screen_video_url: publicUrl + '?t=' + Date.now()
-        } as any, { onConflict: 'user_id' });
+        .upsert(
+          {
+            user_id: user.id,
+            lock_screen_video_url: nextUrl,
+            lock_screen_bg_url: null,
+          } as any,
+          { onConflict: 'user_id' }
+        );
 
-      setVideoBgUrl(publicUrl + '?t=' + Date.now());
+      setVideoBgUrl(nextUrl);
+      setBgUrl(null);
+
       toast.dismiss();
       toast.success('锁屏动态壁纸已更新');
     } catch (error) {
@@ -161,6 +191,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       toast.error('上传失败，请重试');
     } finally {
       setUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = '';
     }
   };
 
@@ -211,7 +242,9 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       {/* Video Background - 优先显示动态壁纸 */}
       {videoBgUrl && !videoError && (
         <video
+          key={videoBgUrl}
           ref={videoRef}
+          src={videoBgUrl}
           autoPlay
           loop
           muted
@@ -221,15 +254,12 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           onCanPlay={handleVideoLoaded}
           onError={handleVideoError}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${videoLoaded ? 'opacity-100' : 'opacity-0'}`}
-          style={{ 
+          style={{
             transform: 'translateZ(0)',
             willChange: 'transform',
             backfaceVisibility: 'hidden'
           }}
-        >
-          <source src={videoBgUrl} type="video/mp4" />
-          <source src={videoBgUrl} type="video/webm" />
-        </video>
+        />
       )}
 
       {/* Image Background - 视频不存在或加载失败时显示 */}
@@ -269,7 +299,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       <input
         ref={videoInputRef}
         type="file"
-        accept="video/mp4,video/webm"
+        accept="video/*"
         className="hidden"
         onChange={handleVideoUpload}
       />

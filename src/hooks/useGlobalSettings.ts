@@ -32,7 +32,7 @@ const applyFont = (fontId: string) => {
   localStorage.setItem('selectedFont', fontId);
 };
 
-const applyGlobalTextColor = (color: string) => {
+export const applyGlobalTextColor = (color: string) => {
   const style = document.getElementById('global-text-color-style') || document.createElement('style');
   style.id = 'global-text-color-style';
   style.textContent = `
@@ -44,7 +44,7 @@ const applyGlobalTextColor = (color: string) => {
   localStorage.setItem('globalTextColor', color);
 };
 
-const applyGlobalTextSize = (size: number) => {
+export const applyGlobalTextSize = (size: number) => {
   const style = document.getElementById('global-text-size-style') || document.createElement('style');
   style.id = 'global-text-size-style';
   style.textContent = `
