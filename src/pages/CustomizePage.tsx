@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';
 
 // 预设头像框
@@ -334,6 +335,9 @@ const CustomizePage: React.FC = () => {
       console.error('Save error:', error);
       toast.error('保存失败');
     } else {
+      // 立即同步到全局样式（桌面APP标签、锁屏文字等）
+      applyGlobalTextColor(globalTextColor);
+      applyGlobalTextSize(globalTextSize);
       toast.success('美化设置已保存！返回桌面查看效果');
     }
   };

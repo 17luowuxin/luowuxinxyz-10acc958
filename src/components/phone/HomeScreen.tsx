@@ -348,7 +348,7 @@ const HomeScreen: React.FC = () => {
             </div>
           )}
         </button>
-        <span className="text-[11px] font-medium text-foreground/80">{app.name}</span>
+        <span className="text-[11px] font-medium desktop-text opacity-80">{app.name}</span>
       </motion.div>
     );
   };
@@ -393,20 +393,40 @@ const HomeScreen: React.FC = () => {
       whileTap={{ scale: 0.9 }}
     >
       <button
-        onClick={() => navigate(app.route)}
-        className="relative"
+        onClick={() => handleIconClick(app)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          handleLongPress();
+        }}
+        onTouchStart={handleTouchStartIcon}
+        onTouchEnd={handleTouchEndIcon}
+        onTouchMove={handleTouchMoveIcon}
+        onTouchCancel={handleTouchEndIcon}
+        className="relative select-none touch-manipulation"
+        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       >
         {appIcons[app.id] ? (
           <div className="w-14 h-14 rounded-[14px] shadow-soft overflow-hidden ring-1 ring-white/30">
-            <img src={appIcons[app.id]} alt={app.name} className="w-full h-full object-cover" />
+            <img
+              src={appIcons[app.id]}
+              alt={app.name}
+              className="w-full h-full object-cover pointer-events-none select-none"
+              draggable={false}
+            />
           </div>
         ) : (
           <div className={`w-14 h-14 rounded-[14px] ${app.bgColor} flex items-center justify-center shadow-soft`}>
             <app.icon className="w-6 h-6 text-white" strokeWidth={1.8} />
           </div>
         )}
+
+        {editMode && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+            <Plus className="w-3 h-3 text-primary-foreground" />
+          </div>
+        )}
       </button>
-      <span className="text-[10px] font-medium text-foreground/80">{app.name}</span>
+      <span className="text-[10px] font-medium desktop-text opacity-80">{app.name}</span>
     </motion.div>
   );
 
