@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, Gift, Sparkles, ShoppingCart, Trash2, Plus, 
   Heart, Star, Crown, Gem, Flower2, Music2, Cake, ImagePlus,
-  Check, X, HeartOff, Clock
+  Check, X, HeartOff, Clock, Watch, Headphones, Projector, Gamepad2,
+  Sparkle, Camera, Cookie, Shirt, Flower, Coffee, Smartphone, Car
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -73,17 +74,30 @@ const categories = [
 
 const defaultGifts: GiftItem[] = [
   // 古风类
-  { id: 'rose', name: '玫瑰花', price: 1, icon: <Flower2 className="w-7 h-7" />, color: 'from-pink-400 to-rose-500', borderColor: 'from-pink-300 to-pink-400', description: '一朵娇艳的玫瑰', category: 'ancient' },
-  { id: 'heart', name: '爱心', price: 5, icon: <Heart className="w-7 h-7" />, color: 'from-red-400 to-pink-500', borderColor: 'from-pink-300 to-pink-400', description: '满满的爱意', category: 'ancient' },
+  { id: 'jade-pendant', name: '墨玉玉佩', price: 520, icon: <Gem className="w-7 h-7" />, color: 'from-slate-600 to-slate-800', borderColor: 'from-pink-300 to-pink-400', description: '古风吊坠', category: 'ancient' },
+  { id: 'wood-hairpin', name: '檀香木簪', price: 888, icon: <Flower2 className="w-7 h-7" />, color: 'from-amber-700 to-amber-900', borderColor: 'from-pink-300 to-pink-400', description: '雕花款', category: 'ancient' },
+  { id: 'safety-charm', name: '平安符', price: 1314, icon: <Heart className="w-7 h-7" />, color: 'from-red-500 to-rose-600', borderColor: 'from-pink-300 to-pink-400', description: '刺绣锦囊', category: 'ancient' },
+  { id: 'celadon-cup', name: '青瓷茶盏', price: 666, icon: <Coffee className="w-7 h-7" />, color: 'from-cyan-400 to-teal-500', borderColor: 'from-pink-300 to-pink-400', description: '莲纹款', category: 'ancient' },
+  { id: 'gold-jade', name: '鎏金玉佩', price: 999, icon: <Sparkles className="w-7 h-7" />, color: 'from-yellow-400 to-amber-500', borderColor: 'from-pink-300 to-pink-400', description: '星空纹', category: 'ancient' },
+  { id: 'ancient-fan', name: '古风折扇', price: 777, icon: <Star className="w-7 h-7" />, color: 'from-stone-400 to-stone-600', borderColor: 'from-pink-300 to-pink-400', description: '题字款', category: 'ancient' },
   // 现代类
-  { id: 'star', name: '星星', price: 10, icon: <Star className="w-7 h-7" />, color: 'from-blue-400 to-cyan-500', borderColor: 'from-blue-300 to-blue-400', description: '闪闪发光的星星', category: 'modern' },
-  { id: 'music', name: '音乐盒', price: 50, icon: <Music2 className="w-7 h-7" />, color: 'from-indigo-400 to-blue-500', borderColor: 'from-blue-300 to-blue-400', description: '美妙的旋律', category: 'modern' },
+  { id: 'mech-watch', name: '定制机械表', price: 5201, icon: <Watch className="w-7 h-7" />, color: 'from-gray-800 to-black', borderColor: 'from-blue-300 to-blue-400', description: '黑檀木表盘', category: 'modern' },
+  { id: 'headphones', name: '无线降噪耳机', price: 2333, icon: <Headphones className="w-7 h-7" />, color: 'from-gray-600 to-gray-800', borderColor: 'from-blue-300 to-blue-400', description: '哑光黑', category: 'modern' },
+  { id: 'projector', name: '星空投影仪', price: 1314, icon: <Projector className="w-7 h-7" />, color: 'from-indigo-500 to-purple-600', borderColor: 'from-blue-300 to-blue-400', description: '浪漫星空', category: 'modern' },
+  { id: 'gaming-set', name: '电竞键鼠套装', price: 2520, icon: <Gamepad2 className="w-7 h-7" />, color: 'from-purple-500 to-pink-500', borderColor: 'from-blue-300 to-blue-400', description: '渐变光', category: 'modern' },
   // 日常类
-  { id: 'cake', name: '蛋糕', price: 20, icon: <Cake className="w-7 h-7" />, color: 'from-yellow-400 to-orange-500', borderColor: 'from-yellow-300 to-amber-400', description: '甜蜜的蛋糕', category: 'daily' },
-  { id: 'sparkle', name: '梦之光', price: 52, icon: <Sparkles className="w-7 h-7" />, color: 'from-amber-400 to-yellow-500', borderColor: 'from-yellow-300 to-amber-400', description: '温暖的光芒', category: 'daily' },
+  { id: 'aroma-box', name: '香薰礼盒', price: 999, icon: <Sparkle className="w-7 h-7" />, color: 'from-green-300 to-teal-400', borderColor: 'from-yellow-300 to-amber-400', description: '白茶味', category: 'daily' },
+  { id: 'polaroid', name: '拍立得相机', price: 1520, icon: <Camera className="w-7 h-7" />, color: 'from-orange-400 to-amber-500', borderColor: 'from-yellow-300 to-amber-400', description: '复古款', category: 'daily' },
+  { id: 'cookies', name: '手工曲奇礼盒', price: 520, icon: <Cookie className="w-7 h-7" />, color: 'from-amber-400 to-yellow-500', borderColor: 'from-yellow-300 to-amber-400', description: '甜蜜美味', category: 'daily' },
+  { id: 'scarf', name: '羊绒围巾', price: 888, icon: <Shirt className="w-7 h-7" />, color: 'from-gray-500 to-gray-700', borderColor: 'from-yellow-300 to-amber-400', description: '深灰色', category: 'daily' },
+  { id: 'succulent', name: '多肉盆栽', price: 666, icon: <Flower className="w-7 h-7" />, color: 'from-green-400 to-emerald-500', borderColor: 'from-yellow-300 to-amber-400', description: '玉露款', category: 'daily' },
+  { id: 'pajamas', name: '纯棉睡衣套装', price: 777, icon: <Shirt className="w-7 h-7" />, color: 'from-pink-300 to-rose-400', borderColor: 'from-yellow-300 to-amber-400', description: '浅色系', category: 'daily' },
+  { id: 'mug', name: '定制马克杯', price: 520, icon: <Coffee className="w-7 h-7" />, color: 'from-blue-400 to-indigo-500', borderColor: 'from-yellow-300 to-amber-400', description: '星空印花', category: 'daily' },
+  { id: 'carpet', name: '羊毛地毯', price: 999, icon: <Gift className="w-7 h-7" />, color: 'from-stone-400 to-stone-600', borderColor: 'from-yellow-300 to-amber-400', description: '简约几何纹', category: 'daily' },
   // 豪车数码
-  { id: 'gem', name: '宝石', price: 100, icon: <Gem className="w-7 h-7" />, color: 'from-emerald-400 to-teal-500', borderColor: 'from-emerald-300 to-teal-400', description: '璀璨的宝石', category: 'luxury' },
-  { id: 'crown', name: '皇冠', price: 200, icon: <Crown className="w-7 h-7" />, color: 'from-teal-400 to-emerald-500', borderColor: 'from-emerald-300 to-teal-400', description: '尊贵的皇冠', category: 'luxury' },
+  { id: 'iphone16', name: '苹果16手机', price: 52000, icon: <Smartphone className="w-7 h-7" />, color: 'from-gray-700 to-gray-900', borderColor: 'from-emerald-300 to-teal-400', description: '最新旗舰', category: 'luxury' },
+  { id: 'lambo-black', name: '兰博基尼（黑款）', price: 131400, icon: <Car className="w-7 h-7" />, color: 'from-gray-900 to-black', borderColor: 'from-emerald-300 to-teal-400', description: '极致速度', category: 'luxury' },
+  { id: 'lambo-yellow', name: '兰博基尼（黄款）', price: 99999, icon: <Car className="w-7 h-7" />, color: 'from-yellow-400 to-amber-500', borderColor: 'from-emerald-300 to-teal-400', description: '经典黄色', category: 'luxury' },
 ];
 
 const GiftShopPage: React.FC = () => {
