@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, Gift, Sparkles, ShoppingCart, Trash2, Plus, 
   Heart, Star, Crown, Gem, Flower2, Music2, Cake, ImagePlus,
-  Check, X
+  Check, X, HeartOff, Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { format } from 'date-fns';
 
 interface Character {
   id: string;
@@ -38,6 +39,28 @@ interface GiftItem {
 interface CartItem {
   gift: GiftItem;
   quantity: number;
+}
+
+interface FavoriteItem {
+  id: string;
+  gift_id: string;
+  gift_name: string;
+  gift_price: number;
+  gift_color: string;
+  gift_category: string;
+  custom_image: string | null;
+  created_at: string;
+}
+
+interface HistoryItem {
+  id: string;
+  character_id: string;
+  character_name: string;
+  gift_id: string;
+  gift_name: string;
+  gift_price: number;
+  quantity: number;
+  created_at: string;
 }
 
 // 分类定义
@@ -82,11 +105,15 @@ const GiftShopPage: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'exchange' | 'collect' | 'mine'>('exchange');
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [giftHistory, setGiftHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
     if (user) {
       fetchBalance();
       fetchCharacters();
+      fetchFavorites();
+      fetchGiftHistory();
     }
   }, [user]);
 
@@ -113,6 +140,74 @@ const GiftShopPage: React.FC = () => {
     if (data) {
       setCharacters(data);
     }
+  };
+
+  const fetchFavorites = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('gift_favorites')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setFavorites(data as FavoriteItem[]);
+    }
+  };
+
+  const fetchGiftHistory = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('gift_history')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setGiftHistory(data as HistoryItem[]);
+    }
+  };
+
+  // 收藏/取消收藏
+  const toggleFavorite = async (gift: GiftItem) => {
+    if (!user) return;
+    
+    const existing = favorites.find(f => f.gift_id === gift.id);
+    
+    if (existing) {
+      // 取消收藏
+      await supabase
+        .from('gift_favorites')
+        .delete()
+        .eq('id', existing.id);
+      
+      setFavorites(favorites.filter(f => f.id !== existing.id));
+      toast.success('已取消收藏');
+    } else {
+      // 添加收藏
+      const { data, error } = await supabase
+        .from('gift_favorites')
+        .insert({
+          user_id: user.id,
+          gift_id: gift.id,
+          gift_name: gift.name,
+          gift_price: gift.price,
+          gift_color: gift.color,
+          gift_category: gift.category,
+          custom_image: gift.customImage || null,
+        })
+        .select()
+        .single();
+
+      if (data && !error) {
+        setFavorites([data as FavoriteItem, ...favorites]);
+        toast.success('已添加收藏 💖');
+      }
+    }
+  };
+
+  const isFavorited = (giftId: string) => {
+    return favorites.some(f => f.gift_id === giftId);
   };
 
   // 播放按钮音效
@@ -239,6 +334,19 @@ const GiftShopPage: React.FC = () => {
 
       if (error) throw error;
 
+      // 保存礼物历史记录
+      for (const item of giftList) {
+        await supabase.from('gift_history').insert({
+          user_id: user.id,
+          character_id: selectedCharacter.id,
+          character_name: selectedCharacter.name,
+          gift_id: item.gift.id,
+          gift_name: item.gift.name,
+          gift_price: item.gift.price,
+          quantity: item.quantity,
+        });
+      }
+
       // 发送聊天消息给角色
       const userMessage = `我给你送了${giftNames}，希望你喜欢！💝`;
       
@@ -299,6 +407,7 @@ const GiftShopPage: React.FC = () => {
         setSelectedCharacter(null);
         setCart([]);
         fetchBalance();
+        fetchGiftHistory();
       }, 2500);
 
     } catch (error) {
@@ -474,6 +583,17 @@ const GiftShopPage: React.FC = () => {
                 <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${gift.borderColor} opacity-40 pointer-events-none`} />
                 <div className="absolute inset-[2px] rounded-xl bg-white pointer-events-none" />
 
+                {/* 收藏按钮 */}
+                <motion.button
+                  whileTap={{ scale: 0.8 }}
+                  onClick={() => toggleFavorite(gift)}
+                  className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/80 shadow-sm"
+                >
+                  <Heart 
+                    className={`w-4 h-4 transition-colors ${isFavorited(gift.id) ? 'text-pink-500 fill-pink-500' : 'text-gray-300'}`} 
+                  />
+                </motion.button>
+
                 <div className="relative flex flex-col items-center gap-2">
                   {/* 图标/图片 */}
                   <div 
@@ -528,16 +648,121 @@ const GiftShopPage: React.FC = () => {
       )}
 
       {activeTab === 'collect' && (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <Heart className="w-12 h-12 mb-2 opacity-30" />
-          <p>收藏功能开发中...</p>
+        <div className="px-4 pb-8">
+          {favorites.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <Heart className="w-12 h-12 mb-2 opacity-30" />
+              <p>还没有收藏任何礼物~</p>
+              <p className="text-xs mt-1">在礼物上点击 ❤️ 可添加收藏</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {favorites.map((fav, index) => {
+                const giftIcon = defaultGifts.find(g => g.id === fav.gift_id)?.icon || <Gift className="w-7 h-7" />;
+                return (
+                  <motion.div
+                    key={fav.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="relative bg-white rounded-2xl p-4 shadow-md overflow-hidden"
+                  >
+                    <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${fav.gift_color.replace('from-', 'from-').replace('to-', 'to-')} opacity-20 pointer-events-none`} />
+                    
+                    <div className="relative flex flex-col items-center gap-2">
+                      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${fav.gift_color} flex items-center justify-center text-white shadow-md overflow-hidden`}>
+                        {fav.custom_image ? (
+                          <img src={fav.custom_image} alt={fav.gift_name} className="w-full h-full object-cover" />
+                        ) : (
+                          giftIcon
+                        )}
+                      </div>
+
+                      <p className="font-bold text-gray-700 text-sm">{fav.gift_name}</p>
+                      
+                      <div className="flex items-center gap-1 text-amber-500 font-bold text-sm">
+                        <span className="w-4 h-4 rounded-full bg-gradient-to-br from-yellow-300 to-amber-400 flex items-center justify-center text-[8px] text-amber-800">¥</span>
+                        <span>{fav.gift_price}</span>
+                      </div>
+
+                      <div className="flex gap-2 mt-1">
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => {
+                            const gift = gifts.find(g => g.id === fav.gift_id);
+                            if (gift) openGiftDetail(gift);
+                          }}
+                          className="px-3 py-1 bg-gradient-to-br from-yellow-300 to-amber-400 text-white text-xs rounded-full shadow"
+                        >
+                          购买
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={async () => {
+                            await supabase.from('gift_favorites').delete().eq('id', fav.id);
+                            setFavorites(favorites.filter(f => f.id !== fav.id));
+                            toast.success('已取消收藏');
+                          }}
+                          className="px-3 py-1 bg-gradient-to-br from-gray-300 to-gray-400 text-white text-xs rounded-full shadow"
+                        >
+                          <HeartOff className="w-3 h-3" />
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {activeTab === 'mine' && (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <Gift className="w-12 h-12 mb-2 opacity-30" />
-          <p>我的礼物开发中...</p>
+        <div className="px-4 pb-8">
+          {giftHistory.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <Gift className="w-12 h-12 mb-2 opacity-30" />
+              <p>还没有赠送过礼物~</p>
+              <p className="text-xs mt-1">快去挑选心仪的礼物送给TA吧</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {giftHistory.map((history, index) => {
+                const giftIcon = defaultGifts.find(g => g.id === history.gift_id)?.icon || <Gift className="w-5 h-5" />;
+                const giftColor = defaultGifts.find(g => g.id === history.gift_id)?.color || 'from-pink-400 to-rose-500';
+                return (
+                  <motion.div
+                    key={history.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-50"
+                  >
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${giftColor} flex items-center justify-center text-white shadow`}>
+                      {giftIcon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-700 truncate">{history.gift_name}</p>
+                        <span className="text-xs text-gray-400">x{history.quantity}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <span>送给</span>
+                        <span className="text-pink-500 font-medium">{history.character_name}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-amber-500 text-sm">-¥{history.gift_price * history.quantity}</p>
+                      <div className="flex items-center gap-1 text-xs text-gray-300">
+                        <Clock className="w-3 h-3" />
+                        <span>{format(new Date(history.created_at), 'MM/dd HH:mm')}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

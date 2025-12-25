@@ -426,6 +426,78 @@ export type Database = {
           },
         ]
       }
+      gift_favorites: {
+        Row: {
+          created_at: string
+          custom_image: string | null
+          gift_category: string
+          gift_color: string
+          gift_id: string
+          gift_name: string
+          gift_price: number
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_image?: string | null
+          gift_category: string
+          gift_color: string
+          gift_id: string
+          gift_name: string
+          gift_price: number
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_image?: string | null
+          gift_category?: string
+          gift_color?: string
+          gift_id?: string
+          gift_name?: string
+          gift_price?: number
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      gift_history: {
+        Row: {
+          character_id: string
+          character_name: string
+          created_at: string
+          gift_id: string
+          gift_name: string
+          gift_price: number
+          id: string
+          quantity: number
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          character_name: string
+          created_at?: string
+          gift_id: string
+          gift_name: string
+          gift_price: number
+          id?: string
+          quantity?: number
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          character_name?: string
+          created_at?: string
+          gift_id?: string
+          gift_name?: string
+          gift_price?: number
+          id?: string
+          quantity?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       group_chats: {
         Row: {
           avatar_url: string | null
