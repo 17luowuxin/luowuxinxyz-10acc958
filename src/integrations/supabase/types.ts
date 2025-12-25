@@ -144,6 +144,7 @@ export type Database = {
           opening_line: string | null
           persona: string | null
           reply_mode: string | null
+          sticker_enabled: boolean | null
           transfer_enabled: boolean | null
           updated_at: string
           user_id: string
@@ -158,6 +159,7 @@ export type Database = {
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
           user_id: string
@@ -172,6 +174,7 @@ export type Database = {
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
           user_id?: string
@@ -860,6 +863,30 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_stickers: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          keywords: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          keywords?: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          keywords?: string[]
           user_id?: string
         }
         Relationships: []

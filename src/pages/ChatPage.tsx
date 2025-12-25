@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
+import { defaultStickers, matchSticker, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -148,6 +150,12 @@ const ChatPage: React.FC = () => {
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
+  // 表情包相关状态
+  const [stickerEnabled, setStickerEnabled] = useState(true);
+  const [userStickers, setUserStickers] = useState<StickerType[]>([]);
+  const [showStickerUpload, setShowStickerUpload] = useState(false);
+  const [stickerKeywordInput, setStickerKeywordInput] = useState('');
+  const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   
@@ -179,8 +187,29 @@ const ChatPage: React.FC = () => {
       }
       setHistoryLimit(data.history_limit ?? 10);
       setTransferEnabled(data.transfer_enabled ?? true);
+      // 加载表情包开关状态
+      setStickerEnabled((data as any).sticker_enabled ?? true);
     }
   }, [characterId]);
+
+  // 加载用户自定义表情包
+  const fetchUserStickers = useCallback(async () => {
+    if (!user?.id) return;
+    const { data } = await supabase
+      .from('user_stickers')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (data) {
+      setUserStickers(data.map(s => ({
+        id: s.id,
+        imageUrl: s.image_url,
+        keywords: s.keywords || [],
+        text: (s.keywords || [])[0] || ''
+      })));
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (user && characterId) {
@@ -189,8 +218,9 @@ const ChatPage: React.FC = () => {
       fetchCustomization();
       fetchProfile();
       fetchApiConfig();
+      fetchUserStickers();
     }
-  }, [user, characterId, fetchProfile, fetchCharacter]);
+  }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers]);
 
   // 优化滚动性能 - 使用防抖
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1677,8 +1707,8 @@ const ChatPage: React.FC = () => {
           delay += 600 + Math.random() * 600;
         }
 
-        // 等待所有消息显示完成后再触发画图，避免图片插入到消息中间
-        setTimeout(() => {
+        // 等待所有消息显示完成后再触发画图和表情包，避免插入到消息中间
+        setTimeout(async () => {
           setLoading(false);
           
           // 线上模式画图：在消息全部显示完后执行
@@ -1691,6 +1721,32 @@ const ChatPage: React.FC = () => {
               const { should, prompt } = shouldGenerateImage(messageContent, combinedForImage);
               if (should) {
                 void generateNovelAIImage(prompt);
+              }
+            }
+          }
+          
+          // 线上模式表情包
+          if (stickerEnabled) {
+            const combinedContent = multiMessages.join(' ');
+            const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
+            if (shouldSendSticker(combinedContent, recentMsgs)) {
+              const matchedSticker = matchSticker(combinedContent, defaultStickers, userStickers);
+              if (matchedSticker) {
+                const stickerMsg = {
+                  id: Date.now() + 100,
+                  role: 'assistant',
+                  content: '',
+                  image_url: matchedSticker.imageUrl
+                };
+                setMessages(prev => [...prev, stickerMsg]);
+                
+                await supabase.from('chat_messages').insert({
+                  user_id: user?.id,
+                  character_id: characterId,
+                  role: 'assistant',
+                  content: `[STICKER:${matchedSticker.id}]`,
+                  image_url: matchedSticker.imageUrl
+                });
               }
             }
           }
@@ -1714,6 +1770,35 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: cleanContent 
         });
+        
+        // 表情包发送逻辑
+        if (stickerEnabled) {
+          const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
+          if (shouldSendSticker(cleanContent, recentMsgs)) {
+            const matchedSticker = matchSticker(cleanContent, defaultStickers, userStickers);
+            if (matchedSticker) {
+              // 延迟发送表情包，模拟自然对话
+              setTimeout(async () => {
+                const stickerMsg = {
+                  id: Date.now() + 2,
+                  role: 'assistant',
+                  content: '',
+                  image_url: matchedSticker.imageUrl
+                };
+                setMessages(prev => [...prev, stickerMsg]);
+                
+                // 保存表情包消息到数据库
+                await supabase.from('chat_messages').insert({
+                  user_id: user?.id,
+                  character_id: characterId,
+                  role: 'assistant',
+                  content: `[STICKER:${matchedSticker.id}]`,
+                  image_url: matchedSticker.imageUrl
+                });
+              }, 500 + Math.random() * 500);
+            }
+          }
+        }
       }
       
       // 检查是否需要生成图片
@@ -1827,6 +1912,87 @@ const ChatPage: React.FC = () => {
   const getUserBubbleDecorImage = () => bubbleFramePresets[userBubbleFrame]?.decorImage;
   const getFriendBubbleDecorImage = () => bubbleFramePresets[friendBubbleFrame]?.decorImage;
 
+  // 上传用户自定义表情包
+  const handleStickerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('表情包大小不能超过2MB');
+      return;
+    }
+    
+    try {
+      // 上传到存储
+      const fileExt = file.name.split('.').pop();
+      const fileName = `stickers/${user.id}/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(fileName, file);
+      
+      if (uploadError) {
+        toast.error('上传失败');
+        return;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('photos')
+        .getPublicUrl(fileName);
+      
+      // 解析关键词
+      const keywords = stickerKeywordInput
+        .split(/[,，、\s]+/)
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+      
+      if (keywords.length === 0) {
+        toast.error('请输入至少一个关键词');
+        return;
+      }
+      
+      // 保存到数据库
+      const { data, error } = await supabase
+        .from('user_stickers')
+        .insert({
+          user_id: user.id,
+          image_url: publicUrl,
+          keywords: keywords
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        toast.error('保存失败');
+        return;
+      }
+      
+      // 更新本地状态
+      setUserStickers(prev => [{
+        id: data.id,
+        imageUrl: publicUrl,
+        keywords: keywords,
+        text: keywords[0]
+      }, ...prev]);
+      
+      setStickerKeywordInput('');
+      setShowStickerUpload(false);
+      toast.success('表情包上传成功！');
+    } catch (err) {
+      console.error('Upload sticker error:', err);
+      toast.error('上传失败');
+    }
+  };
+
+  // 删除用户表情包
+  const handleDeleteSticker = async (stickerId: string) => {
+    if (!user?.id) return;
+    
+    await supabase.from('user_stickers').delete().eq('id', stickerId);
+    setUserStickers(prev => prev.filter(s => s.id !== stickerId));
+    toast.success('已删除');
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
       {/* 固定背景层 - 不随滚动移动 */}
@@ -1928,6 +2094,36 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
+            {/* 表情包设置 */}
+            <div className="px-3 py-2 border-t border-border">
+              <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                <Sticker className="w-3 h-3" />
+                表情包设置
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm">角色发送表情包</span>
+                <Switch 
+                  checked={stickerEnabled}
+                  onCheckedChange={async (checked) => {
+                    setStickerEnabled(checked);
+                    await supabase.from('characters').update({ sticker_enabled: checked }).eq('id', characterId);
+                    toast.success(checked ? '已开启表情包' : '已关闭表情包');
+                  }}
+                />
+              </div>
+              <button
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted rounded-md transition-colors"
+                onClick={() => setShowStickerUpload(true)}
+              >
+                <Upload className="w-3 h-3" />
+                上传自定义表情包
+              </button>
+              {userStickers.length > 0 && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  已上传 {userStickers.length} 个表情包
+                </div>
+              )}
+            </div>
             
             <div className="h-px bg-border my-1" />
             
@@ -2329,6 +2525,86 @@ const ChatPage: React.FC = () => {
           <Send className="w-4 h-4" />
         </Button>
       </footer>
+
+      {/* 表情包上传弹窗 */}
+      {showStickerUpload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowStickerUpload(false)}>
+          <div className="bg-background rounded-xl p-4 w-[90%] max-w-md mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg">上传表情包</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowStickerUpload(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {/* 上传区域 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">选择图片</label>
+              <input
+                ref={stickerInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleStickerUpload}
+              />
+              <Button 
+                variant="outline" 
+                className="w-full h-24 border-dashed"
+                onClick={() => stickerInputRef.current?.click()}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-6 h-6 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">点击上传表情包图片</span>
+                </div>
+              </Button>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                关键词（用逗号分隔，用于自动匹配发送）
+              </label>
+              <Input
+                value={stickerKeywordInput}
+                onChange={(e) => setStickerKeywordInput(e.target.value)}
+                placeholder="例如：开心，高兴，太棒了"
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                输入关键词后，当角色回复包含这些词时会自动发送此表情包
+              </p>
+            </div>
+            
+            {/* 已上传的表情包列表 */}
+            {userStickers.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-2">已上传的表情包</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {userStickers.map(sticker => (
+                    <div key={sticker.id} className="relative group">
+                      <img 
+                        src={sticker.imageUrl} 
+                        alt={sticker.text}
+                        className="w-full aspect-square object-cover rounded-lg"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDeleteSticker(sticker.id)}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                      <div className="text-[10px] text-center text-muted-foreground truncate mt-1">
+                        {sticker.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
