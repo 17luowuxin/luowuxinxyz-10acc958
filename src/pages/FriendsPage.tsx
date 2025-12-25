@@ -35,12 +35,39 @@ const FriendsPage: React.FC = () => {
   }, [user]);
 
   const fetchCharacters = async () => {
-    const { data } = await supabase
+    // 获取角色列表
+    const { data: charData } = await supabase
       .from('characters')
       .select('*')
+      .eq('user_id', user?.id);
+    
+    if (!charData) return;
+    
+    // 获取每个角色的最后聊天时间
+    const { data: lastMessages } = await supabase
+      .from('chat_messages')
+      .select('character_id, created_at')
       .eq('user_id', user?.id)
-      .order('updated_at', { ascending: false });
-    if (data) setCharacters(data);
+      .order('created_at', { ascending: false });
+    
+    // 创建角色最后聊天时间映射
+    const lastChatMap: Record<string, string> = {};
+    if (lastMessages) {
+      for (const msg of lastMessages) {
+        if (!lastChatMap[msg.character_id]) {
+          lastChatMap[msg.character_id] = msg.created_at;
+        }
+      }
+    }
+    
+    // 按最后聊天时间排序，最近聊天的排在前面
+    const sortedChars = charData.sort((a, b) => {
+      const aTime = lastChatMap[a.id] || a.created_at;
+      const bTime = lastChatMap[b.id] || b.created_at;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
+    
+    setCharacters(sortedChars);
   };
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

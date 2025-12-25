@@ -128,8 +128,25 @@ const GiftShopPage: React.FC = () => {
       fetchCharacters();
       fetchFavorites();
       fetchGiftHistory();
+      fetchCustomImages();
     }
   }, [user]);
+
+  // 加载自定义图片
+  const fetchCustomImages = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('gift_custom_images')
+      .select('gift_id, image_url')
+      .eq('user_id', user.id);
+    
+    if (data && data.length > 0) {
+      setGifts(prevGifts => prevGifts.map(gift => {
+        const customImage = data.find(img => img.gift_id === gift.id);
+        return customImage ? { ...gift, customImage: customImage.image_url } : gift;
+      }));
+    }
+  };
 
   const fetchBalance = async () => {
     const { data } = await supabase
@@ -256,37 +273,46 @@ const GiftShopPage: React.FC = () => {
   const cartTotal = cart.reduce((sum, item) => sum + item.gift.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // 上传自定义图片
+  // 上传自定义图片 - 保存到存储
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !editingGiftId) return;
+    if (!file || !editingGiftId || !user) return;
 
-    // 压缩图片
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    
-    img.onload = () => {
-      const maxSize = 256;
-      let { width, height } = img;
-      if (width > height) {
-        if (width > maxSize) { height = height * maxSize / width; width = maxSize; }
-      } else {
-        if (height > maxSize) { width = width * maxSize / height; height = maxSize; }
-      }
-      canvas.width = width;
-      canvas.height = height;
-      ctx?.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    try {
+      // 上传到存储
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/gift-${editingGiftId}-${Date.now()}.${fileExt}`;
       
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(fileName, file, { upsert: true });
+      
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('photos')
+        .getPublicUrl(fileName);
+      
+      // 保存到数据库
+      await supabase
+        .from('gift_custom_images')
+        .upsert({
+          user_id: user.id,
+          gift_id: editingGiftId,
+          image_url: publicUrl,
+        }, { onConflict: 'user_id,gift_id' });
+      
+      // 更新本地状态
       setGifts(gifts.map(g => 
-        g.id === editingGiftId ? { ...g, customImage: dataUrl } : g
+        g.id === editingGiftId ? { ...g, customImage: publicUrl } : g
       ));
       setEditingGiftId(null);
-      toast.success('图片已更新');
-    };
+      toast.success('图片已保存');
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('上传失败，请重试');
+    }
     
-    img.src = URL.createObjectURL(file);
     e.target.value = '';
   };
 
