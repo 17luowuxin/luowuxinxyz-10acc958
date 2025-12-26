@@ -155,6 +155,8 @@ const ChatPage: React.FC = () => {
   const [userStickers, setUserStickers] = useState<StickerType[]>([]);
   const [showStickerUpload, setShowStickerUpload] = useState(false);
   const [stickerKeywordInput, setStickerKeywordInput] = useState('');
+  const [pendingStickerFile, setPendingStickerFile] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [uploadingSticker, setUploadingSticker] = useState(false);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1912,18 +1914,39 @@ const ChatPage: React.FC = () => {
   const getUserBubbleDecorImage = () => bubbleFramePresets[userBubbleFrame]?.decorImage;
   const getFriendBubbleDecorImage = () => bubbleFramePresets[friendBubbleFrame]?.decorImage;
 
-  // 上传用户自定义表情包
-  const handleStickerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 选择表情包图片（先预览，不立即上传）
+  const handleStickerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user?.id) return;
+    if (!file) return;
     
     if (file.size > 2 * 1024 * 1024) {
       toast.error('表情包大小不能超过2MB');
       return;
     }
     
+    const previewUrl = URL.createObjectURL(file);
+    setPendingStickerFile({ file, previewUrl });
+  };
+
+  // 确认上传表情包
+  const handleStickerUpload = async () => {
+    if (!pendingStickerFile || !user?.id) return;
+    
+    // 解析关键词
+    const keywords = stickerKeywordInput
+      .split(/[,，、\s]+/)
+      .map(k => k.trim())
+      .filter(k => k.length > 0);
+    
+    if (keywords.length === 0) {
+      toast.error('请输入至少一个关键词');
+      return;
+    }
+    
+    setUploadingSticker(true);
+    
     try {
-      // 上传到存储
+      const file = pendingStickerFile.file;
       const fileExt = file.name.split('.').pop();
       const fileName = `stickers/${user.id}/${Date.now()}.${fileExt}`;
       
@@ -1932,24 +1955,14 @@ const ChatPage: React.FC = () => {
         .upload(fileName, file);
       
       if (uploadError) {
-        toast.error('上传失败');
+        toast.error('上传失败: ' + uploadError.message);
+        setUploadingSticker(false);
         return;
       }
       
       const { data: { publicUrl } } = supabase.storage
         .from('photos')
         .getPublicUrl(fileName);
-      
-      // 解析关键词
-      const keywords = stickerKeywordInput
-        .split(/[,，、\s]+/)
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
-      
-      if (keywords.length === 0) {
-        toast.error('请输入至少一个关键词');
-        return;
-      }
       
       // 保存到数据库
       const { data, error } = await supabase
@@ -1963,7 +1976,8 @@ const ChatPage: React.FC = () => {
         .single();
       
       if (error) {
-        toast.error('保存失败');
+        toast.error('保存失败: ' + error.message);
+        setUploadingSticker(false);
         return;
       }
       
@@ -1975,13 +1989,26 @@ const ChatPage: React.FC = () => {
         text: keywords[0]
       }, ...prev]);
       
+      // 清理
+      URL.revokeObjectURL(pendingStickerFile.previewUrl);
+      setPendingStickerFile(null);
       setStickerKeywordInput('');
-      setShowStickerUpload(false);
       toast.success('表情包上传成功！');
     } catch (err) {
       console.error('Upload sticker error:', err);
       toast.error('上传失败');
+    } finally {
+      setUploadingSticker(false);
     }
+  };
+
+  // 取消选择的表情包
+  const cancelStickerSelect = () => {
+    if (pendingStickerFile) {
+      URL.revokeObjectURL(pendingStickerFile.previewUrl);
+      setPendingStickerFile(null);
+    }
+    setStickerKeywordInput('');
   };
 
   // 删除用户表情包
@@ -2526,65 +2553,95 @@ const ChatPage: React.FC = () => {
         </Button>
       </footer>
 
-      {/* 表情包上传弹窗 */}
+      {/* 表情包管理弹窗 */}
       {showStickerUpload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowStickerUpload(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { setShowStickerUpload(false); cancelStickerSelect(); }}>
           <div className="bg-background rounded-xl p-4 w-[90%] max-w-md mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">上传表情包</h3>
-              <Button variant="ghost" size="icon" onClick={() => setShowStickerUpload(false)}>
+              <h3 className="font-semibold text-lg">表情包管理</h3>
+              <Button variant="ghost" size="icon" onClick={() => { setShowStickerUpload(false); cancelStickerSelect(); }}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
             
-            {/* 上传区域 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">选择图片</label>
-              <input
-                ref={stickerInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleStickerUpload}
-              />
-              <Button 
-                variant="outline" 
-                className="w-full h-24 border-dashed"
-                onClick={() => stickerInputRef.current?.click()}
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="w-6 h-6 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">点击上传表情包图片</span>
+            {/* 上传新表情包 */}
+            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+              <label className="block text-sm font-medium mb-2">上传新表情包</label>
+              
+              {/* 图片预览或选择按钮 */}
+              {pendingStickerFile ? (
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="relative">
+                    <img 
+                      src={pendingStickerFile.previewUrl} 
+                      alt="预览" 
+                      className="w-20 h-20 object-cover rounded-lg"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full"
+                      onClick={cancelStickerSelect}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      value={stickerKeywordInput}
+                      onChange={(e) => setStickerKeywordInput(e.target.value)}
+                      placeholder="输入关键词，用逗号分隔"
+                      className="text-sm mb-2"
+                    />
+                    <Button 
+                      size="sm" 
+                      onClick={handleStickerUpload}
+                      disabled={uploadingSticker || !stickerKeywordInput.trim()}
+                      className="w-full"
+                    >
+                      {uploadingSticker ? '上传中...' : '确认上传'}
+                    </Button>
+                  </div>
                 </div>
-              </Button>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">
-                关键词（用逗号分隔，用于自动匹配发送）
-              </label>
-              <Input
-                value={stickerKeywordInput}
-                onChange={(e) => setStickerKeywordInput(e.target.value)}
-                placeholder="例如：开心，高兴，太棒了"
-                className="text-sm"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
+              ) : (
+                <>
+                  <input
+                    ref={stickerInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleStickerSelect}
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-16 border-dashed"
+                    onClick={() => stickerInputRef.current?.click()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">选择表情包图片</span>
+                    </div>
+                  </Button>
+                </>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
                 输入关键词后，当角色回复包含这些词时会自动发送此表情包
               </p>
             </div>
             
             {/* 已上传的表情包列表 */}
-            {userStickers.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium mb-2">已上传的表情包</label>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                已上传的表情包 ({userStickers.length})
+              </label>
+              {userStickers.length > 0 ? (
                 <div className="grid grid-cols-4 gap-2">
                   {userStickers.map(sticker => (
                     <div key={sticker.id} className="relative group">
                       <img 
                         src={sticker.imageUrl} 
                         alt={sticker.text}
-                        className="w-full aspect-square object-cover rounded-lg"
+                        className="w-full aspect-square object-cover rounded-lg border"
                       />
                       <Button
                         variant="destructive"
@@ -2594,14 +2651,39 @@ const ChatPage: React.FC = () => {
                       >
                         <X className="w-3 h-3" />
                       </Button>
-                      <div className="text-[10px] text-center text-muted-foreground truncate mt-1">
+                      <div className="text-[10px] text-center text-muted-foreground truncate mt-1" title={sticker.keywords.join(', ')}>
                         {sticker.text}
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  还没有上传表情包
+                </div>
+              )}
+            </div>
+            
+            {/* 默认表情包预览 */}
+            <div className="mt-4 pt-4 border-t">
+              <label className="block text-sm font-medium mb-2">
+                默认表情包 ({defaultStickers.length})
+              </label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {defaultStickers.map(sticker => (
+                  <div key={sticker.id} className="relative">
+                    <img 
+                      src={sticker.imageUrl} 
+                      alt={sticker.text}
+                      className="w-full aspect-square object-cover rounded-lg border opacity-80"
+                    />
+                    <div className="text-[9px] text-center text-muted-foreground truncate mt-0.5">
+                      {sticker.text}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
