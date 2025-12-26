@@ -2281,16 +2281,16 @@ const ChatPage: React.FC = () => {
                   
               {/* Bubble with Sanrio Decoration */}
               <div className={`flex flex-col flex-1 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                {/* 图片消息 - 独立容器，不透明 */}
+                {/* 图片/表情包消息 - 独立容器，不透明，缩小尺寸 */}
                 {msg.image_url && (
-                  <div className="mb-1.5 rounded-xl overflow-hidden bg-background shadow-sm max-w-[240px]">
+                  <div className="mb-1.5 rounded-lg overflow-hidden bg-background shadow-sm max-w-[140px]">
                     <img 
                       src={msg.image_url} 
-                      alt="AI生成的图片" 
+                      alt="图片" 
                       loading="lazy"
                       decoding="async"
-                      className="w-full rounded-xl object-cover cursor-pointer hover:brightness-95 transition-all"
-                      style={{ maxHeight: '320px' }}
+                      className="w-full rounded-lg object-cover cursor-pointer hover:brightness-95 transition-all"
+                      style={{ maxHeight: '140px' }}
                       onClick={() => window.open(msg.image_url, '_blank')}
                     />
                   </div>
