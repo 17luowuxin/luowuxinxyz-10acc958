@@ -1211,9 +1211,9 @@ const ChatPage: React.FC = () => {
         return;
       }
       
-      // 构建消息内容
-      const textContent = input.trim() || '发送了一张图片';
-      const messageContent = `[图片] ${textContent}`;
+      // 构建消息内容 - 如果用户没有输入文字，则只存 [图片] 标记（不显示"发送了一张图片"）
+      const textContent = input.trim();
+      const messageContent = textContent ? `[图片] ${textContent}` : '[图片]';
       
       // 保存用户消息到数据库
       const { data: savedMsg, error: saveError } = await supabase
@@ -2297,7 +2297,8 @@ const ChatPage: React.FC = () => {
                 )}
                 
                 {/* 文本气泡 - 横排（禁用竖排），气泡大小/透明度同步美化设置 */}
-                {msg.content && (
+                {/* 如果是纯图片/表情包消息，不显示文字（包括 [STICKER:xxx] 和 [图片] xxx） */}
+                {msg.content && !msg.content.startsWith('[STICKER:') && !(msg.image_url && msg.content.startsWith('[图片]')) && (
                   <div
                     className={getBubbleStyle(msg.role === 'user')}
                     style={{
