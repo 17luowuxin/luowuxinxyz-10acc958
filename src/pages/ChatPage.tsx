@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -157,9 +157,17 @@ const ChatPage: React.FC = () => {
   const [stickerKeywordInput, setStickerKeywordInput] = useState('');
   const [pendingStickerFile, setPendingStickerFile] = useState<{ file: File; previewUrl: string } | null>(null);
   const [uploadingSticker, setUploadingSticker] = useState(false);
+  const [showStickerPicker, setShowStickerPicker] = useState(false); // 快捷发送表情包面板
+  // 通话相关状态
+  const [showCallDialog, setShowCallDialog] = useState<'voice' | 'video' | null>(null);
+  const [inCall, setInCall] = useState(false);
+  const [callMessages, setCallMessages] = useState<{ role: string; content: string }[]>([]);
+  const [callInput, setCallInput] = useState('');
+  const [callLoading, setCallLoading] = useState(false);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const callMessagesEndRef = useRef<HTMLDivElement>(null);
   
 
   // 先定义 fetchProfile - 需要在 useEffect 之前
@@ -2033,6 +2041,156 @@ const ChatPage: React.FC = () => {
     toast.success('已删除');
   };
 
+  // 快捷发送表情包（用户点击即发送）
+  const sendStickerDirectly = async (sticker: StickerType) => {
+    if (!user?.id || !characterId) return;
+    setShowStickerPicker(false);
+
+    // 用户发送表情包消息
+    const userMsg = {
+      id: Date.now(),
+      role: 'user',
+      content: '',
+      image_url: sticker.imageUrl
+    };
+    setMessages(prev => [...prev, userMsg]);
+
+    await supabase.from('chat_messages').insert({
+      user_id: user.id,
+      character_id: characterId,
+      role: 'user',
+      content: `[STICKER:${sticker.id}]`,
+      image_url: sticker.imageUrl
+    });
+  };
+
+  // 开始通话（语音/视频）
+  const startCall = (type: 'voice' | 'video') => {
+    setShowCallDialog(type);
+    setInCall(true);
+    setCallMessages([]);
+    // 角色的开场白
+    const greeting = type === 'voice'
+      ? `喂？${profile?.nickname || ''}？怎么啦，想我了吗～`
+      : `哇，视频来了！让我看看你～ 你今天怎么样呀？`;
+    setCallMessages([{ role: 'assistant', content: greeting }]);
+  };
+
+  // 结束通话
+  const endCall = () => {
+    setShowCallDialog(null);
+    setInCall(false);
+    setCallMessages([]);
+    setCallInput('');
+  };
+
+  // 通话中发送消息
+  const sendCallMessage = async () => {
+    if (!callInput.trim() || callLoading || !character) return;
+
+    const userText = callInput.trim();
+    setCallInput('');
+    setCallMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setCallLoading(true);
+
+    try {
+      const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
+      const systemHint = `你正在和用户进行${callType}。请用简短、口语化、亲切的方式回复，像真的在打电话一样。不要用书面语，多用语气词和口头禅。回复控制在1-2句话。`;
+
+      const body: any = {
+        messages: [
+          ...callMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: userText }
+        ],
+        characterName: character.name,
+        characterId: characterId,
+        userId: user?.id,
+        persona: character.persona ? `${character.persona}\n\n${systemHint}` : systemHint,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        replyMode: 'novel',
+        historyLimit: 10
+      };
+
+      body.userApiKey = apiConfig.apiKey;
+      body.provider = apiConfig.provider;
+      if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
+      if (apiConfig.model) body.model = apiConfig.model;
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        toast.error('通话出错');
+        setCallLoading(false);
+        return;
+      }
+
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode();
+
+      let assistantContent = '';
+
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          assistantContent = json.choices?.[0]?.message?.content || json.content || '';
+        } catch {
+          if (fullText.trim() && !fullText.includes('<!DOCTYPE')) {
+            assistantContent = fullText.trim();
+          }
+        }
+      }
+
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (!line || line.startsWith(':')) continue;
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta = json.choices?.[0]?.delta?.content || json.choices?.[0]?.message?.content || '';
+              if (delta) assistantContent += delta;
+            } catch {}
+          }
+        }
+      }
+
+      assistantContent = assistantContent.replace(/\|{2,}/g, ' ').trim();
+
+      if (assistantContent) {
+        setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+      }
+    } catch (err) {
+      console.error('Call message error:', err);
+      toast.error('发送失败');
+    }
+
+    setCallLoading(false);
+  };
+
+  // 通话消息滚动
+  useEffect(() => {
+    callMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [callMessages]);
+
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
       {/* 固定背景层 - 不随滚动移动 */}
@@ -2549,6 +2707,70 @@ const ChatPage: React.FC = () => {
         >
           <ImagePlus className="w-4 h-4" />
         </Button>
+
+        {/* 表情包快捷发送按钮 */}
+        <Popover open={showStickerPicker} onOpenChange={setShowStickerPicker}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
+              <Sticker className="w-4 h-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="center" side="top">
+            <div className="text-xs font-medium text-muted-foreground mb-2 px-1">点击表情包直接发送</div>
+            <div className="max-h-48 overflow-y-auto">
+              {userStickers.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-muted-foreground mb-1 px-1">我的表情包</div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {userStickers.map(sticker => (
+                      <button
+                        key={sticker.id}
+                        onClick={() => sendStickerDirectly(sticker)}
+                        className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                      >
+                        <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] text-muted-foreground mb-1 px-1">默认表情包</div>
+                <div className="grid grid-cols-4 gap-1">
+                  {defaultStickers.map(sticker => (
+                    <button
+                      key={sticker.id}
+                      onClick={() => sendStickerDirectly(sticker)}
+                      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                    >
+                      <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* 语音通话按钮 */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
+          onClick={() => startCall('voice')}
+        >
+          <Phone className="w-4 h-4" />
+        </Button>
+
+        {/* 视频通话按钮 */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
+          onClick={() => startCall('video')}
+        >
+          <Video className="w-4 h-4" />
+        </Button>
         
         <Input 
           value={input} 
@@ -2697,6 +2919,92 @@ const ChatPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 通话弹窗（语音/视频） */}
+      {showCallDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-background rounded-2xl w-[90%] max-w-sm mx-4 overflow-hidden shadow-2xl flex flex-col" style={{ maxHeight: '85vh' }}>
+            {/* 通话头部 */}
+            <div className={`p-6 text-center ${showCallDialog === 'video' ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-gradient-to-br from-green-500 to-teal-500'}`}>
+              <div className="relative mx-auto w-20 h-20 mb-3">
+                {character?.avatar_url ? (
+                  <img src={character.avatar_url} alt={character.name} className="w-full h-full rounded-full object-cover border-4 border-white/30" />
+                ) : (
+                  <div className="w-full h-full rounded-full bg-white/20 flex items-center justify-center text-2xl text-white font-bold">
+                    {character?.name?.charAt(0) || '?'}
+                  </div>
+                )}
+                {showCallDialog === 'video' && (
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                    <Video className="w-3 h-3 text-purple-500" />
+                  </div>
+                )}
+              </div>
+              <h3 className="text-white font-semibold text-lg">{character?.name}</h3>
+              <p className="text-white/80 text-sm mt-1">
+                {showCallDialog === 'video' ? '视频通话中...' : '语音通话中...'}
+              </p>
+            </div>
+
+            {/* 通话消息区域 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30" style={{ minHeight: '200px', maxHeight: '300px' }}>
+              {callMessages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-primary text-primary-foreground rounded-br-md' 
+                      : 'bg-muted text-foreground rounded-bl-md'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {callLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground">
+                    正在说话...
+                  </div>
+                </div>
+              )}
+              <div ref={callMessagesEndRef} />
+            </div>
+
+            {/* 通话输入区域 */}
+            <div className="p-3 border-t bg-background">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={callInput}
+                  onChange={(e) => setCallInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
+                  placeholder="说点什么..."
+                  className="flex-1 h-10 rounded-full"
+                  disabled={callLoading}
+                />
+                <Button
+                  size="icon"
+                  onClick={sendCallMessage}
+                  disabled={callLoading || !callInput.trim()}
+                  className="w-10 h-10 rounded-full bg-primary"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* 挂断按钮 */}
+            <div className="p-4 flex justify-center bg-background border-t">
+              <Button
+                variant="destructive"
+                size="lg"
+                className="w-14 h-14 rounded-full"
+                onClick={endCall}
+              >
+                <Phone className="w-6 h-6 rotate-[135deg]" />
+              </Button>
             </div>
           </div>
         </div>
