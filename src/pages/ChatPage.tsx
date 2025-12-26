@@ -1948,8 +1948,9 @@ const ChatPage: React.FC = () => {
     try {
       const file = pendingStickerFile.file;
       const fileExt = file.name.split('.').pop();
-      const fileName = `stickers/${user.id}/${Date.now()}.${fileExt}`;
-      
+      // 重要：photos 桶的上传策略要求第一层目录必须是 user.id
+      const fileName = `${user.id}/stickers/${Date.now()}.${fileExt}`;
+
       const { error: uploadError } = await supabase.storage
         .from('photos')
         .upload(fileName, file);
