@@ -109,43 +109,69 @@ export function matchSticker(
   return bestMatch?.sticker || null;
 }
 
+// 用户显式要求发某个表情包时：优先按用户意图返回（找不到就随机来一个）
+export function parseStickerRequest(
+  userText: string,
+  stickers: Sticker[],
+  userStickers: Sticker[] = []
+): Sticker | null {
+  const text = (userText || '').trim();
+  if (!text) return null;
+
+  const normalized = text.replace(/\s+/g, ' ');
+
+  const hasStickerWord = /(表情包|表情|贴纸|斗图)/.test(normalized);
+  const hasRequestVerb = /(发|来)(个|张|点|一个|一张)/.test(normalized);
+  const hasCue = hasStickerWord || hasRequestVerb;
+
+  // “不要/别发表情包”之类的否定指令
+  const isNegative = /(不要|别|不需要|别再)/.test(normalized) && hasCue;
+  if (isNegative) return null;
+
+  if (!hasCue) return null;
+
+  const matched = matchSticker(normalized, stickers, userStickers);
+  if (matched) return matched;
+
+  // 没点名：给个友好的默认/随机
+  const pool = [...userStickers, ...stickers];
+  if (pool.length === 0) return null;
+
+  const friendly = pool.find(s => s.id === 'kaixin') || pool.find(s => s.id === 'meiwenti');
+  return friendly || pool[Math.floor(Math.random() * pool.length)];
+}
+
 // 判断是否应该发送表情包（根据对话情感和上下文）
 export function shouldSendSticker(
   aiReply: string,
   recentMessages: { role: string; content: string }[] = []
 ): boolean {
-  // 1. 如果最近5条消息中已有表情包，暂时不发（避免刷屏）
+  const reply = (aiReply || '').trim();
+
+  // 1) 避免刷屏：最近 6 条里出现过表情包就先不发
   const recentStickerCount = recentMessages
-    .slice(-5)
+    .slice(-6)
     .filter(m => m.content?.includes('[STICKER:')).length;
-  
-  if (recentStickerCount >= 1) {
-    return false;
-  }
-  
-  // 2. 消息太短或太长都不适合发表情包
-  const replyLength = aiReply.length;
-  if (replyLength < 5 || replyLength > 200) {
-    return false;
-  }
-  
-  // 3. 检测是否是严肃/复杂话题（不适合发表情包）
+
+  if (recentStickerCount >= 1) return false;
+
+  // 2) 太短不发（像“嗯”“好”这类）
+  if (reply.length < 4) return false;
+
+  // 3) 严肃/敏感话题尽量不发
+  const snippet = reply.slice(Math.max(0, reply.length - 240));
   const seriousKeywords = [
-    '对不起', '抱歉', '很遗憾', '不幸', '去世', '死', '病', '离婚', '分手',
-    '焦虑', '抑郁', '压力大', '崩溃', '绝望', '自杀', '伤害',
-    '严肃', '认真', '重要', '必须', '紧急', '危险',
-    '问题是', '原因是', '分析', '解释', '建议你', '应该'
+    '自杀', '去世', '不幸', '病', '抑郁', '焦虑', '崩溃', '绝望',
+    '分手', '离婚', '伤害', '危险', '紧急',
+    '对不起', '抱歉', '很遗憾'
   ];
-  
-  const hasSeriousContent = seriousKeywords.some(kw => aiReply.includes(kw));
-  if (hasSeriousContent) {
-    return false;
-  }
-  
-  // 4. 检测是否有明显的情感表达（适合发表情包）
+
+  if (seriousKeywords.some(kw => snippet.includes(kw))) return false;
+
+  // 4) 情感强度判断（更偏“收尾一句”是否有情绪）
   const strongEmotionalKeywords = [
     '晚安', '早安', '睡啦', '睡了',
-    '太开心了', '好开心', '超开心', '开心死了',
+    '太开心了', '好开心', '超开心',
     '好饿', '吃饭', '干饭',
     '好困', '困死了',
     '爱你', '喜欢你', '么么哒', '亲亲', '比心',
@@ -153,27 +179,26 @@ export function shouldSendSticker(
     '真的吗', '天啊', '我的天', '太震惊了',
     '呜呜', '好委屈', '心疼'
   ];
-  
-  // 弱情感关键词（需要更高的随机门槛）
+
   const weakEmotionalKeywords = [
-    '开心', '高兴', '棒', '好', '没问题', '可以',
+    '开心', '高兴', '太棒了', '棒', '好耶', '哈哈', '嘻嘻',
+    '没问题', '可以', '行',
     '困', '累', '懒', '摸鱼',
-    '惊讶', '什么', '居然', '竟然',
-    '😊', '😢', '😴', '😍', '💕', '❤', '🥺', '😭', '😆', '哈哈', '嘻嘻'
+    '震惊', '惊讶', '什么', '居然', '竟然',
+    '😊', '😢', '😴', '😍', '💕', '❤', '🥺', '😭', '😆'
   ];
-  
-  const hasStrongEmotion = strongEmotionalKeywords.some(kw => aiReply.includes(kw));
-  const hasWeakEmotion = weakEmotionalKeywords.some(kw => aiReply.includes(kw));
-  
-  // 5. 根据情感强度决定发送概率
-  if (hasStrongEmotion) {
-    // 强情感：35%概率发送
-    return Math.random() < 0.35;
-  } else if (hasWeakEmotion) {
-    // 弱情感：15%概率发送
-    return Math.random() < 0.15;
-  }
-  
-  // 没有情感关键词，不发送
-  return false;
+
+  const hasStrongEmotion = strongEmotionalKeywords.some(kw => snippet.includes(kw));
+  const hasWeakEmotion = weakEmotionalKeywords.some(kw => snippet.includes(kw));
+
+  let p = 0;
+  if (hasStrongEmotion) p = 0.32;
+  else if (hasWeakEmotion) p = 0.12;
+  else return false;
+
+  // 5) 回复越长越像“认真解释”，降低但不完全禁止
+  if (reply.length > 400) p *= 0.6;
+  if (reply.length > 800) p *= 0.4;
+
+  return Math.random() < p;
 }
