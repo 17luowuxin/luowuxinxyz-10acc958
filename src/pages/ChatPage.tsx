@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
-import { defaultStickers, matchSticker, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
+import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -1410,11 +1410,15 @@ const ChatPage: React.FC = () => {
     if (quotedMessage) {
       messageContent = `[引用: "${quotedMessage.content.slice(0, 50)}${quotedMessage.content.length > 50 ? '...' : ''}"]\n${input}`;
     }
-    
+
+    // 如果用户明确要求“来/发”某个表情包，则优先按用户意图发送（在 AI 回复后作为单独一条消息）
+    const requestedSticker = stickerEnabled
+      ? parseStickerRequest(messageContent, defaultStickers, userStickers)
+      : null;
+
     const userMessage = { role: 'user', content: messageContent };
     const tempId = Date.now();
     const isWaitingForAI = loading; // 记录当前是否正在等待AI回复
-    
     // 先清空输入，允许用户继续输入
     setInput('');
     setQuotedMessage(null);
@@ -1731,25 +1735,29 @@ const ChatPage: React.FC = () => {
           if (stickerEnabled) {
             const combinedContent = multiMessages.join(' ');
             const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
-            if (shouldSendSticker(combinedContent, recentMsgs)) {
-              const matchedSticker = matchSticker(combinedContent, defaultStickers, userStickers);
-              if (matchedSticker) {
-                const stickerMsg = {
-                  id: Date.now() + 100,
-                  role: 'assistant',
-                  content: '',
-                  image_url: matchedSticker.imageUrl
-                };
-                setMessages(prev => [...prev, stickerMsg]);
-                
-                await supabase.from('chat_messages').insert({
-                  user_id: user?.id,
-                  character_id: characterId,
-                  role: 'assistant',
-                  content: `[STICKER:${matchedSticker.id}]`,
-                  image_url: matchedSticker.imageUrl
-                });
-              }
+
+            const stickerToSend =
+              requestedSticker ||
+              (shouldSendSticker(combinedContent, recentMsgs)
+                ? matchSticker(combinedContent, defaultStickers, userStickers)
+                : null);
+
+            if (stickerToSend) {
+              const stickerMsg = {
+                id: Date.now() + 100,
+                role: 'assistant',
+                content: '',
+                image_url: stickerToSend.imageUrl
+              };
+              setMessages(prev => [...prev, stickerMsg]);
+
+              await supabase.from('chat_messages').insert({
+                user_id: user?.id,
+                character_id: characterId,
+                role: 'assistant',
+                content: `[STICKER:${stickerToSend.id}]`,
+                image_url: stickerToSend.imageUrl
+              });
             }
           }
         }, delay + 500);
@@ -1776,29 +1784,33 @@ const ChatPage: React.FC = () => {
         // 表情包发送逻辑
         if (stickerEnabled) {
           const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
-          if (shouldSendSticker(cleanContent, recentMsgs)) {
-            const matchedSticker = matchSticker(cleanContent, defaultStickers, userStickers);
-            if (matchedSticker) {
-              // 延迟发送表情包，模拟自然对话
-              setTimeout(async () => {
-                const stickerMsg = {
-                  id: Date.now() + 2,
-                  role: 'assistant',
-                  content: '',
-                  image_url: matchedSticker.imageUrl
-                };
-                setMessages(prev => [...prev, stickerMsg]);
-                
-                // 保存表情包消息到数据库
-                await supabase.from('chat_messages').insert({
-                  user_id: user?.id,
-                  character_id: characterId,
-                  role: 'assistant',
-                  content: `[STICKER:${matchedSticker.id}]`,
-                  image_url: matchedSticker.imageUrl
-                });
-              }, 500 + Math.random() * 500);
-            }
+
+          const stickerToSend =
+            requestedSticker ||
+            (shouldSendSticker(cleanContent, recentMsgs)
+              ? matchSticker(cleanContent, defaultStickers, userStickers)
+              : null);
+
+          if (stickerToSend) {
+            // 延迟发送表情包，模拟自然对话
+            setTimeout(async () => {
+              const stickerMsg = {
+                id: Date.now() + 2,
+                role: 'assistant',
+                content: '',
+                image_url: stickerToSend.imageUrl
+              };
+              setMessages(prev => [...prev, stickerMsg]);
+
+              // 保存表情包消息到数据库
+              await supabase.from('chat_messages').insert({
+                user_id: user?.id,
+                character_id: characterId,
+                role: 'assistant',
+                content: `[STICKER:${stickerToSend.id}]`,
+                image_url: stickerToSend.imageUrl
+              });
+            }, 500 + Math.random() * 500);
           }
         }
       }
