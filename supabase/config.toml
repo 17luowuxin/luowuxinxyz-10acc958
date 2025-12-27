@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.novelai-models]
 verify_jwt = false
+
+[functions.tts]
+verify_jwt = false

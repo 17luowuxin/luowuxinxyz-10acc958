@@ -164,6 +164,9 @@ const ChatPage: React.FC = () => {
   const [callMessages, setCallMessages] = useState<{ role: string; content: string }[]>([]);
   const [callInput, setCallInput] = useState('');
   const [callLoading, setCallLoading] = useState(false);
+  // TTS相关状态
+  const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
+  const [ttsPlaying, setTtsPlaying] = useState(false);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -513,6 +516,21 @@ const ChatPage: React.FC = () => {
         } else {
           setApiConfig({});
         }
+        
+        // TTS config
+        const ttsEnabledSetting = apiKeys.find(k => k.provider === 'tts_enabled');
+        const ttsBaseUrlSetting = apiKeys.find(k => k.provider === 'tts_base_url');
+        const ttsApiKeySetting = apiKeys.find(k => k.provider === 'tts_api_key');
+        const ttsModelSetting = apiKeys.find(k => k.provider === 'tts_model');
+        
+        if (ttsBaseUrlSetting && ttsApiKeySetting) {
+          setTtsConfig({
+            enabled: ttsEnabledSetting?.api_key !== 'false',
+            baseUrl: ttsBaseUrlSetting.api_key,
+            apiKey: ttsApiKeySetting.api_key,
+            model: ttsModelSetting?.api_key || '',
+          });
+        }
       } else {
         setApiConfig({});
       }
@@ -521,6 +539,40 @@ const ChatPage: React.FC = () => {
       setApiConfig({});
     } finally {
       setApiConfigLoading(false);
+    }
+  };
+  
+  // TTS播放函数
+  const playTTS = async (text: string) => {
+    if (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl || !character) return;
+    
+    try {
+      setTtsPlaying(true);
+      const { data, error } = await supabase.functions.invoke('tts', {
+        body: {
+          text,
+          voiceId: character.voice_id || 'default',
+          ttsConfig: {
+            apiKey: ttsConfig.apiKey,
+            baseUrl: ttsConfig.baseUrl,
+            model: ttsConfig.model,
+          },
+        },
+      });
+
+      if (error || !data?.audioContent) {
+        console.error('TTS error:', error || 'No audio content');
+        return;
+      }
+
+      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setTtsPlaying(false);
+      audio.onerror = () => setTtsPlaying(false);
+      await audio.play();
+    } catch (err) {
+      console.error('TTS playback error:', err);
+      setTtsPlaying(false);
     }
   };
 
@@ -2177,6 +2229,8 @@ const ChatPage: React.FC = () => {
 
       if (assistantContent) {
         setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+        // 播放TTS语音
+        playTTS(assistantContent);
       }
     } catch (err) {
       console.error('Call message error:', err);
