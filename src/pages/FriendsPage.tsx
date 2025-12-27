@@ -28,6 +28,7 @@ const FriendsPage: React.FC = () => {
   const [regeneratingMemory, setRegeneratingMemory] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(10);
   const [transferEnabled, setTransferEnabled] = useState(true);
+  const [voiceId, setVoiceId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -148,7 +149,8 @@ const FriendsPage: React.FC = () => {
         opening_line: openingLine,
         avatar_url: finalAvatarUrl,
         history_limit: historyLimit,
-        transfer_enabled: transferEnabled
+        transfer_enabled: transferEnabled,
+        voice_id: voiceId || null
       })
       .eq('id', editingChar.id);
     
@@ -173,6 +175,7 @@ const FriendsPage: React.FC = () => {
     setAvatarFile(null);
     setHistoryLimit(10);
     setTransferEnabled(true);
+    setVoiceId('');
   };
 
   const openEditDialog = async (char: any) => {
@@ -183,6 +186,7 @@ const FriendsPage: React.FC = () => {
     setAvatarUrl(char.avatar_url || '');
     setHistoryLimit(char.history_limit ?? 10);
     setTransferEnabled(char.transfer_enabled ?? true);
+    setVoiceId(char.voice_id || '');
     setMemorySummary('');
     setOpen(true);
     
@@ -414,6 +418,26 @@ const FriendsPage: React.FC = () => {
                         transferEnabled ? 'translate-x-6' : 'translate-x-0.5'
                       }`} />
                     </button>
+                  </div>
+                  
+                  {/* Voice ID */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎙️</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">语音ID</p>
+                        <p className="text-xs text-gray-400">用于TTS语音合成的声音ID</p>
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="输入语音ID（从TTS服务获取）"
+                      value={voiceId}
+                      onChange={(e) => setVoiceId(e.target.value)}
+                      className="rounded-xl bg-gray-50 border-gray-200"
+                    />
+                    <p className="text-xs text-gray-400">
+                      不同TTS服务的语音ID格式不同，请参考对应服务的文档
+                    </p>
                   </div>
                   
                   <Button 

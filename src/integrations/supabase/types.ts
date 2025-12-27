@@ -148,6 +148,7 @@ export type Database = {
           transfer_enabled: boolean | null
           updated_at: string
           user_id: string
+          voice_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -163,6 +164,7 @@ export type Database = {
           transfer_enabled?: boolean | null
           updated_at?: string
           user_id: string
+          voice_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -178,6 +180,7 @@ export type Database = {
           transfer_enabled?: boolean | null
           updated_at?: string
           user_id?: string
+          voice_id?: string | null
         }
         Relationships: []
       }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -140,6 +140,15 @@ const SettingsPage: React.FC = () => {
   const [novelaiVibeImage, setNovelaiVibeImage] = useState('');
   const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(0.6);
   const [showImg2ImgParams, setShowImg2ImgParams] = useState(false);
+  
+  // TTS state
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [ttsBaseUrl, setTtsBaseUrl] = useState('');
+  const [ttsApiKey, setTtsApiKey] = useState('');
+  const [ttsModel, setTtsModel] = useState('');
+  const [showTtsKey, setShowTtsKey] = useState(false);
+  const [ttsConfigured, setTtsConfigured] = useState(false);
+  const [testingTts, setTestingTts] = useState(false);
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -267,6 +276,20 @@ const SettingsPage: React.FC = () => {
       if (vibeTransferSetting) setNovelaiVibeTransfer(vibeTransferSetting.api_key === 'true');
       if (vibeImageSetting) setNovelaiVibeImage(vibeImageSetting.api_key);
       if (vibeStrengthSetting) setNovelaiVibeStrength(parseFloat(vibeStrengthSetting.api_key) || 0.6);
+      
+      // TTS settings
+      const ttsEnabledSetting = data.find(k => k.provider === 'tts_enabled');
+      const ttsBaseUrlSetting = data.find(k => k.provider === 'tts_base_url');
+      const ttsApiKeySetting = data.find(k => k.provider === 'tts_api_key');
+      const ttsModelSetting = data.find(k => k.provider === 'tts_model');
+      
+      if (ttsEnabledSetting) setTtsEnabled(ttsEnabledSetting.api_key !== 'false');
+      if (ttsBaseUrlSetting) {
+        setTtsBaseUrl(ttsBaseUrlSetting.api_key);
+        setTtsConfigured(true);
+      }
+      if (ttsApiKeySetting) setTtsApiKey(ttsApiKeySetting.api_key);
+      if (ttsModelSetting) setTtsModel(ttsModelSetting.api_key);
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -630,6 +653,80 @@ const SettingsPage: React.FC = () => {
 
   const useCustomApiHandler = () => {
     setUsingDefaultApi(false);
+  };
+
+  // TTS functions
+  const saveTtsSettings = async () => {
+    if (!user || !ttsBaseUrl.trim() || !ttsApiKey.trim()) {
+      toast.error('请填写TTS API配置');
+      return;
+    }
+
+    const providersToReplace = ['tts_enabled', 'tts_base_url', 'tts_api_key', 'tts_model'];
+    
+    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    
+    const rows = [
+      { user_id: user.id, provider: 'tts_enabled', api_key: ttsEnabled ? 'true' : 'false' },
+      { user_id: user.id, provider: 'tts_base_url', api_key: ttsBaseUrl.trim() },
+      { user_id: user.id, provider: 'tts_api_key', api_key: ttsApiKey.trim() },
+    ];
+    
+    if (ttsModel.trim()) {
+      rows.push({ user_id: user.id, provider: 'tts_model', api_key: ttsModel.trim() });
+    }
+    
+    const { error } = await supabase.from('api_keys').insert(rows);
+    if (error) {
+      toast.error('保存失败: ' + error.message);
+      return;
+    }
+    
+    setTtsConfigured(true);
+    toast.success('TTS配置已保存');
+  };
+
+  const testTtsConnection = async () => {
+    if (!ttsBaseUrl || !ttsApiKey) {
+      toast.error('请先填写TTS配置');
+      return;
+    }
+
+    setTestingTts(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('tts', {
+        body: {
+          text: '你好，这是语音测试。',
+          voiceId: 'default',
+          ttsConfig: {
+            apiKey: ttsApiKey,
+            baseUrl: ttsBaseUrl,
+            model: ttsModel,
+          },
+        },
+      });
+
+      if (error) {
+        toast.error(`连接失败: ${error.message}`);
+        return;
+      }
+
+      if (data.audioContent) {
+        // Play the test audio
+        const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+        const audio = new Audio(audioUrl);
+        audio.play();
+        toast.success('TTS连接成功！正在播放测试语音...');
+      } else if (data.error) {
+        toast.error(`TTS错误: ${data.error}`);
+      } else {
+        toast.error('未收到音频数据');
+      }
+    } catch (error) {
+      toast.error('连接测试失败');
+    } finally {
+      setTestingTts(false);
+    }
   };
 
   return (
@@ -1592,6 +1689,135 @@ const SettingsPage: React.FC = () => {
               className="w-full py-6 rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
             >
               保存NovelAI配置
+            </Button>
+          </div>
+        </div>
+
+        {/* TTS Configuration Card */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-blue-100/50">
+          {/* Card Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center">
+                <Volume2 className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-800">语音合成 (TTS)</h2>
+                <p className="text-xs text-gray-500">
+                  配置语音API实现通话语音播放
+                </p>
+              </div>
+            </div>
+            {ttsConfigured && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full font-medium">
+                <Check className="w-3.5 h-3.5" /> 已配置
+              </span>
+            )}
+          </div>
+
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50/80 to-cyan-50/80 rounded-2xl mb-4">
+            <div>
+              <p className="font-medium text-gray-800">启用语音功能</p>
+              <p className="text-xs text-gray-500">关闭后通话时角色不会播放语音</p>
+            </div>
+            <button
+              onClick={async () => {
+                const newVal = !ttsEnabled;
+                setTtsEnabled(newVal);
+                if (user) {
+                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'tts_enabled');
+                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'tts_enabled', api_key: newVal ? 'true' : 'false' });
+                }
+              }}
+              className={`w-14 h-8 rounded-full transition-all ${
+                ttsEnabled ? 'bg-blue-400' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                ttsEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          <div className={`space-y-4 ${!ttsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* TTS Base URL */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-blue-600 mb-2">
+                <Globe className="w-4 h-4" />
+                TTS API URL
+              </label>
+              <Input
+                placeholder="例如: https://api.elevenlabs.io/v1/text-to-speech"
+                value={ttsBaseUrl}
+                onChange={(e) => setTtsBaseUrl(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                支持 OpenAI TTS、ElevenLabs、Minimax、Fish Audio 等任意兼容API
+              </p>
+            </div>
+
+            {/* TTS API Key */}
+            <div>
+              <label className="text-sm font-medium text-blue-600 mb-2 block">
+                API Key
+              </label>
+              <div className="relative">
+                <Input
+                  type={showTtsKey ? 'text' : 'password'}
+                  placeholder="你的TTS API密钥"
+                  value={ttsApiKey}
+                  onChange={(e) => setTtsApiKey(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTtsKey(!showTtsKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showTtsKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* TTS Model */}
+            <div>
+              <label className="text-sm font-medium text-blue-600 mb-2 block">
+                模型名称 (可选)
+              </label>
+              <Input
+                placeholder="例如: tts-1, eleven_multilingual_v2"
+                value={ttsModel}
+                onChange={(e) => setTtsModel(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                不同API使用不同的模型名称，留空使用默认值
+              </p>
+            </div>
+
+            {/* Test Button */}
+            <button
+              onClick={testTtsConnection}
+              disabled={testingTts || !ttsBaseUrl || !ttsApiKey}
+              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {testingTts ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4 text-blue-500" />
+              )}
+              测试TTS连接
+            </button>
+
+            {/* Save Button */}
+            <Button
+              onClick={saveTtsSettings}
+              disabled={!ttsBaseUrl || !ttsApiKey}
+              className="w-full py-6 rounded-2xl bg-gradient-to-r from-blue-400 to-cyan-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              保存TTS配置
             </Button>
           </div>
         </div>
