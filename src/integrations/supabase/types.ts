@@ -149,6 +149,7 @@ export type Database = {
           updated_at: string
           user_id: string
           voice_id: string | null
+          voice_mode: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -165,6 +166,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           voice_id?: string | null
+          voice_mode?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -181,6 +183,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           voice_id?: string | null
+          voice_mode?: string | null
         }
         Relationships: []
       }
@@ -399,6 +402,7 @@ export type Database = {
           created_at: string
           id: string
           is_received: boolean | null
+          is_user_transfer: boolean | null
           message: string | null
           user_id: string
         }
@@ -409,6 +413,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_received?: boolean | null
+          is_user_transfer?: boolean | null
           message?: string | null
           user_id: string
         }
@@ -419,6 +424,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_received?: boolean | null
+          is_user_transfer?: boolean | null
           message?: string | null
           user_id?: string
         }
