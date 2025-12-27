@@ -367,9 +367,10 @@ const GiftShopPage: React.FC = () => {
           user_id: user.id,
           character_id: selectedCharacter.id,
           character_name: selectedCharacter.name,
-          amount: -totalPrice,
+          amount: totalPrice,
           message: `赠送了${giftNames}`,
           is_received: true,
+          is_user_transfer: true,
         });
 
       if (error) throw error;

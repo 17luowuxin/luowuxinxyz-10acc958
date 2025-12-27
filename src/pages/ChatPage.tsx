@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
+import UserTransferCard from '@/components/chat/UserTransferCard';
 import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -167,6 +168,7 @@ const ChatPage: React.FC = () => {
   // TTS相关状态
   const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<'off' | 'sometimes' | 'always'>('off'); // 角色语音模式
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -202,6 +204,8 @@ const ChatPage: React.FC = () => {
       setTransferEnabled(data.transfer_enabled ?? true);
       // 加载表情包开关状态
       setStickerEnabled((data as any).sticker_enabled ?? true);
+      // 加载语音模式
+      setVoiceMode(((data as any).voice_mode as 'off' | 'sometimes' | 'always') || 'off');
     }
   }, [characterId]);
 
@@ -1309,9 +1313,9 @@ const ChatPage: React.FC = () => {
       setUploadingImage(false);
       URL.revokeObjectURL(pendingImage.url);
       
-      // 调用AI（带图片识别）
+      // 调用AI（带图片识别），过滤掉表情包消息
       const recentMessages = messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('[STICKER:'))
         .slice(-historyLimit)
         .map(m => ({ role: m.role, content: m.content, image_url: m.image_url }));
       
@@ -1512,14 +1516,14 @@ const ChatPage: React.FC = () => {
     setMessages(prev => [...prev, { ...userMessage, id: savedMsg?.id || tempId, quotedMessage }]);
 
     try {
-      // 保留历史消息中的图片URL
+      // 保留历史消息中的图片URL，过滤掉表情包消息
       const recentMessages = messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('[STICKER:'))
         .slice(-historyLimit)
         .map(m => ({ role: m.role, content: m.content, image_url: m.image_url }));
       
-      // 检查最近消息中是否有图片（用于上下文）
-      const hasImageInHistory = recentMessages.some(m => m.image_url);
+      // 检查最近消息中是否有图片（用于上下文），排除表情包
+      const hasImageInHistory = recentMessages.some(m => m.image_url && !m.content?.startsWith('[STICKER:'));
       
       const body: any = { 
         messages: [...recentMessages, userMessage], 
@@ -1840,6 +1844,14 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: cleanContent 
         });
+        
+        // 角色语音输出
+        if (ttsConfig?.enabled && voiceMode !== 'off') {
+          const shouldSpeak = voiceMode === 'always' || (voiceMode === 'sometimes' && Math.random() < 0.3);
+          if (shouldSpeak) {
+            playTTS(cleanContent);
+          }
+        }
         
         // 表情包发送逻辑
         if (stickerEnabled) {
@@ -2377,6 +2389,35 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
+            {/* 语音设置 */}
+            {ttsConfig?.enabled && (
+              <div className="px-3 py-2 border-t border-border">
+                <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                  <Volume2 className="w-3 h-3" />
+                  角色语音输出
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { value: 'off', label: '关闭' },
+                    { value: 'sometimes', label: '偶尔' },
+                    { value: 'always', label: '每句' },
+                  ].map((mode) => (
+                    <button
+                      key={mode.value}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors ${voiceMode === mode.value ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={async () => {
+                        setVoiceMode(mode.value as any);
+                        await supabase.from('characters').update({ voice_mode: mode.value }).eq('id', characterId);
+                        toast.success(`语音模式: ${mode.label}`);
+                      }}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div className="h-px bg-border my-1" />
             
             <AlertDialog>
@@ -2430,6 +2471,39 @@ const ChatPage: React.FC = () => {
             if (msg.role === 'transfer') {
               const transfer = msg.transferData || pendingTransfers.find(t => msg.content.includes(t.id));
               if (transfer) {
+                // 判断是用户转账（礼物）还是角色转账
+                const isUserGift = (transfer as any).is_user_transfer === true;
+                
+                if (isUserGift) {
+                  // 用户赠送礼物 - 显示在右侧，角色已收款
+                  return (
+                    <div key={msg.id} className="flex items-end gap-2 flex-row-reverse">
+                      {/* 用户头像 */}
+                      <div className="relative w-10 h-10 flex-shrink-0">
+                        {userAvatarFrame && (
+                          <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                        )}
+                        <div className={`absolute rounded-full overflow-hidden ${userAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
+                          {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-pink-200 to-purple-200 flex items-center justify-center text-[10px] text-gray-500">
+                              {profile?.nickname?.charAt(0) || '我'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <UserTransferCard
+                        amount={Math.abs(Number(transfer.amount))}
+                        giftName={transfer.message?.replace('赠送了', '') || ''}
+                        characterName={character?.name || '角色'}
+                        message=""
+                      />
+                    </div>
+                  );
+                }
+                
+                // 角色转账 - 显示在左侧
                 return (
                   <div key={msg.id} className="flex items-end gap-2 flex-row">
                     {/* 角色头像 */}
