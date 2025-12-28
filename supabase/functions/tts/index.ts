@@ -30,24 +30,54 @@ serve(async (req) => {
 
     const { apiKey, baseUrl, model } = ttsConfig;
     
+    // 标准化 baseUrl - 移除尾部斜杠
+    const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+    
     // Build the request URL - support different API formats
-    let requestUrl = baseUrl;
+    let requestUrl = normalizedBaseUrl;
     let requestBody: Record<string, unknown> = {};
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
     // Detect API type based on URL patterns
-    const isOpenAILike = baseUrl.includes('openai') || baseUrl.includes('/v1/audio/speech');
-    const isElevenLabs = baseUrl.includes('elevenlabs');
-    const isMinimax = baseUrl.includes('minimax') || baseUrl.includes('volink');
-    const isFishAudio = baseUrl.includes('fish.audio');
+    const isOpenAILike = normalizedBaseUrl.includes('openai') || 
+                         normalizedBaseUrl.includes('/v1/audio/speech') ||
+                         normalizedBaseUrl.includes('api2d') ||
+                         normalizedBaseUrl.includes('openrouter');
+    const isElevenLabs = normalizedBaseUrl.includes('elevenlabs');
+    const isMinimax = normalizedBaseUrl.includes('minimax') || normalizedBaseUrl.includes('volink');
+    const isFishAudio = normalizedBaseUrl.includes('fish.audio') || normalizedBaseUrl.includes('fish-audio');
+    const isAzure = normalizedBaseUrl.includes('azure') || normalizedBaseUrl.includes('cognitiveservices');
+    const isGoogleTTS = normalizedBaseUrl.includes('texttospeech.googleapis');
+    const isByteDance = normalizedBaseUrl.includes('bytedance') || normalizedBaseUrl.includes('volcengine');
+    const isXunfei = normalizedBaseUrl.includes('xfyun') || normalizedBaseUrl.includes('xunfei');
+    const isBaidu = normalizedBaseUrl.includes('baidu');
+    const isTencent = normalizedBaseUrl.includes('tencent');
+    const isAliyun = normalizedBaseUrl.includes('aliyun') || normalizedBaseUrl.includes('alibaba');
+    const isSiliconFlow = normalizedBaseUrl.includes('siliconflow');
+
+    console.log('TTS API Detection:', {
+      baseUrl: normalizedBaseUrl,
+      isOpenAILike,
+      isElevenLabs,
+      isMinimax,
+      isFishAudio,
+      isAzure,
+      isGoogleTTS,
+      isByteDance,
+      isXunfei,
+      isBaidu,
+      isTencent,
+      isAliyun,
+      isSiliconFlow
+    });
 
     if (isElevenLabs) {
       // ElevenLabs API format
       requestUrl = voiceId 
-        ? `${baseUrl.replace(/\/$/, '')}/${voiceId}`
-        : baseUrl;
+        ? `${normalizedBaseUrl.replace(/\/text-to-speech.*$/, '')}/text-to-speech/${voiceId}`
+        : normalizedBaseUrl;
       headers['xi-api-key'] = apiKey;
       requestBody = {
         text,
@@ -71,9 +101,96 @@ serve(async (req) => {
         reference_id: voiceId,
         format: 'mp3',
       };
+    } else if (isAzure) {
+      // Azure Cognitive Services TTS
+      headers['Ocp-Apim-Subscription-Key'] = apiKey;
+      headers['Content-Type'] = 'application/ssml+xml';
+      headers['X-Microsoft-OutputFormat'] = 'audio-16khz-128kbitrate-mono-mp3';
+      
+      const voice = voiceId || 'zh-CN-XiaoxiaoNeural';
+      requestBody = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'>
+        <voice name='${voice}'>${text}</voice>
+      </speak>` as any;
+    } else if (isGoogleTTS) {
+      // Google Cloud TTS
+      requestUrl = `${normalizedBaseUrl}?key=${apiKey}`;
+      requestBody = {
+        input: { text },
+        voice: { languageCode: 'zh-CN', name: voiceId || 'zh-CN-Standard-A' },
+        audioConfig: { audioEncoding: 'MP3' },
+      };
+    } else if (isByteDance) {
+      // 字节跳动/火山引擎 TTS
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      requestBody = {
+        text,
+        voice_type: voiceId || 'zh_female_qingxin',
+        encoding: 'mp3',
+        speed_ratio: 1.0,
+      };
+    } else if (isXunfei) {
+      // 讯飞 TTS
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      requestBody = {
+        text,
+        vcn: voiceId || 'xiaoyan',
+        aue: 'lame',
+        speed: 50,
+        volume: 50,
+        pitch: 50,
+      };
+    } else if (isBaidu) {
+      // 百度 TTS
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      const params = new URLSearchParams({
+        tex: text,
+        tok: apiKey,
+        cuid: 'lovable_app',
+        ctp: '1',
+        lan: 'zh',
+        per: voiceId || '0',
+        aue: '3',
+      });
+      requestBody = params.toString() as any;
+    } else if (isTencent) {
+      // 腾讯云 TTS
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      requestBody = {
+        Text: text,
+        VoiceType: parseInt(voiceId) || 0,
+        PrimaryLanguage: 1,
+        SampleRate: 16000,
+        Codec: 'mp3',
+      };
+    } else if (isAliyun) {
+      // 阿里云 TTS
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      requestBody = {
+        text,
+        voice: voiceId || 'xiaoyun',
+        format: 'mp3',
+        sample_rate: 16000,
+      };
+    } else if (isSiliconFlow) {
+      // SiliconFlow TTS API (OpenAI compatible)
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      // SiliconFlow 使用 OpenAI 兼容格式
+      if (!normalizedBaseUrl.includes('/audio/speech')) {
+        requestUrl = `${normalizedBaseUrl}/v1/audio/speech`;
+      }
+      requestBody = {
+        model: model || 'fishaudio/fish-speech-1.5',
+        input: text,
+        voice: voiceId || 'alloy',
+        response_format: 'mp3',
+      };
     } else if (isOpenAILike) {
       // OpenAI-compatible TTS API format
       headers['Authorization'] = `Bearer ${apiKey}`;
+      // 确保 URL 包含正确的端点
+      if (!normalizedBaseUrl.includes('/audio/speech')) {
+        requestUrl = `${normalizedBaseUrl}/v1/audio/speech`;
+      }
       requestBody = {
         model: model || 'tts-1',
         input: text,
@@ -81,31 +198,40 @@ serve(async (req) => {
         response_format: 'mp3',
       };
     } else {
-      // Generic API format - try to be flexible
+      // Generic API format - try multiple field names for maximum compatibility
       headers['Authorization'] = `Bearer ${apiKey}`;
       requestBody = {
         text,
-        voice_id: voiceId,
-        model: model,
         input: text,
+        voice_id: voiceId,
         voice: voiceId,
+        model: model,
+        format: 'mp3',
+        response_format: 'mp3',
       };
     }
 
-    console.log('TTS Request URL:', requestUrl);
-    console.log('TTS Request Body:', JSON.stringify(requestBody));
+    console.log('TTS Request:', {
+      url: requestUrl,
+      bodyType: typeof requestBody === 'string' ? 'string' : 'object',
+      voiceId,
+      model
+    });
 
     const response = await fetch(requestUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(requestBody),
+      body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('TTS API error:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: `TTS API error: ${response.status} - ${errorText}` }),
+        JSON.stringify({ 
+          error: `TTS API error: ${response.status}`,
+          details: errorText.slice(0, 500)
+        }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -116,7 +242,17 @@ serve(async (req) => {
     if (contentType.includes('application/json')) {
       // Parse JSON response - might contain base64 audio
       const jsonData = await response.json();
-      const audioContent = jsonData.audio || jsonData.audio_content || jsonData.data || jsonData.result;
+      
+      // Google TTS returns audioContent in JSON
+      if (jsonData.audioContent) {
+        return new Response(
+          JSON.stringify({ audioContent: jsonData.audioContent }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Try various field names
+      const audioContent = jsonData.audio || jsonData.audio_content || jsonData.data || jsonData.result || jsonData.audio_data;
       
       if (audioContent) {
         return new Response(
@@ -124,6 +260,7 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
+        console.error('No audio content in JSON response:', JSON.stringify(jsonData).slice(0, 500));
         return new Response(
           JSON.stringify({ error: 'No audio content in response', raw: jsonData }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -132,6 +269,14 @@ serve(async (req) => {
     } else {
       // Binary audio response - convert to base64
       const audioBuffer = await response.arrayBuffer();
+      
+      if (audioBuffer.byteLength === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Empty audio response' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       const audioContent = base64Encode(audioBuffer);
       
       return new Response(
