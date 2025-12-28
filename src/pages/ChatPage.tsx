@@ -656,8 +656,8 @@ const ChatPage: React.FC = () => {
 
   // 转账相关函数 - 解析 AI 返回的转账指令
   const parseTransferCommand = (content: string): { amount: number; message: string } | null => {
-    // 匹配格式: [转账:金额:留言] 或 [TRANSFER:金额:留言]
-    const transferMatch = content.match(/\[(?:转账|TRANSFER):(\d+(?:\.\d{1,2})?):([^\]]*)\]/i);
+    // 匹配格式: [转账:金额:留言] 或 [TRANSFER:金额:留言] 或 (转账:金额:留言)
+    const transferMatch = content.match(/[\[\(](?:转账|TRANSFER):(\d+(?:\.\d{1,2})?):([^\]\)]*?)[\]\)]/i);
     if (transferMatch) {
       const amount = parseFloat(transferMatch[1]);
       const message = transferMatch[2].trim() || '给你的~';
@@ -671,7 +671,7 @@ const ChatPage: React.FC = () => {
   
   // 从内容中移除转账指令标记
   const removeTransferCommand = (content: string): string => {
-    return content.replace(/\[(?:转账|TRANSFER):\d+(?:\.\d{1,2})?:[^\]]*\]/gi, '').trim();
+    return content.replace(/[\[\(](?:转账|TRANSFER):\d+(?:\.\d{1,2})?:[^\]\)]*?[\]\)]/gi, '').trim();
   };
   
   const createTransfer = async (amount: number, message?: string) => {
@@ -2730,51 +2730,77 @@ const ChatPage: React.FC = () => {
                 
                 {/* 文本气泡 - 横排（禁用竖排），气泡大小/透明度同步美化设置 */}
                 {/* 如果是纯图片/表情包消息，不显示文字（包括 [STICKER:xxx] 和 [图片] xxx） */}
-                {msg.content && !msg.content.startsWith('[STICKER:') && !(msg.image_url && msg.content.startsWith('[图片]')) && (
-                  <div
-                    className={getBubbleStyle(msg.role === 'user')}
-                    style={{
-                      // 气泡样式（背景/边框）+ 透明度：同时作用于文字与气泡背景
-                      ...getBubbleBackgroundStyle(msg.role === 'user'),
-                      opacity: bubbleOpacity,
+                {(() => {
+                  // 检查是否有内联转账指令
+                  const transferData = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
+                  const displayContent = transferData ? removeTransferCommand(msg.content) : msg.content;
+                  const showBubble = displayContent && !displayContent.startsWith('[STICKER:') && !(msg.image_url && displayContent.startsWith('[图片]'));
+                  
+                  return (
+                    <>
+                      {showBubble && (
+                        <div
+                          className={getBubbleStyle(msg.role === 'user')}
+                          style={{
+                            // 气泡样式（背景/边框）+ 透明度：同时作用于文字与气泡背景
+                            ...getBubbleBackgroundStyle(msg.role === 'user'),
+                            opacity: bubbleOpacity,
 
-                      color: msg.role === 'user' ? fontColor : friendFontColor,
-                      fontSize: `${bubbleSize}px`,
+                            color: msg.role === 'user' ? fontColor : friendFontColor,
+                            fontSize: `${bubbleSize}px`,
 
-                      // 强制横向排版：禁用任何竖排/列排模式
-                      writingMode: 'horizontal-tb',
-                      textOrientation: 'mixed',
-                      direction: 'ltr',
-                      textAlign: 'left',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'anywhere',
-                      whiteSpace: 'pre-wrap',
-                      lineHeight: 1.5,
+                            // 强制横向排版：禁用任何竖排/列排模式
+                            writingMode: 'horizontal-tb',
+                            textOrientation: 'mixed',
+                            direction: 'ltr',
+                            textAlign: 'left',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.5,
 
-                      // 气泡自适应内容宽度，不设置强制最小宽度
-                      width: 'fit-content',
+                            // 气泡自适应内容宽度，不设置强制最小宽度
+                            width: 'fit-content',
 
-                      // 气泡大小（内边距）随 bubble_size 同步
-                      padding: getBubblePadding(bubbleSize),
-                    }}
-                  >
-                    {/* 装饰图标 或 头像装饰图片 */}
-                    {msg.role === 'user' && getUserBubbleDecorImage() && (
-                      <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -right-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
-                    )}
-                    {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
-                      <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
-                    )}
-                    {msg.role !== 'user' && getFriendBubbleDecorImage() && (
-                      <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
-                    )}
-                    {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
-                      <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
-                    )}
+                            // 气泡大小（内边距）随 bubble_size 同步
+                            padding: getBubblePadding(bubbleSize),
+                          }}
+                        >
+                          {/* 装饰图标 或 头像装饰图片 */}
+                          {msg.role === 'user' && getUserBubbleDecorImage() && (
+                            <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -right-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                          )}
+                          {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
+                            <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
+                          )}
+                          {msg.role !== 'user' && getFriendBubbleDecorImage() && (
+                            <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-2 -left-3 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
+                          )}
+                          {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
+                            <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
+                          )}
 
-                    <span className="relative z-10" style={{ display: 'inline' }}>{msg.content}</span>
-                  </div>
-                )}
+                          <span className="relative z-10" style={{ display: 'inline' }}>{displayContent}</span>
+                        </div>
+                      )}
+                      
+                      {/* 内联转账卡片 - AI消息中检测到转账指令时显示 */}
+                      {transferData && (
+                        <div className="mt-2">
+                          <TransferCard
+                            amount={transferData.amount}
+                            characterName={character?.name || '角色'}
+                            message={transferData.message}
+                            isReceived={false}
+                            onReceive={() => {
+                              toast.success(`收到 ${transferData.amount} 梦币！`);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 
                 {/* 已读状态 */}
                 {msg.role === 'user' && (
