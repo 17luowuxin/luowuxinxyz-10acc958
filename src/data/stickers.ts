@@ -124,7 +124,7 @@ export function parseStickerRequest(
   const hasRequestVerb = /(发|来)(个|张|点|一个|一张)/.test(normalized);
   const hasCue = hasStickerWord || hasRequestVerb;
 
-  // “不要/别发表情包”之类的否定指令
+  // "不要/别发表情包"之类的否定指令
   const isNegative = /(不要|别|不需要|别再)/.test(normalized) && hasCue;
   if (isNegative) return null;
 
@@ -155,7 +155,7 @@ export function shouldSendSticker(
 
   if (recentStickerCount >= 1) return false;
 
-  // 2) 太短不发（像“嗯”“好”这类）
+  // 2) 太短不发（像"嗯""好"这类）
   if (reply.length < 4) return false;
 
   // 3) 严肃/敏感话题尽量不发
@@ -168,7 +168,7 @@ export function shouldSendSticker(
 
   if (seriousKeywords.some(kw => snippet.includes(kw))) return false;
 
-  // 4) 情感强度判断（更偏“收尾一句”是否有情绪）
+  // 4) 情感强度判断（更偏"收尾一句"是否有情绪）
   const strongEmotionalKeywords = [
     '晚安', '早安', '睡啦', '睡了',
     '太开心了', '好开心', '超开心',
@@ -191,14 +191,15 @@ export function shouldSendSticker(
   const hasStrongEmotion = strongEmotionalKeywords.some(kw => snippet.includes(kw));
   const hasWeakEmotion = weakEmotionalKeywords.some(kw => snippet.includes(kw));
 
+  // 提高触发几率：强情绪55%，弱情绪30%
   let p = 0;
-  if (hasStrongEmotion) p = 0.32;
-  else if (hasWeakEmotion) p = 0.12;
+  if (hasStrongEmotion) p = 0.55;
+  else if (hasWeakEmotion) p = 0.30;
   else return false;
 
-  // 5) 回复越长越像“认真解释”，降低但不完全禁止
-  if (reply.length > 400) p *= 0.6;
-  if (reply.length > 800) p *= 0.4;
+  // 5) 回复越长越像"认真解释"，降低但不完全禁止
+  if (reply.length > 400) p *= 0.7;
+  if (reply.length > 800) p *= 0.5;
 
   return Math.random() < p;
 }
