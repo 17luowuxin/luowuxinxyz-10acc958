@@ -2108,9 +2108,9 @@ const ChatPage: React.FC = () => {
     toast.success('已删除');
   };
 
-  // 快捷发送表情包（用户点击即发送）
+  // 快捷发送表情包（用户点击即发送，并触发AI回复）
   const sendStickerDirectly = async (sticker: StickerType) => {
-    if (!user?.id || !characterId) return;
+    if (!user?.id || !characterId || !character) return;
     setShowStickerPicker(false);
 
     // 用户发送表情包消息
@@ -2129,6 +2129,109 @@ const ChatPage: React.FC = () => {
       content: `[STICKER:${sticker.id}]`,
       image_url: sticker.imageUrl
     });
+
+    // 触发AI回复（告诉AI用户发了表情包）
+    setLoading(true);
+    try {
+      const stickerText = sticker.text || '表情包';
+      const recentMessages = messages
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('[STICKER:'))
+        .slice(-historyLimit)
+        .map(m => ({ role: m.role, content: m.content }));
+      
+      const body: any = { 
+        messages: [...recentMessages, { role: 'user', content: `[用户发送了一个"${stickerText}"的表情包，请用简短的话回应]` }], 
+        characterName: character.name, 
+        characterId: characterId,
+        userId: user.id,
+        persona: character.persona,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        replyMode: replyMode,
+        onlineMessageCount: onlineMessageCount,
+        transferEnabled: transferEnabled,
+        historyLimit: historyLimit,
+      };
+      
+      body.userApiKey = apiConfig.apiKey;
+      body.provider = apiConfig.provider;
+      if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
+      if (apiConfig.model) body.model = apiConfig.model;
+      
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        console.error('Sticker response error');
+        setLoading(false);
+        return;
+      }
+      
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode();
+      
+      let assistantContent = '';
+      
+      // 解析响应
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          assistantContent = json.choices?.[0]?.message?.content 
+            || json.choices?.[0]?.delta?.content
+            || json.content
+            || '';
+        } catch {
+          if (fullText.trim() && !fullText.includes('<!DOCTYPE')) {
+            assistantContent = fullText.trim();
+          }
+        }
+      }
+      
+      // SSE格式解析
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          const jsonStr = line.slice(5).trim();
+          if (jsonStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.message?.content || '';
+            assistantContent += delta;
+          } catch {}
+        }
+      }
+      
+      // 清理内容（移除|||分隔符，因为表情包回复应该简短）
+      assistantContent = assistantContent.replace(/\|\|\|/g, ' ').trim();
+      
+      if (assistantContent) {
+        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
+        await supabase.from('chat_messages').insert({ 
+          user_id: user.id, 
+          character_id: characterId, 
+          role: 'assistant', 
+          content: assistantContent 
+        });
+      }
+    } catch (err) {
+      console.error('Sticker AI response error:', err);
+    }
+    setLoading(false);
   };
 
   // 开始通话（语音/视频）- 先显示来电动画
