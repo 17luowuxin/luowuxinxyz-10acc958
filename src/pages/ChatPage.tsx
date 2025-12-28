@@ -165,6 +165,9 @@ const ChatPage: React.FC = () => {
   const [callMessages, setCallMessages] = useState<{ role: string; content: string }[]>([]);
   const [callInput, setCallInput] = useState('');
   const [callLoading, setCallLoading] = useState(false);
+  const [callRinging, setCallRinging] = useState(false); // 来电铃声状态
+  const [callStartTime, setCallStartTime] = useState<number | null>(null); // 通话开始时间
+  const [callDuration, setCallDuration] = useState(0); // 通话时长（秒）
   // TTS相关状态
   const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -2128,13 +2131,22 @@ const ChatPage: React.FC = () => {
     });
   };
 
-  // 开始通话（语音/视频）
+  // 开始通话（语音/视频）- 先显示来电动画
   const startCall = (type: 'voice' | 'video') => {
     setShowCallDialog(type);
-    setInCall(true);
+    setCallRinging(true);
     setCallMessages([]);
+    setCallDuration(0);
+    setCallStartTime(null);
+  };
+
+  // 接听通话
+  const answerCall = () => {
+    setCallRinging(false);
+    setInCall(true);
+    setCallStartTime(Date.now());
     // 角色的开场白
-    const greeting = type === 'voice'
+    const greeting = showCallDialog === 'voice'
       ? `喂？${profile?.nickname || ''}？怎么啦，想我了吗～`
       : `哇，视频来了！让我看看你～ 你今天怎么样呀？`;
     setCallMessages([{ role: 'assistant', content: greeting }]);
@@ -2144,8 +2156,27 @@ const ChatPage: React.FC = () => {
   const endCall = () => {
     setShowCallDialog(null);
     setInCall(false);
+    setCallRinging(false);
     setCallMessages([]);
     setCallInput('');
+    setCallStartTime(null);
+    setCallDuration(0);
+  };
+
+  // 通话时长计时器
+  useEffect(() => {
+    if (!callStartTime) return;
+    const timer = setInterval(() => {
+      setCallDuration(Math.floor((Date.now() - callStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [callStartTime]);
+
+  // 格式化通话时长
+  const formatCallDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   // 通话中发送消息
@@ -3054,86 +3085,164 @@ const ChatPage: React.FC = () => {
 
       {/* 通话弹窗（语音/视频） */}
       {showCallDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
           <div className="bg-background rounded-2xl w-[90%] max-w-sm mx-4 overflow-hidden shadow-2xl flex flex-col" style={{ maxHeight: '85vh' }}>
             {/* 通话头部 */}
             <div className={`p-6 text-center ${showCallDialog === 'video' ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-gradient-to-br from-green-500 to-teal-500'}`}>
-              <div className="relative mx-auto w-20 h-20 mb-3">
-                {character?.avatar_url ? (
-                  <img src={character.avatar_url} alt={character.name} className="w-full h-full rounded-full object-cover border-4 border-white/30" />
-                ) : (
-                  <div className="w-full h-full rounded-full bg-white/20 flex items-center justify-center text-2xl text-white font-bold">
-                    {character?.name?.charAt(0) || '?'}
-                  </div>
+              {/* 来电铃声动画 */}
+              <div className="relative mx-auto w-24 h-24 mb-3">
+                {callRinging && (
+                  <>
+                    <div className="absolute inset-0 rounded-full bg-white/20 animate-ping" style={{ animationDuration: '1.5s' }} />
+                    <div className="absolute inset-[-8px] rounded-full border-2 border-white/30 animate-pulse" />
+                    <div className="absolute inset-[-16px] rounded-full border border-white/20 animate-pulse" style={{ animationDelay: '0.3s' }} />
+                  </>
                 )}
-                {showCallDialog === 'video' && (
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center">
-                    <Video className="w-3 h-3 text-purple-500" />
-                  </div>
-                )}
+                <div className="relative w-full h-full">
+                  {character?.avatar_url ? (
+                    <img 
+                      src={character.avatar_url} 
+                      alt={character.name} 
+                      className={`w-full h-full rounded-full object-cover border-4 border-white/30 ${callRinging ? 'animate-pulse' : ''}`} 
+                    />
+                  ) : (
+                    <div className={`w-full h-full rounded-full bg-white/20 flex items-center justify-center text-2xl text-white font-bold ${callRinging ? 'animate-pulse' : ''}`}>
+                      {character?.name?.charAt(0) || '?'}
+                    </div>
+                  )}
+                  {showCallDialog === 'video' && (
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                      <Video className="w-3 h-3 text-purple-500" />
+                    </div>
+                  )}
+                </div>
               </div>
               <h3 className="text-white font-semibold text-lg">{character?.name}</h3>
               <p className="text-white/80 text-sm mt-1">
-                {showCallDialog === 'video' ? '视频通话中...' : '语音通话中...'}
+                {callRinging 
+                  ? (showCallDialog === 'video' ? '视频来电...' : '语音来电...') 
+                  : (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                      {formatCallDuration(callDuration)}
+                    </span>
+                  )
+                }
               </p>
             </div>
 
-            {/* 通话消息区域 */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30" style={{ minHeight: '200px', maxHeight: '300px' }}>
-              {callMessages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-                    msg.role === 'user' 
-                      ? 'bg-primary text-primary-foreground rounded-br-md' 
-                      : 'bg-muted text-foreground rounded-bl-md'
-                  }`}>
-                    {msg.content}
+            {/* 来电铃声界面 */}
+            {callRinging ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/30" style={{ minHeight: '200px' }}>
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <div 
+                        key={i}
+                        className="w-1 bg-primary rounded-full animate-bounce"
+                        style={{ 
+                          height: `${12 + i * 4}px`,
+                          animationDelay: `${i * 0.15}s`,
+                          animationDuration: '0.6s'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-muted-foreground text-sm ml-2">正在呼叫...</span>
+                  <div className="flex gap-1">
+                    {[2, 1, 0].map((i) => (
+                      <div 
+                        key={i}
+                        className="w-1 bg-primary rounded-full animate-bounce"
+                        style={{ 
+                          height: `${12 + i * 4}px`,
+                          animationDelay: `${(2 - i) * 0.15 + 0.3}s`,
+                          animationDuration: '0.6s'
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
-              ))}
-              {callLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground">
-                    正在说话...
-                  </div>
+                
+                {/* 接听和挂断按钮 */}
+                <div className="flex items-center gap-8">
+                  <Button
+                    variant="destructive"
+                    size="lg"
+                    className="w-16 h-16 rounded-full"
+                    onClick={endCall}
+                  >
+                    <Phone className="w-7 h-7 rotate-[135deg]" />
+                  </Button>
+                  <Button
+                    size="lg"
+                    className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600"
+                    onClick={answerCall}
+                  >
+                    <Phone className="w-7 h-7" />
+                  </Button>
                 </div>
-              )}
-              <div ref={callMessagesEndRef} />
-            </div>
-
-            {/* 通话输入区域 */}
-            <div className="p-3 border-t bg-background">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={callInput}
-                  onChange={(e) => setCallInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
-                  placeholder="说点什么..."
-                  className="flex-1 h-10 rounded-full"
-                  disabled={callLoading}
-                />
-                <Button
-                  size="icon"
-                  onClick={sendCallMessage}
-                  disabled={callLoading || !callInput.trim()}
-                  className="w-10 h-10 rounded-full bg-primary"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* 通话消息区域 */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30" style={{ minHeight: '200px', maxHeight: '300px' }}>
+                  {callMessages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
+                        msg.role === 'user' 
+                          ? 'bg-primary text-primary-foreground rounded-br-md' 
+                          : 'bg-muted text-foreground rounded-bl-md'
+                      }`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {callLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground">
+                        正在说话...
+                      </div>
+                    </div>
+                  )}
+                  <div ref={callMessagesEndRef} />
+                </div>
 
-            {/* 挂断按钮 */}
-            <div className="p-4 flex justify-center bg-background border-t">
-              <Button
-                variant="destructive"
-                size="lg"
-                className="w-14 h-14 rounded-full"
-                onClick={endCall}
-              >
-                <Phone className="w-6 h-6 rotate-[135deg]" />
-              </Button>
-            </div>
+                {/* 通话输入区域 */}
+                <div className="p-3 border-t bg-background">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={callInput}
+                      onChange={(e) => setCallInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
+                      placeholder="说点什么..."
+                      className="flex-1 h-10 rounded-full"
+                      disabled={callLoading}
+                    />
+                    <Button
+                      size="icon"
+                      onClick={sendCallMessage}
+                      disabled={callLoading || !callInput.trim()}
+                      className="w-10 h-10 rounded-full bg-primary"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 挂断按钮 */}
+                <div className="p-4 flex justify-center bg-background border-t">
+                  <Button
+                    variant="destructive"
+                    size="lg"
+                    className="w-14 h-14 rounded-full"
+                    onClick={endCall}
+                  >
+                    <Phone className="w-6 h-6 rotate-[135deg]" />
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
