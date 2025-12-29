@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2 } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
 import UserTransferCard from '@/components/chat/UserTransferCard';
 import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
+import { useSpeechToText } from '@/hooks/useSpeechToText';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
