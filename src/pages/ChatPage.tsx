@@ -553,32 +553,63 @@ const ChatPage: React.FC = () => {
   const playTTS = async (text: string) => {
     if (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl || !character) return;
     
+    // 检查是否设置了语音ID (Volink等API必须)
+    const voiceId = character.voice_id;
+    
     try {
       setTtsPlaying(true);
-      const { data, error } = await supabase.functions.invoke('tts', {
-        body: {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
           text,
-          voiceId: character.voice_id || 'default',
+          voiceId: voiceId || 'default',
           ttsConfig: {
             apiKey: ttsConfig.apiKey,
             baseUrl: ttsConfig.baseUrl,
             model: ttsConfig.model,
           },
-        },
+        }),
       });
 
-      if (error || !data?.audioContent) {
-        console.error('TTS error:', error || 'No audio content');
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error('TTS error:', data.error || 'Unknown error');
+        // 显示更友好的错误提示
+        if (data.error?.includes('voice_id') || data.error?.includes('Voice ID')) {
+          toast.error('请先设置角色语音ID（点击右上角菜单）');
+        } else if (data.error?.includes('balance') || data.error?.includes('402')) {
+          toast.error('TTS API余额不足');
+        } else if (data.error?.includes('invalid') || data.error?.includes('401')) {
+          toast.error('TTS API密钥无效');
+        } else if (data.details) {
+          console.error('TTS details:', data.details);
+        }
+        setTtsPlaying(false);
+        return;
+      }
+
+      if (!data.audioContent) {
+        console.error('TTS: No audio content received');
+        setTtsPlaying(false);
         return;
       }
 
       const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
       const audio = new Audio(audioUrl);
       audio.onended = () => setTtsPlaying(false);
-      audio.onerror = () => setTtsPlaying(false);
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        setTtsPlaying(false);
+      };
       await audio.play();
     } catch (err) {
       console.error('TTS playback error:', err);
+      toast.error('语音播放失败');
       setTtsPlaying(false);
     }
   };

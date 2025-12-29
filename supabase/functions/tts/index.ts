@@ -23,7 +23,7 @@ serve(async (req) => {
 
     if (!ttsConfig?.apiKey || !ttsConfig?.baseUrl) {
       return new Response(
-        JSON.stringify({ error: 'TTS API configuration is required' }),
+        JSON.stringify({ error: 'TTS API configuration is required (apiKey and baseUrl)' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -41,12 +41,16 @@ serve(async (req) => {
     };
 
     // Detect API type based on URL patterns
-    const isOpenAILike = normalizedBaseUrl.includes('openai') || 
-                         normalizedBaseUrl.includes('/v1/audio/speech') ||
-                         normalizedBaseUrl.includes('api2d') ||
-                         normalizedBaseUrl.includes('openrouter');
+    // ===== Volink API 专门检测 =====
+    const isVolink = normalizedBaseUrl.includes('volink');
+    const isOpenAILike = !isVolink && (
+      normalizedBaseUrl.includes('openai') || 
+      normalizedBaseUrl.includes('/v1/audio/speech') ||
+      normalizedBaseUrl.includes('api2d') ||
+      normalizedBaseUrl.includes('openrouter')
+    );
     const isElevenLabs = normalizedBaseUrl.includes('elevenlabs');
-    const isMinimax = normalizedBaseUrl.includes('minimax') || normalizedBaseUrl.includes('volink');
+    const isMinimax = !isVolink && normalizedBaseUrl.includes('minimax');
     const isFishAudio = normalizedBaseUrl.includes('fish.audio') || normalizedBaseUrl.includes('fish-audio');
     const isAzure = normalizedBaseUrl.includes('azure') || normalizedBaseUrl.includes('cognitiveservices');
     const isGoogleTTS = normalizedBaseUrl.includes('texttospeech.googleapis');
@@ -59,6 +63,7 @@ serve(async (req) => {
 
     console.log('TTS API Detection:', {
       baseUrl: normalizedBaseUrl,
+      isVolink,
       isOpenAILike,
       isElevenLabs,
       isMinimax,
@@ -66,14 +71,50 @@ serve(async (req) => {
       isAzure,
       isGoogleTTS,
       isByteDance,
-      isXunfei,
-      isBaidu,
-      isTencent,
-      isAliyun,
-      isSiliconFlow
+      voiceId,
     });
 
-    if (isElevenLabs) {
+    // ===== Volink API =====
+    // 文档: https://api.volink.org/
+    // POST /api/v1/tts
+    // Body: { voice_id, text, stream? }
+    // Response: binary MP3
+    if (isVolink) {
+      // 验证 voice_id 必填
+      if (!voiceId || voiceId === 'default') {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Volink TTS requires a voice_id. Please set the voice ID in character settings.',
+            details: 'Go to chat menu (three dots) → Set character voice ID'
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // 构建正确的 URL: baseUrl + /api/v1/tts
+      // 处理不同的 baseUrl 格式:
+      // - https://api.volink.org -> https://api.volink.org/api/v1/tts
+      // - https://api.volink.org/ -> https://api.volink.org/api/v1/tts
+      // - https://api.volink.org/api/v1/tts -> 保持不变
+      if (normalizedBaseUrl.includes('/api/v1/tts')) {
+        requestUrl = normalizedBaseUrl;
+      } else if (normalizedBaseUrl.includes('/api/v1')) {
+        requestUrl = `${normalizedBaseUrl}/tts`;
+      } else if (normalizedBaseUrl.includes('/api')) {
+        requestUrl = `${normalizedBaseUrl}/v1/tts`;
+      } else {
+        requestUrl = `${normalizedBaseUrl}/api/v1/tts`;
+      }
+      
+      headers['Authorization'] = `Bearer ${apiKey}`;
+      requestBody = {
+        text,
+        voice_id: voiceId,
+        // stream: false  // 可选，默认 false
+      };
+      
+      console.log('Volink TTS Request:', { requestUrl, voiceId, textLength: text.length });
+    } else if (isElevenLabs) {
       // ElevenLabs API format
       requestUrl = voiceId 
         ? `${normalizedBaseUrl.replace(/\/text-to-speech.*$/, '')}/text-to-speech/${voiceId}`
@@ -213,6 +254,7 @@ serve(async (req) => {
 
     console.log('TTS Request:', {
       url: requestUrl,
+      provider: isVolink ? 'Volink' : isElevenLabs ? 'ElevenLabs' : isMinimax ? 'Minimax' : 'Other',
       bodyType: typeof requestBody === 'string' ? 'string' : 'object',
       voiceId,
       model
@@ -227,10 +269,26 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('TTS API error:', response.status, errorText);
+      
+      // 解析常见错误
+      let errorMessage = `TTS API error: ${response.status}`;
+      if (response.status === 401) {
+        errorMessage = 'TTS API key is invalid or expired';
+      } else if (response.status === 402) {
+        errorMessage = 'TTS API balance insufficient';
+      } else if (response.status === 404) {
+        errorMessage = 'Voice ID not found. Please check your voice_id setting.';
+      } else if (response.status === 413) {
+        errorMessage = 'Text too long for TTS API';
+      } else if (response.status === 502) {
+        errorMessage = 'TTS upstream provider error';
+      }
+      
       return new Response(
         JSON.stringify({ 
-          error: `TTS API error: ${response.status}`,
-          details: errorText.slice(0, 500)
+          error: errorMessage,
+          details: errorText.slice(0, 500),
+          requestUrl: requestUrl.replace(apiKey, '***'),
         }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -238,6 +296,8 @@ serve(async (req) => {
 
     // Check if response is JSON (contains base64 audio) or binary audio
     const contentType = response.headers.get('content-type') || '';
+    
+    console.log('TTS Response:', { contentType, status: response.status });
     
     if (contentType.includes('application/json')) {
       // Parse JSON response - might contain base64 audio
@@ -267,15 +327,18 @@ serve(async (req) => {
         );
       }
     } else {
-      // Binary audio response - convert to base64
+      // Binary audio response (MP3) - convert to base64
+      // Volink 和大多数 TTS API 都返回二进制 MP3
       const audioBuffer = await response.arrayBuffer();
       
       if (audioBuffer.byteLength === 0) {
         return new Response(
-          JSON.stringify({ error: 'Empty audio response' }),
+          JSON.stringify({ error: 'Empty audio response from TTS API' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      
+      console.log('TTS audio received:', audioBuffer.byteLength, 'bytes');
       
       const audioContent = base64Encode(audioBuffer);
       
