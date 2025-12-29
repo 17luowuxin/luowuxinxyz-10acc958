@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-type SpeechRecognitionConstructor = new () => SpeechRecognition;
+import "@/types/speech-recognition.d.ts";
 
 type UseSpeechToTextOptions = {
   lang?: string;
@@ -10,9 +9,9 @@ type UseSpeechToTextOptions = {
   onError?: (message: string) => void;
 };
 
-const getSpeechRecognitionCtor = (): SpeechRecognitionConstructor | null => {
-  const w = window as any;
-  return (w.SpeechRecognition || w.webkitSpeechRecognition || null) as SpeechRecognitionConstructor | null;
+const getSpeechRecognitionCtor = (): (new () => SpeechRecognition) | null => {
+  const w = window as Window;
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 };
 
 const mapSpeechError = (err: string) => {
