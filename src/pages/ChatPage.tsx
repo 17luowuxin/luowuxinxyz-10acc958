@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,6 +14,7 @@ import TransferCard from '@/components/chat/TransferCard';
 import UserTransferCard from '@/components/chat/UserTransferCard';
 import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
+import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
@@ -163,7 +164,7 @@ const ChatPage: React.FC = () => {
   // 通话相关状态
   const [showCallDialog, setShowCallDialog] = useState<'voice' | 'video' | null>(null);
   const [inCall, setInCall] = useState(false);
-  const [callMessages, setCallMessages] = useState<{ role: string; content: string }[]>([]);
+  const [callMessages, setCallMessages] = useState<{ role: string; content: string; audioBase64?: string }[]>([]);
   const [callInput, setCallInput] = useState('');
   const [callLoading, setCallLoading] = useState(false);
   const [callRinging, setCallRinging] = useState(false); // 来电铃声状态
@@ -173,11 +174,30 @@ const ChatPage: React.FC = () => {
   const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [voiceMode, setVoiceMode] = useState<'off' | 'sometimes' | 'always'>('off'); // 角色语音模式
+  // 视频通话相关
+  const [callVideoUrl, setCallVideoUrl] = useState<string | null>(null); // 用户上传的6秒视频
+  const [callVideoPlaying, setCallVideoPlaying] = useState(false);
+  const callVideoRef = useRef<HTMLVideoElement>(null);
+  const callVideoInputRef = useRef<HTMLInputElement>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const callMessagesEndRef = useRef<HTMLDivElement>(null);
-  
+
+  // 语音输入 Hook
+  const speechToText = useSpeechToText({
+    lang: 'zh-CN',
+    continuous: false,
+    interimResults: true,
+    onFinal: (text) => {
+      if (text.trim() && showCallDialog && inCall) {
+        setCallInput(prev => prev + text);
+      }
+    },
+    onError: (message) => {
+      toast.error(message);
+    },
+  });
 
   // 先定义 fetchProfile - 需要在 useEffect 之前
   const fetchProfile = useCallback(async () => {
@@ -2273,6 +2293,8 @@ const ChatPage: React.FC = () => {
     setCallMessages([]);
     setCallDuration(0);
     setCallStartTime(null);
+    setCallVideoUrl(null);
+    setCallVideoPlaying(false);
   };
 
   // 接听通话
@@ -2296,7 +2318,59 @@ const ChatPage: React.FC = () => {
     setCallInput('');
     setCallStartTime(null);
     setCallDuration(0);
+    setCallVideoUrl(null);
+    setCallVideoPlaying(false);
+    // 停止语音识别
+    if (speechToText.isListening) {
+      speechToText.stop();
+    }
   };
+
+  // 处理视频通话上传6秒视频
+  const handleCallVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 验证是视频文件
+    if (!file.type.startsWith('video/')) {
+      toast.error('请选择视频文件');
+      return;
+    }
+
+    // 创建预览URL
+    const url = URL.createObjectURL(file);
+    
+    // 验证视频时长
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      if (video.duration > 6) {
+        toast.error('视频时长不能超过6秒');
+        URL.revokeObjectURL(url);
+        return;
+      }
+      setCallVideoUrl(url);
+      toast.success('视频上传成功');
+    };
+    video.src = url;
+
+    // Reset input
+    e.target.value = '';
+  };
+
+  // 切换视频播放
+  const toggleCallVideo = () => {
+    if (!callVideoRef.current) return;
+    if (callVideoPlaying) {
+      callVideoRef.current.pause();
+      setCallVideoPlaying(false);
+    } else {
+      callVideoRef.current.play();
+      setCallVideoPlaying(true);
+    }
+  };
+
 
   // 通话时长计时器
   useEffect(() => {
@@ -2406,9 +2480,42 @@ const ChatPage: React.FC = () => {
       assistantContent = assistantContent.replace(/\|{2,}/g, ' ').trim();
 
       if (assistantContent) {
-        setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
-        // 播放TTS语音
-        playTTS(assistantContent);
+        // 尝试生成语音消息
+        let audioBase64: string | undefined;
+        if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character.voice_id) {
+          try {
+            const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({
+                text: assistantContent,
+                voiceId: character.voice_id,
+                ttsConfig: {
+                  apiKey: ttsConfig.apiKey,
+                  baseUrl: ttsConfig.baseUrl,
+                  model: ttsConfig.model,
+                },
+              }),
+            });
+            const ttsData = await ttsResp.json();
+            if (ttsData.audioContent) {
+              audioBase64 = ttsData.audioContent;
+              // 自动播放语音
+              const audioUrl = `data:audio/mpeg;base64,${ttsData.audioContent}`;
+              const audio = new Audio(audioUrl);
+              audio.play().catch(console.error);
+            }
+          } catch (err) {
+            console.error('TTS generation error:', err);
+          }
+        } else {
+          // 没有TTS配置，直接播放原有的TTS
+          playTTS(assistantContent);
+        }
+        setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent, audioBase64 }]);
       }
     } catch (err) {
       console.error('Call message error:', err);
@@ -3283,9 +3390,34 @@ const ChatPage: React.FC = () => {
       {/* 通话弹窗（语音/视频） */}
       {showCallDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
+          {/* 隐藏的视频上传input */}
+          <input
+            ref={callVideoInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleCallVideoUpload}
+          />
+          
           <div className="bg-background rounded-2xl w-[90%] max-w-sm mx-4 overflow-hidden shadow-2xl flex flex-col" style={{ maxHeight: '85vh' }}>
-            {/* 通话头部 */}
-            <div className={`p-6 text-center ${showCallDialog === 'video' ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-gradient-to-br from-green-500 to-teal-500'}`}>
+            {/* 通话头部 - 视频通话时显示视频 */}
+            <div className={`relative p-6 text-center ${showCallDialog === 'video' ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-gradient-to-br from-green-500 to-teal-500'}`}>
+              {/* 视频通话背景视频 */}
+              {showCallDialog === 'video' && callVideoUrl && !callRinging && (
+                <div className="absolute inset-0 overflow-hidden">
+                  <video
+                    ref={callVideoRef}
+                    src={callVideoUrl}
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover opacity-60"
+                    onEnded={() => setCallVideoPlaying(false)}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
+                </div>
+              )}
+              
               {/* 来电铃声动画 */}
               <div className="relative mx-auto w-24 h-24 mb-3">
                 {callRinging && (
@@ -3314,8 +3446,8 @@ const ChatPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              <h3 className="text-white font-semibold text-lg">{character?.name}</h3>
-              <p className="text-white/80 text-sm mt-1">
+              <h3 className="text-white font-semibold text-lg relative z-10">{character?.name}</h3>
+              <p className="text-white/80 text-sm mt-1 relative z-10">
                 {callRinging 
                   ? (showCallDialog === 'video' ? '视频来电...' : '语音来电...') 
                   : (
@@ -3326,6 +3458,32 @@ const ChatPage: React.FC = () => {
                   )
                 }
               </p>
+              
+              {/* 视频通话控制按钮 */}
+              {showCallDialog === 'video' && !callRinging && (
+                <div className="relative z-10 mt-3 flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
+                    onClick={() => callVideoInputRef.current?.click()}
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    上传视频(≤6s)
+                  </Button>
+                  {callVideoUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
+                      onClick={toggleCallVideo}
+                    >
+                      {callVideoPlaying ? <Pause className="w-3 h-3 mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+                      {callVideoPlaying ? '暂停' : '播放'}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 来电铃声界面 */}
@@ -3386,18 +3544,38 @@ const ChatPage: React.FC = () => {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30" style={{ minHeight: '200px', maxHeight: '300px' }}>
                   {callMessages.map((msg, idx) => (
                     <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-                        msg.role === 'user' 
-                          ? 'bg-primary text-primary-foreground rounded-br-md' 
-                          : 'bg-muted text-foreground rounded-bl-md'
-                      }`}>
-                        {msg.content}
-                      </div>
+                      {msg.audioBase64 ? (
+                        // 语音消息气泡
+                        <VoiceMessageBubble
+                          audioBase64={msg.audioBase64}
+                          transcript={msg.content}
+                          isUser={msg.role === 'user'}
+                          bubbleColor={msg.role === 'user' ? '#95ec69' : '#ffffff'}
+                        />
+                      ) : (
+                        // 普通文字消息
+                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
+                          msg.role === 'user' 
+                            ? 'bg-primary text-primary-foreground rounded-br-md' 
+                            : 'bg-muted text-foreground rounded-bl-md'
+                        }`}>
+                          {msg.content}
+                        </div>
+                      )}
                     </div>
                   ))}
                   {callLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground">
+                      <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {[0, 1, 2].map((i) => (
+                            <div 
+                              key={i}
+                              className="w-1 h-3 bg-primary/50 rounded-full animate-bounce"
+                              style={{ animationDelay: `${i * 0.15}s` }}
+                            />
+                          ))}
+                        </div>
                         正在说话...
                       </div>
                     </div>
@@ -3407,12 +3585,44 @@ const ChatPage: React.FC = () => {
 
                 {/* 通话输入区域 */}
                 <div className="p-3 border-t bg-background">
+                  {/* 语音输入提示 */}
+                  {speechToText.isListening && (
+                    <div className="mb-2 px-3 py-2 bg-primary/10 rounded-lg flex items-center gap-2">
+                      <div className="flex gap-0.5">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <div 
+                            key={i}
+                            className="w-1 bg-primary rounded-full animate-pulse"
+                            style={{ 
+                              height: `${8 + Math.random() * 12}px`,
+                              animationDelay: `${i * 0.1}s`
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs text-primary">正在听你说话...</span>
+                    </div>
+                  )}
+                  
                   <div className="flex items-center gap-2">
+                    {/* 语音输入按钮 */}
+                    {speechToText.isSupported && (
+                      <Button
+                        variant={speechToText.isListening ? "default" : "outline"}
+                        size="icon"
+                        className={`w-10 h-10 rounded-full flex-shrink-0 ${speechToText.isListening ? 'bg-red-500 hover:bg-red-600 animate-pulse' : ''}`}
+                        onClick={speechToText.toggle}
+                        disabled={callLoading}
+                      >
+                        {speechToText.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                    )}
+                    
                     <Input
                       value={callInput}
                       onChange={(e) => setCallInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
-                      placeholder="说点什么..."
+                      placeholder={speechToText.isListening ? "正在听..." : "说点什么..."}
                       className="flex-1 h-10 rounded-full"
                       disabled={callLoading}
                     />
