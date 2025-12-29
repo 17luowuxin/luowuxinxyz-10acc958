@@ -146,6 +146,7 @@ const SettingsPage: React.FC = () => {
   const [ttsBaseUrl, setTtsBaseUrl] = useState('');
   const [ttsApiKey, setTtsApiKey] = useState('');
   const [ttsModel, setTtsModel] = useState('');
+  const [ttsTestVoiceId, setTtsTestVoiceId] = useState('');
   const [showTtsKey, setShowTtsKey] = useState(false);
   const [ttsConfigured, setTtsConfigured] = useState(false);
   const [testingTts, setTestingTts] = useState(false);
@@ -692,12 +693,19 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
+    // 检查是否是 Volink API，需要提供 voiceId
+    const isVolink = ttsBaseUrl.includes('volink');
+    if (isVolink && !ttsTestVoiceId.trim()) {
+      toast.error('Volink API 需要填写测试语音ID');
+      return;
+    }
+
     setTestingTts(true);
     try {
       const { data, error } = await supabase.functions.invoke('tts', {
         body: {
           text: '你好，这是语音测试。',
-          voiceId: 'default',
+          voiceId: ttsTestVoiceId.trim() || 'alloy',
           ttsConfig: {
             apiKey: ttsApiKey,
             baseUrl: ttsBaseUrl,
@@ -718,7 +726,7 @@ const SettingsPage: React.FC = () => {
         audio.play();
         toast.success('TTS连接成功！正在播放测试语音...');
       } else if (data.error) {
-        toast.error(`TTS错误: ${data.error}`);
+        toast.error(`TTS错误: ${data.error}${data.details ? `\n${data.details}` : ''}`);
       } else {
         toast.error('未收到音频数据');
       }
@@ -1794,6 +1802,22 @@ const SettingsPage: React.FC = () => {
               />
               <p className="text-xs text-gray-400 mt-1.5">
                 不同API使用不同的模型名称，留空使用默认值
+              </p>
+            </div>
+
+            {/* Test Voice ID */}
+            <div>
+              <label className="text-sm font-medium text-blue-600 mb-2 block">
+                测试语音ID (Volink必填)
+              </label>
+              <Input
+                placeholder="例如: 689334e84d3396ad1d28eea8"
+                value={ttsTestVoiceId}
+                onChange={(e) => setTtsTestVoiceId(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                Volink等API需要提供voice_id才能测试，可在API文档中查找
               </p>
             </div>
 
