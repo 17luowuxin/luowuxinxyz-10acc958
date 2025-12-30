@@ -5,6 +5,8 @@ type UseSpeechToTextOptions = {
   lang?: string;
   continuous?: boolean;
   interimResults?: boolean;
+  /** If true, recognition will restart automatically when it ends (persistent mode) */
+  persistent?: boolean;
   onFinal?: (text: string) => void;
   onError?: (message: string) => void;
 };
@@ -31,10 +33,17 @@ const mapSpeechError = (err: string) => {
 };
 
 export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
-  const { lang = "zh-CN", continuous = false, interimResults = true } = options;
+  const { 
+    lang = "zh-CN", 
+    continuous = false, 
+    interimResults = true,
+    persistent = false, // New option for persistent mode
+  } = options;
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const permissionStreamRef = useRef<MediaStream | null>(null);
+  const persistentModeRef = useRef(false); // Track if persistent mode is enabled
+  const shouldRestartRef = useRef(false); // Track if we should restart after end
 
   const onFinalRef = useRef(options.onFinal);
   const onErrorRef = useRef(options.onError);
@@ -49,6 +58,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
   const isSupported = useMemo(() => Boolean(getSpeechRecognitionCtor()), []);
   const [isListening, setIsListening] = useState(false);
+  const [isPersistentEnabled, setIsPersistentEnabled] = useState(false);
 
   const cleanupPermissionStream = useCallback(() => {
     const stream = permissionStreamRef.current;
@@ -56,6 +66,21 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       stream.getTracks().forEach((t) => t.stop());
       permissionStreamRef.current = null;
     }
+  }, []);
+
+  const restartRecognition = useCallback(() => {
+    if (!shouldRestartRef.current || !recognitionRef.current) return;
+    
+    // Small delay before restarting to avoid rapid restarts
+    setTimeout(() => {
+      if (shouldRestartRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch {
+          // Recognition might already be running
+        }
+      }
+    }, 100);
   }, []);
 
   const ensureRecognition = useCallback(() => {
@@ -66,16 +91,35 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     const rec = new Ctor();
     rec.lang = lang;
-    rec.continuous = continuous;
+    rec.continuous = true; // Always use continuous for persistent mode
     rec.interimResults = interimResults;
 
     rec.onstart = () => setIsListening(true);
-    rec.onend = () => setIsListening(false);
+    
+    rec.onend = () => {
+      setIsListening(false);
+      // In persistent mode, auto-restart unless explicitly stopped
+      if (shouldRestartRef.current) {
+        restartRecognition();
+      }
+    };
 
     rec.onerror = (e: any) => {
-      const message = mapSpeechError(String(e?.error || "unknown"));
+      const errorType = String(e?.error || "unknown");
+      // Don't show error for no-speech in persistent mode, just restart
+      if (errorType === "no-speech" && shouldRestartRef.current) {
+        restartRecognition();
+        return;
+      }
+      // Don't show error for aborted (happens on restart)
+      if (errorType === "aborted" && shouldRestartRef.current) {
+        return;
+      }
+      const message = mapSpeechError(errorType);
       onErrorRef.current?.(message);
       cleanupPermissionStream();
+      shouldRestartRef.current = false;
+      setIsPersistentEnabled(false);
     };
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
@@ -96,7 +140,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     recognitionRef.current = rec;
     return rec;
-  }, [cleanupPermissionStream, continuous, interimResults, lang]);
+  }, [cleanupPermissionStream, interimResults, lang, restartRecognition]);
 
   const start = useCallback(async () => {
     const rec = ensureRecognition();
@@ -105,7 +149,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       return;
     }
 
-    // 提前触发麦克风权限弹窗（有些浏览器更稳定）
+    // 提前触发麦克风权限弹窗
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       permissionStreamRef.current = stream;
@@ -114,15 +158,22 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       return;
     }
 
+    shouldRestartRef.current = persistent || true;
+    setIsPersistentEnabled(true);
+
     try {
       rec.start();
     } catch (e: any) {
       onErrorRef.current?.(String(e?.message || "语音识别启动失败"));
       cleanupPermissionStream();
+      shouldRestartRef.current = false;
+      setIsPersistentEnabled(false);
     }
-  }, [cleanupPermissionStream, ensureRecognition]);
+  }, [cleanupPermissionStream, ensureRecognition, persistent]);
 
   const stop = useCallback(() => {
+    shouldRestartRef.current = false;
+    setIsPersistentEnabled(false);
     try {
       recognitionRef.current?.stop();
     } finally {
@@ -131,19 +182,27 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   }, [cleanupPermissionStream]);
 
   const toggle = useCallback(async () => {
-    if (isListening) {
+    if (isListening || isPersistentEnabled) {
       stop();
       return;
     }
     await start();
-  }, [isListening, start, stop]);
+  }, [isListening, isPersistentEnabled, start, stop]);
 
   // cleanup on unmount
   useEffect(() => {
     return () => {
+      shouldRestartRef.current = false;
       stop();
     };
   }, [stop]);
 
-  return { isSupported, isListening, start, stop, toggle };
+  return { 
+    isSupported, 
+    isListening, 
+    isPersistentEnabled, // New: whether persistent mode is active
+    start, 
+    stop, 
+    toggle 
+  };
 }
