@@ -833,11 +833,49 @@ const SpacePage: React.FC = () => {
                 );
               })}
 
+              {/* 回复角色选择器 */}
+              {commentReplyTargets[moment.id] && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-primary/5 px-3 py-1.5 rounded-lg">
+                  <span>正在回复</span>
+                  <span className="text-primary font-medium">@{commentReplyTargets[moment.id]}</span>
+                  <button
+                    type="button"
+                    className="ml-auto text-muted-foreground hover:text-foreground"
+                    onClick={() => setCommentReplyTargets(prev => {
+                      const next = { ...prev };
+                      delete next[moment.id];
+                      return next;
+                    })}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              
+              {/* 角色快速选择 */}
+              <div className="flex flex-wrap gap-1 pt-1">
+                <span className="text-xs text-muted-foreground mr-1">回复:</span>
+                {characters.map(char => (
+                  <button
+                    key={char.id}
+                    type="button"
+                    className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+                      commentReplyTargets[moment.id] === char.name
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                    }`}
+                    onClick={() => setCommentReplyTargets(prev => ({ ...prev, [moment.id]: char.name }))}
+                  >
+                    {char.name}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <Input
                   value={commentInputs[moment.id] || ''}
                   onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
-                  placeholder="写评论..."
+                  placeholder={commentReplyTargets[moment.id] ? `回复 @${commentReplyTargets[moment.id]}...` : "写评论..."}
                   className="flex-1"
                   onKeyPress={(e) => e.key === 'Enter' && handleComment(moment)}
                 />
