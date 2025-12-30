@@ -201,6 +201,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          quoted_message_id: string | null
           role: string
           user_id: string
         }
@@ -211,6 +212,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          quoted_message_id?: string | null
           role: string
           user_id: string
         }
@@ -221,6 +223,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          quoted_message_id?: string | null
           role?: string
           user_id?: string
         }
@@ -230,6 +233,13 @@ export type Database = {
             columns: ["character_id"]
             isOneToOne: false
             referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_quoted_message_id_fkey"
+            columns: ["quoted_message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
             referencedColumns: ["id"]
           },
         ]

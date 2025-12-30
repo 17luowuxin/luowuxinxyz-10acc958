@@ -309,7 +309,7 @@ const ChatPage: React.FC = () => {
     const [chatResult, transferResult] = await Promise.all([
       supabase
         .from('chat_messages')
-        .select('id, role, content, created_at, image_url, audio_url')
+        .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
         .eq('character_id', characterId)
         .order('created_at'),
       supabase
@@ -326,13 +326,35 @@ const ChatPage: React.FC = () => {
     // 合并消息和转账记录
     const allItems: any[] = [];
     
+    // 先创建消息映射，用于关联引用消息
+    const messageMap = new Map<string, any>();
     if (chatData) {
       chatData.forEach(msg => {
+        messageMap.set(msg.id, msg);
+      });
+    }
+    
+    if (chatData) {
+      chatData.forEach(msg => {
+        // 查找引用的消息
+        let quotedMessage = null;
+        if ((msg as any).quoted_message_id) {
+          const quotedMsg = messageMap.get((msg as any).quoted_message_id);
+          if (quotedMsg) {
+            quotedMessage = {
+              id: quotedMsg.id,
+              role: quotedMsg.role,
+              content: quotedMsg.content
+            };
+          }
+        }
+        
         allItems.push({
           ...msg,
           // 如果有audio_url，设置audioBase64为URL，组件需要能处理URL或base64
           audioBase64: (msg as any).audio_url || undefined,
-          timestamp: new Date(msg.created_at).getTime()
+          timestamp: new Date(msg.created_at).getTime(),
+          quotedMessage
         });
       });
     }
@@ -1673,7 +1695,8 @@ const ChatPage: React.FC = () => {
         user_id: user?.id, 
         character_id: characterId, 
         role: 'user', 
-        content: messageContent 
+        content: messageContent,
+        quoted_message_id: quotedMessage?.id || null
       })
       .select()
       .single();
