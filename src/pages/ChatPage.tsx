@@ -21,6 +21,26 @@ import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
+const VOICE_REQUEST_KEYWORDS = [
+  "发语音",
+  "发个语音",
+  "发条语音",
+  "给我发语音",
+  "来段语音",
+  "来个语音",
+  "语音回复",
+  "用语音",
+  "说句话",
+  "说点什么",
+  "听你声音",
+  "想听",
+] as const;
+
+const isVoiceRequestedByUser = (text: string) => {
+  const t = (text ?? "").replace(/\s+/g, "");
+  return VOICE_REQUEST_KEYWORDS.some((kw) => t.includes(kw));
+};
+
 // Emoji categories with comprehensive emoji list
 const EMOJI_CATEGORIES = {
   recent: { icon: '🕐', name: '最近', emojis: [] as string[] },
@@ -2009,6 +2029,61 @@ const ChatPage: React.FC = () => {
               }
             }
           }
+
+          // 线上模式语音：用户点名必发；偶尔模式概率发（最多1-2条）
+          const userWantsVoice = isVoiceRequestedByUser(messageContent);
+
+          if (userWantsVoice && (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl)) {
+            toast.error('还没配置语音服务（去设置里开启TTS）');
+          } else if (userWantsVoice && !character?.voice_id?.trim()) {
+            toast.error('请先设置角色语音ID（右上角菜单）');
+          } else if (ttsConfig?.enabled && voiceMode !== 'always' && (userWantsVoice || voiceMode === 'sometimes')) {
+            const shouldSendVoice = userWantsVoice || Math.random() < 0.8;
+
+            if (shouldSendVoice) {
+              const voiceCount = userWantsVoice ? (Math.random() < 0.5 ? 2 : 1) : 1;
+              const voiceText = removeTransferCommand(multiMessages[multiMessages.length - 1] || '').trim();
+
+              if (voiceText) {
+                for (let i = 0; i < voiceCount; i++) {
+                  const voiceAudio = await generateTTSAudio(voiceText);
+
+                  if (!voiceAudio) {
+                    if (userWantsVoice) toast.error('语音生成失败');
+                    break;
+                  }
+
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: Date.now() + 10 + i,
+                      role: 'assistant',
+                      content: voiceText,
+                      audioBase64: voiceAudio,
+                    },
+                  ]);
+
+                  audioQueue
+                    .enqueue({ src: `data:audio/mpeg;base64,${voiceAudio}` })
+                    .catch(console.error);
+
+                  await supabase.from('chat_messages').insert({
+                    user_id: user?.id,
+                    character_id: characterId,
+                    role: 'assistant',
+                    content: voiceText,
+                    audio_url: voiceAudio,
+                  });
+
+                  if (i < voiceCount - 1) {
+                    await new Promise((r) => setTimeout(r, 800));
+                  }
+                }
+              } else if (userWantsVoice) {
+                toast.error('没有可生成语音的内容');
+              }
+            }
+          }
           
           // 线上模式表情包
           if (stickerEnabled) {
@@ -2077,54 +2152,52 @@ const ChatPage: React.FC = () => {
           audio_url: audioBase64 || null
         });
         
-        // 角色语音输出（sometimes模式时随机生成语音气泡）
-        // 用户明确要求发语音时，直接发送语音气泡
-        const voiceKeywords = ['发语音', '发个语音', '语音', '说话', '听你声音', '想听', '给我发语音', '发条语音', '声音', '说点什么'];
-        const userWantsVoice = voiceKeywords.some(kw => messageContent.includes(kw));
-        console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig enabled:', ttsConfig?.enabled, 'userWantsVoice:', userWantsVoice, 'message:', messageContent);
-        
-        if (ttsConfig?.enabled && voiceMode === 'sometimes') {
-          // 用户明确要求时100%发，否则80%几率
+        // 角色语音输出：用户点名必发；偶尔模式概率发（最多1-2条）
+        const userWantsVoice = isVoiceRequestedByUser(messageContent);
+
+        if (userWantsVoice && (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl)) {
+          toast.error('还没配置语音服务（去设置里开启TTS）');
+        } else if (userWantsVoice && !character?.voice_id?.trim()) {
+          toast.error('请先设置角色语音ID（右上角菜单）');
+        } else if (ttsConfig?.enabled && voiceMode !== 'always' && (userWantsVoice || voiceMode === 'sometimes')) {
           const shouldSendVoice = userWantsVoice || Math.random() < 0.8;
-          console.log('[TTS sometimes] shouldSendVoice:', shouldSendVoice);
-          
+
           if (shouldSendVoice) {
-            // 用户要求时发1-2条，随机时发1条
             const voiceCount = userWantsVoice ? (Math.random() < 0.5 ? 2 : 1) : 1;
-            console.log('[TTS sometimes] generating', voiceCount, 'voice message(s)');
-            
-            // 延迟发送语音气泡
+
             setTimeout(async () => {
               for (let i = 0; i < voiceCount; i++) {
-                console.log('[TTS sometimes] generating voice', i + 1);
                 const voiceAudio = await generateTTSAudio(cleanContent);
-                console.log('[TTS sometimes] voiceAudio result:', voiceAudio ? 'success' : 'failed');
-                
-                if (voiceAudio) {
-                  const voiceMsg = {
+
+                if (!voiceAudio) {
+                  if (userWantsVoice) toast.error('语音生成失败');
+                  break;
+                }
+
+                setMessages((prev) => [
+                  ...prev,
+                  {
                     id: Date.now() + 10 + i,
                     role: 'assistant',
                     content: cleanContent,
-                    audioBase64: voiceAudio
-                  };
-                  setMessages(prev => [...prev, voiceMsg]);
-                  
-                  // 播放语音
-                  const audioUrl = `data:audio/mpeg;base64,${voiceAudio}`;
-                  audioQueue.enqueue({ src: audioUrl }).catch(console.error);
-                  
-                  // 保存语音消息到数据库
-                  await supabase.from('chat_messages').insert({
-                    user_id: user?.id,
-                    character_id: characterId,
-                    role: 'assistant',
-                    content: cleanContent,
-                    audio_url: voiceAudio
-                  });
-                  
-                  if (i < voiceCount - 1) {
-                    await new Promise(r => setTimeout(r, 800)); // 两条语音之间间隔
-                  }
+                    audioBase64: voiceAudio,
+                  },
+                ]);
+
+                audioQueue
+                  .enqueue({ src: `data:audio/mpeg;base64,${voiceAudio}` })
+                  .catch(console.error);
+
+                await supabase.from('chat_messages').insert({
+                  user_id: user?.id,
+                  character_id: characterId,
+                  role: 'assistant',
+                  content: cleanContent,
+                  audio_url: voiceAudio,
+                });
+
+                if (i < voiceCount - 1) {
+                  await new Promise((r) => setTimeout(r, 800));
                 }
               }
             }, 500);
