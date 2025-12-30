@@ -570,6 +570,49 @@ const ChatPage: React.FC = () => {
     }
   };
   
+  // TTS生成函数 - 返回 audioBase64
+  const generateTTSAudio = async (text: string): Promise<string | null> => {
+    if (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl || !character) return null;
+    
+    const voiceId = character.voice_id;
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          text,
+          voiceId: voiceId || 'default',
+          ttsConfig: {
+            apiKey: ttsConfig.apiKey,
+            baseUrl: ttsConfig.baseUrl,
+            model: ttsConfig.model,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error('TTS error:', data.error || 'Unknown error');
+        return null;
+      }
+
+      if (!data.audioContent) {
+        console.error('TTS: No audio content received');
+        return null;
+      }
+
+      return data.audioContent;
+    } catch (err) {
+      console.error('TTS generation error:', err);
+      return null;
+    }
+  };
+
   // TTS播放函数
   const playTTS = async (text: string) => {
     if (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl || !character) return;
@@ -1816,7 +1859,18 @@ const ChatPage: React.FC = () => {
             
             // 如果移除转账指令后还有内容，显示消息
             if (msgContent.trim()) {
-              setMessages(prev => [...prev, { id: msgId, role: 'assistant', content: msgContent }]);
+              // 生成语音气泡（如果TTS启用且voiceMode为always）
+              let audioBase64: string | null = null;
+              if (ttsConfig?.enabled && voiceMode === 'always') {
+                audioBase64 = await generateTTSAudio(msgContent);
+              }
+              
+              setMessages(prev => [...prev, { 
+                id: msgId, 
+                role: 'assistant', 
+                content: msgContent,
+                audioBase64: audioBase64 || undefined,
+              }]);
               
               // 保存到数据库
               await supabase.from('chat_messages').insert({ 
@@ -1891,7 +1945,18 @@ const ChatPage: React.FC = () => {
       const cleanContent = await handleAITransfer(finalContent);
       
       if (cleanContent.trim()) {
-        setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: cleanContent }]);
+        // 生成语音气泡（如果TTS启用且voiceMode为always）
+        let audioBase64: string | null = null;
+        if (ttsConfig?.enabled && voiceMode === 'always') {
+          audioBase64 = await generateTTSAudio(cleanContent);
+        }
+        
+        setMessages(prev => [...prev, { 
+          id: Date.now() + 1, 
+          role: 'assistant', 
+          content: cleanContent,
+          audioBase64: audioBase64 || undefined,
+        }]);
 
         await supabase.from('chat_messages').insert({ 
           user_id: user?.id, 
@@ -1900,12 +1965,9 @@ const ChatPage: React.FC = () => {
           content: cleanContent 
         });
         
-        // 角色语音输出
-        if (ttsConfig?.enabled && voiceMode !== 'off') {
-          const shouldSpeak = voiceMode === 'always' || (voiceMode === 'sometimes' && Math.random() < 0.3);
-          if (shouldSpeak) {
-            playTTS(cleanContent);
-          }
+        // 角色语音输出（sometimes模式时随机播放，不生成语音气泡）
+        if (ttsConfig?.enabled && voiceMode === 'sometimes' && Math.random() < 0.3) {
+          playTTS(cleanContent);
         }
         
         // 表情包发送逻辑
@@ -2913,7 +2975,23 @@ const ChatPage: React.FC = () => {
                   
                   return (
                     <>
-                      {showBubble && (
+                      {/* 语音消息气泡 - 如果有 audioBase64 则显示语音气泡 */}
+                      {msg.audioBase64 && showBubble && (
+                        <VoiceMessageBubble
+                          audioBase64={msg.audioBase64}
+                          transcript={displayContent}
+                          isUser={msg.role === 'user'}
+                          bubbleColor={msg.role === 'user' ? userBubbleColor : friendBubbleColor}
+                          fontColor={msg.role === 'user' ? fontColor : friendFontColor}
+                          bubbleStyle={{
+                            ...getBubbleBackgroundStyle(msg.role === 'user'),
+                            opacity: bubbleOpacity,
+                          }}
+                        />
+                      )}
+                      
+                      {/* 普通文本气泡 - 没有语音时显示 */}
+                      {showBubble && !msg.audioBase64 && (
                         <div
                           className={getBubbleStyle(msg.role === 'user')}
                           style={{
