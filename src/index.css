@@ -261,37 +261,46 @@
     @apply bg-black/40 backdrop-blur-xl border border-white/10;
   }
 
-  /* 玻璃气泡卡片 - 类似3D玻璃胶囊效果 */
+  /* 玻璃气泡卡片 - 3D玻璃胶囊效果 */
   .glass-bubble {
     position: relative;
     background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      rgba(255, 255, 255, 0.08) 50%,
-      rgba(255, 255, 255, 0.15) 100%
+      180deg,
+      rgba(180, 200, 220, 0.6) 0%,
+      rgba(140, 160, 180, 0.4) 30%,
+      rgba(160, 180, 200, 0.5) 70%,
+      rgba(200, 210, 220, 0.6) 100%
     );
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 2rem;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-bottom-color: rgba(180, 190, 200, 0.4);
+    border-radius: 2.5rem;
     box-shadow: 
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
-      inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
-      0 8px 32px -8px rgba(0, 0, 0, 0.1),
-      0 4px 16px -4px rgba(0, 0, 0, 0.05);
+      /* 外部阴影 - 底部深色 */
+      0 8px 24px -4px rgba(0, 0, 0, 0.15),
+      0 4px 12px -2px rgba(0, 0, 0, 0.1),
+      /* 内部高光 - 顶部亮边 */
+      inset 0 2px 4px 0 rgba(255, 255, 255, 0.8),
+      inset 0 -2px 6px 0 rgba(0, 0, 0, 0.05),
+      /* 左右微妙高光 */
+      inset 2px 0 4px 0 rgba(255, 255, 255, 0.3),
+      inset -2px 0 4px 0 rgba(255, 255, 255, 0.3);
     overflow: hidden;
   }
 
   .glass-bubble::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 50%;
+    top: 4px;
+    left: 8%;
+    right: 8%;
+    height: 40%;
     background: linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.4) 0%,
+      rgba(255, 255, 255, 0.7) 0%,
+      rgba(255, 255, 255, 0.3) 40%,
       rgba(255, 255, 255, 0) 100%
     );
     border-radius: 2rem 2rem 50% 50%;
@@ -301,19 +310,21 @@
   .glass-bubble::after {
     content: '';
     position: absolute;
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60%;
-    height: 2px;
+    bottom: 6px;
+    left: 15%;
+    right: 15%;
+    height: 3px;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0.5) 30%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0.5) 70%,
       transparent 100%
     );
     border-radius: 50%;
     pointer-events: none;
+    filter: blur(1px);
   }
 
   .gradient-primary {
