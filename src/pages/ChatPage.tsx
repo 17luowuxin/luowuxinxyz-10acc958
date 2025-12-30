@@ -239,6 +239,7 @@ const ChatPage: React.FC = () => {
     if (!characterId) return;
     const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
     if (data) {
+      console.log('[fetchCharacter] loaded:', data.name, 'ringtone_url:', data.ringtone_url);
       setCharacter(data);
       if (data.reply_mode) {
         setReplyMode(data.reply_mode as 'novel' | 'online');
@@ -2477,7 +2478,8 @@ const ChatPage: React.FC = () => {
     // 播放来电铃声
     try {
       // 优先使用角色自定义铃声
-      const customRingtoneUrl = (character as any)?.ringtone_url;
+      const customRingtoneUrl = character?.ringtone_url;
+      console.log('[startCall] ringtone_url:', customRingtoneUrl);
       if (customRingtoneUrl) {
         // 使用自定义音频文件
         const audio = new Audio(customRingtoneUrl);
