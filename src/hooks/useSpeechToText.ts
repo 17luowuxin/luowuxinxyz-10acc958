@@ -8,6 +8,7 @@ type UseSpeechToTextOptions = {
   /** If true, recognition will restart automatically when it ends (persistent mode) */
   persistent?: boolean;
   onFinal?: (text: string) => void;
+  onInterim?: (text: string) => void;
   onError?: (message: string) => void;
 };
 
@@ -46,11 +47,16 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const shouldRestartRef = useRef(false); // Track if we should restart after end
 
   const onFinalRef = useRef(options.onFinal);
+  const onInterimRef = useRef(options.onInterim);
   const onErrorRef = useRef(options.onError);
 
   useEffect(() => {
     onFinalRef.current = options.onFinal;
   }, [options.onFinal]);
+
+  useEffect(() => {
+    onInterimRef.current = options.onInterim;
+  }, [options.onInterim]);
 
   useEffect(() => {
     onErrorRef.current = options.onError;
@@ -124,16 +130,25 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
       let finalText = "";
+      let interimText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const result = e.results[i];
         const txt = result?.[0]?.transcript || "";
         if (result.isFinal) {
           finalText += txt;
+        } else {
+          interimText += txt;
         }
+      }
+
+      // Emit interim text for real-time display
+      if (interimText) {
+        onInterimRef.current?.(interimText);
       }
 
       const cleaned = finalText.trim();
       if (cleaned) {
+        onInterimRef.current?.(""); // Clear interim when final is received
         onFinalRef.current?.(cleaned);
       }
     };
