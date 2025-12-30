@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -203,7 +203,7 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
       const buf = new Uint8Array(await r.arrayBuffer());
       // 防止拉取过大的图片导致函数超时/内存飙升
       if (buf.byteLength > 2_500_000) return null;
-      return `data:${ct};base64,${encodeBase64(buf)}`;
+      return `data:${ct};base64,${encodeBase64(buf.buffer)}`;
     } catch {
       return null;
     }
