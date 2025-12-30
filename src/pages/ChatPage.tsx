@@ -166,6 +166,8 @@ const ChatPage: React.FC = () => {
   const [inCall, setInCall] = useState(false);
   const [callMessages, setCallMessages] = useState<{ role: string; content: string; audioBase64?: string }[]>([]);
   const [callInput, setCallInput] = useState('');
+  // 保存已上传的视频通话视频URL（从数据库加载）
+  const [savedCallVideoUrl, setSavedCallVideoUrl] = useState<string | null>(null);
   const [callLoading, setCallLoading] = useState(false);
   const [callRinging, setCallRinging] = useState(false); // 来电铃声状态
   const [callStartTime, setCallStartTime] = useState<number | null>(null); // 通话开始时间
@@ -232,6 +234,8 @@ const ChatPage: React.FC = () => {
       setStickerEnabled((data as any).sticker_enabled ?? true);
       // 加载语音模式
       setVoiceMode(((data as any).voice_mode as 'off' | 'sometimes' | 'always') || 'off');
+      // 加载视频通话动态视频URL
+      setSavedCallVideoUrl((data as any).call_video_url || null);
     }
   }, [characterId]);
 
@@ -287,7 +291,7 @@ const ChatPage: React.FC = () => {
     const [chatResult, transferResult] = await Promise.all([
       supabase
         .from('chat_messages')
-        .select('id, role, content, created_at, image_url')
+        .select('id, role, content, created_at, image_url, audio_url')
         .eq('character_id', characterId)
         .order('created_at'),
       supabase
@@ -308,6 +312,8 @@ const ChatPage: React.FC = () => {
       chatData.forEach(msg => {
         allItems.push({
           ...msg,
+          // 如果有audio_url，设置audioBase64为URL，组件需要能处理URL或base64
+          audioBase64: (msg as any).audio_url || undefined,
           timestamp: new Date(msg.created_at).getTime()
         });
       });
@@ -1865,6 +1871,12 @@ const ChatPage: React.FC = () => {
               let audioBase64: string | null = null;
               if (ttsConfig?.enabled && voiceMode === 'always') {
                 audioBase64 = await generateTTSAudio(msgContent);
+                // 自动播放语音
+                if (audioBase64) {
+                  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+                  const audio = new Audio(audioUrl);
+                  audio.play().catch(console.error);
+                }
               }
               
               setMessages(prev => [...prev, { 
@@ -1874,12 +1886,13 @@ const ChatPage: React.FC = () => {
                 audioBase64: audioBase64 || undefined,
               }]);
               
-              // 保存到数据库
+              // 保存到数据库，包括audio_url
               await supabase.from('chat_messages').insert({ 
                 user_id: user?.id, 
                 character_id: characterId, 
                 role: 'assistant', 
-                content: msgContent 
+                content: msgContent,
+                audio_url: audioBase64 || null
               });
             }
           }, msgDelay);
@@ -1951,6 +1964,12 @@ const ChatPage: React.FC = () => {
         let audioBase64: string | null = null;
         if (ttsConfig?.enabled && voiceMode === 'always') {
           audioBase64 = await generateTTSAudio(cleanContent);
+          // 自动播放语音
+          if (audioBase64) {
+            const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+            const audio = new Audio(audioUrl);
+            audio.play().catch(console.error);
+          }
         }
         
         setMessages(prev => [...prev, { 
@@ -1964,7 +1983,8 @@ const ChatPage: React.FC = () => {
           user_id: user?.id, 
           character_id: characterId, 
           role: 'assistant', 
-          content: cleanContent 
+          content: cleanContent,
+          audio_url: audioBase64 || null
         });
         
         // 角色语音输出（sometimes模式时随机播放，不生成语音气泡）
@@ -2357,7 +2377,8 @@ const ChatPage: React.FC = () => {
     setCallMessages([]);
     setCallDuration(0);
     setCallStartTime(null);
-    setCallVideoUrl(null);
+    // 加载已保存的视频URL
+    setCallVideoUrl(savedCallVideoUrl);
     setCallVideoPlaying(false);
   };
 
@@ -2436,6 +2457,9 @@ const ChatPage: React.FC = () => {
           .getPublicUrl(fileName);
         
         setCallVideoUrl(publicUrl);
+        setSavedCallVideoUrl(publicUrl);
+        // 保存到characters表
+        await supabase.from('characters').update({ call_video_url: publicUrl }).eq('id', characterId);
         toast.success('视频上传成功，已保存');
       } catch (err) {
         console.error('Upload video error:', err);
@@ -3547,49 +3571,115 @@ const ChatPage: React.FC = () => {
           )}
           
           {/* 主内容区域 */}
-          <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
-            {/* 头像区域 - 语音通话参考图1样式 */}
-            {showCallDialog === 'voice' && (
-              <div className="mb-8">
-                <div 
-                  className="w-32 h-32 rounded-lg overflow-hidden shadow-lg"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.3)' }}
-                >
-                  {character?.avatar_url ? (
-                    <img 
-                      src={character.avatar_url} 
-                      alt={character.name} 
-                      className="w-full h-full object-cover grayscale-[30%]"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl text-gray-600 font-bold">
-                      {character?.name?.charAt(0) || '?'}
-                    </div>
-                  )}
+          <div className="flex-1 flex flex-col relative z-10 px-4 py-4">
+            {/* 顶部：头像/名字区域 */}
+            <div className="flex flex-col items-center mb-4">
+              {/* 头像区域 - 语音通话参考图1样式 */}
+              {showCallDialog === 'voice' && !inCall && (
+                <div className="mb-4">
+                  <div 
+                    className="w-24 h-24 rounded-lg overflow-hidden shadow-lg"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.3)' }}
+                  >
+                    {character?.avatar_url ? (
+                      <img 
+                        src={character.avatar_url} 
+                        alt={character.name} 
+                        className="w-full h-full object-cover grayscale-[30%]"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-3xl text-gray-600 font-bold">
+                        {character?.name?.charAt(0) || '?'}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+              
+              {/* 名字和时长 */}
+              <h2 
+                className="text-xl font-bold mb-1"
+                style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
+              >
+                {character?.name}
+              </h2>
+              <p 
+                className="text-sm"
+                style={{ color: showCallDialog === 'video' ? 'rgba(255,255,255,0.8)' : '#7f8c8d' }}
+              >
+                {callRinging 
+                  ? (showCallDialog === 'video' ? '视频来电...' : '正在呼叫...') 
+                  : formatCallDuration(callDuration)
+                }
+              </p>
+              
+              {/* 语音识别状态显示 */}
+              {inCall && speechToText.isListening && (
+                <div className="mt-2 px-3 py-1 bg-red-500/80 rounded-full flex items-center gap-2">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  <span className="text-white text-xs">正在听...</span>
+                </div>
+              )}
+            </div>
+            
+            {/* 通话消息区域 - 滚动 */}
+            {inCall && (
+              <div className="flex-1 overflow-y-auto mb-4 space-y-3 px-2">
+                {callMessages.map((msg, idx) => (
+                  <div 
+                    key={idx}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div 
+                      className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${
+                        msg.role === 'user' 
+                          ? 'bg-blue-500 text-white rounded-br-sm' 
+                          : 'bg-white/90 text-gray-800 rounded-bl-sm shadow-sm'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {callLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white/90 px-4 py-2 rounded-2xl rounded-bl-sm shadow-sm">
+                      <span className="inline-flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div ref={callMessagesEndRef} />
               </div>
             )}
             
-            {/* 名字和时长 */}
-            <h2 
-              className="text-2xl font-bold mb-2"
-              style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
-            >
-              {character?.name}
-            </h2>
-            <p 
-              className="text-lg"
-              style={{ color: showCallDialog === 'video' ? 'rgba(255,255,255,0.8)' : '#7f8c8d' }}
-            >
-              {callRinging 
-                ? (showCallDialog === 'video' ? '视频来电...' : '正在呼叫...') 
-                : formatCallDuration(callDuration)
-              }
-            </p>
+            {/* 通话中的输入框 */}
+            {inCall && (
+              <div className="flex items-center gap-2 px-2">
+                <Input 
+                  value={callInput}
+                  onChange={(e) => setCallInput(e.target.value)}
+                  placeholder={speechToText.isListening ? "正在听你说话..." : "输入消息..."}
+                  onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
+                  className="flex-1 h-10 rounded-full bg-white/90 border-0 text-sm text-gray-800 placeholder:text-gray-500"
+                />
+                <Button 
+                  size="icon"
+                  onClick={sendCallMessage}
+                  disabled={callLoading || !callInput.trim()}
+                  className="w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex-shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
             
             {/* 视频通话装饰线 - 参考图2 */}
-            {showCallDialog === 'video' && !callRinging && (
-              <div className="mt-8 w-64 flex items-center justify-center">
+            {showCallDialog === 'video' && !callRinging && !inCall && (
+              <div className="mt-8 w-64 flex items-center justify-center mx-auto">
                 <div className="flex-1 h-px bg-white/30" />
                 <div className="mx-4 flex items-center gap-1">
                   {[0, 1, 2, 3, 4].map((i) => (

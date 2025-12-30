@@ -160,13 +160,14 @@ const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
         </span>
       </div>
 
-      {/* Transcript text - shown below like reference image 4 */}
+      {/* Transcript text - shown below like reference image 4, with synced bubble style */}
       {showTranscript && transcript && (
         <div
           className={`mt-1.5 px-4 py-2.5 rounded-xl text-sm max-w-[220px] ${
             isUser ? 'rounded-br-sm' : 'rounded-bl-sm'
           }`}
           style={{ 
+            ...bubbleStyle,
             backgroundColor: bubbleColor || (isUser ? '#95ec69' : '#ffffff'),
             color: fontColor,
             boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
