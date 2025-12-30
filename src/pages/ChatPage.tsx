@@ -225,6 +225,7 @@ const ChatPage: React.FC = () => {
     interimResults: true,
     persistent: true,
     onFinal: (text) => {
+      console.log('[Call] Speech final:', text, 'inCall:', inCall, 'isAISpeaking:', isAISpeaking);
       if (text.trim() && showCallDialog && inCall && !isAISpeaking) {
         // 自动发送识别到的文字
         autoSendCallMessageRef.current?.(text.trim());
@@ -237,7 +238,14 @@ const ChatPage: React.FC = () => {
       }
     },
     onError: (message) => {
+      console.error('[Call] Speech error:', message);
       toast.error(message);
+    },
+    onAudioStart: () => {
+      console.log('[Call] Audio activity started');
+    },
+    onAudioEnd: () => {
+      console.log('[Call] Audio activity ended');
     },
   });
 
@@ -3053,9 +3061,14 @@ const ChatPage: React.FC = () => {
         
         // 恢复语音识别的辅助函数
         const resumeSpeechRecognition = () => {
+          console.log('[Call] Resuming speech recognition, isSupported:', speechToText.isSupported, 'inCall:', inCall, 'isListening:', speechToText.isListening);
           setIsAISpeaking(false);
           if (speechToText.isSupported && inCall && !speechToText.isListening) {
-            setTimeout(() => speechToText.start(), 200);
+            // 增加延迟到500ms，确保音频播放完全结束
+            setTimeout(() => {
+              console.log('[Call] Starting speech recognition after delay');
+              speechToText.start();
+            }, 500);
           }
         };
         
