@@ -91,6 +91,7 @@ const SpacePage: React.FC = () => {
   const [deleteGuestbookId, setDeleteGuestbookId] = useState<string | null>(null);
   const [postingGuestbook, setPostingGuestbook] = useState(false);
   const [selectedGuestbookChars, setSelectedGuestbookChars] = useState<Set<string>>(new Set());
+  const [guestbookReplyTarget, setGuestbookReplyTarget] = useState<{ entryId: string; charName: string } | null>(null);
 
   // Space Logs state
   const [spaceLogs, setSpaceLogs] = useState<SpaceLog[]>([]);
@@ -506,34 +507,46 @@ const SpacePage: React.FC = () => {
     if (!newGuestbookContent.trim()) return;
     
     setPostingGuestbook(true);
+    const contentToPost = guestbookReplyTarget 
+      ? `@${guestbookReplyTarget.charName} ${newGuestbookContent.trim()}`
+      : newGuestbookContent.trim();
+    
     try {
       await supabase.from('guestbook').insert({
         user_id: user?.id,
-        content: newGuestbookContent.trim(),
+        content: contentToPost,
         is_character_reply: false
       });
 
       toast.success('留言成功!');
+      const originalContent = newGuestbookContent.trim();
       setNewGuestbookContent('');
       fetchGuestbook();
 
-      // AI character reply - 使用用户选择的角色，如果没选则随机
+      // AI character reply
       if (characters.length > 0 && apiConfig?.apiKey) {
         let replyChars: any[];
-        if (selectedGuestbookChars.size > 0) {
+        
+        // 如果是回复某个角色，只让那个角色回复
+        if (guestbookReplyTarget) {
+          const targetChar = characters.find(c => c.name === guestbookReplyTarget.charName);
+          replyChars = targetChar ? [targetChar] : [];
+        } else if (selectedGuestbookChars.size > 0) {
           replyChars = characters.filter(c => selectedGuestbookChars.has(c.id));
         } else {
           replyChars = [characters[Math.floor(Math.random() * characters.length)]];
         }
+        
         setSelectedGuestbookChars(new Set()); // 重置选择
+        setGuestbookReplyTarget(null); // 重置回复目标
 
         for (const char of replyChars) {
           try {
             const { data: replyData } = await supabase.functions.invoke('generate-moment', {
               body: { 
                 character: char, 
-                type: 'reply',
-                userPost: newGuestbookContent.trim(),
+                type: 'guestbook-reply',
+                userPost: originalContent,
                 userApiKey: apiConfig.apiKey,
                 provider: apiConfig.provider,
                 baseUrl: apiConfig.baseUrl,
@@ -556,6 +569,8 @@ const SpacePage: React.FC = () => {
             console.error('AI guestbook reply error:', err);
           }
         }
+      } else {
+        setGuestbookReplyTarget(null);
       }
     } catch (err) {
       console.error('Guestbook error:', err);
@@ -1101,15 +1116,30 @@ const SpacePage: React.FC = () => {
         <TabsContent value="guestbook" className="p-4 space-y-4 pb-24 mt-0">
           {/* Post Guestbook */}
           <div className="bg-card rounded-xl p-4 border border-border/50 space-y-3">
+            {/* 回复指定角色提示 */}
+            {guestbookReplyTarget && (
+              <div className="flex items-center gap-2 text-sm bg-primary/5 px-3 py-2 rounded-lg">
+                <span className="text-muted-foreground">正在回复</span>
+                <span className="text-primary font-medium">@{guestbookReplyTarget.charName}</span>
+                <button
+                  type="button"
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                  onClick={() => setGuestbookReplyTarget(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            
             <Textarea
               value={newGuestbookContent}
               onChange={(e) => setNewGuestbookContent(e.target.value)}
-              placeholder="写点什么..."
+              placeholder={guestbookReplyTarget ? `回复 @${guestbookReplyTarget.charName}...` : "写点什么..."}
               className="min-h-[80px] resize-none"
             />
             
-            {/* 选择回复角色 */}
-            {characters.length > 0 && (
+            {/* 选择回复角色（没有指定回复目标时显示） */}
+            {characters.length > 0 && !guestbookReplyTarget && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">选择回复的角色（不选则随机）</p>
                 <div className="flex flex-wrap gap-2">
@@ -1155,7 +1185,7 @@ const SpacePage: React.FC = () => {
               className="w-full"
             >
               {postingGuestbook ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
-              发布留言
+              {guestbookReplyTarget ? `回复 ${guestbookReplyTarget.charName}` : '发布留言'}
             </Button>
           </div>
 
@@ -1193,11 +1223,20 @@ const SpacePage: React.FC = () => {
                     </div>
                     <span className="font-medium text-sm flex-1">
                       {entry.is_character_reply ? (
-                        <>
+                        <button
+                          type="button"
+                          className="hover:underline"
+                          onClick={() => {
+                            const charName = entry.character?.name;
+                            if (charName) {
+                              setGuestbookReplyTarget({ entryId: entry.id, charName });
+                            }
+                          }}
+                        >
                           <span className="text-primary">{entry.character?.name || 'AI角色'}</span>
                           <span className="text-muted-foreground mx-1">回复</span>
                           <span className="text-foreground">{userProfile?.nickname || '我'}</span>
-                        </>
+                        </button>
                       ) : (
                         <span className="text-foreground">{userProfile?.nickname || '我'}</span>
                       )}
@@ -1205,6 +1244,16 @@ const SpacePage: React.FC = () => {
                     <span className="text-xs text-muted-foreground">
                       {formatTime(entry.created_at)}
                     </span>
+                    {/* 回复按钮（角色留言可点击回复） */}
+                    {entry.is_character_reply && entry.character?.name && (
+                      <button
+                        onClick={() => setGuestbookReplyTarget({ entryId: entry.id, charName: entry.character!.name })}
+                        className="p-1 hover:bg-primary/10 rounded transition-colors text-primary"
+                        title={`回复 ${entry.character.name}`}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => setDeleteGuestbookId(entry.id)}
                       className="p-1 hover:bg-destructive/10 rounded transition-colors"
