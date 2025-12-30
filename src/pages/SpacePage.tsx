@@ -89,6 +89,7 @@ const SpacePage: React.FC = () => {
   const [newGuestbookContent, setNewGuestbookContent] = useState('');
   const [deleteGuestbookId, setDeleteGuestbookId] = useState<string | null>(null);
   const [postingGuestbook, setPostingGuestbook] = useState(false);
+  const [selectedGuestbookChars, setSelectedGuestbookChars] = useState<Set<string>>(new Set());
 
   // Space Logs state
   const [spaceLogs, setSpaceLogs] = useState<SpaceLog[]>([]);
@@ -511,35 +512,44 @@ const SpacePage: React.FC = () => {
       setNewGuestbookContent('');
       fetchGuestbook();
 
-      // AI character reply
+      // AI character reply - 使用用户选择的角色，如果没选则随机
       if (characters.length > 0 && apiConfig?.apiKey) {
-        const char = characters[Math.floor(Math.random() * characters.length)];
-        try {
-          const { data: replyData } = await supabase.functions.invoke('generate-moment', {
-            body: { 
-              character: char, 
-              type: 'reply',
-              userPost: newGuestbookContent.trim(),
-              userApiKey: apiConfig.apiKey,
-              provider: apiConfig.provider,
-              baseUrl: apiConfig.baseUrl,
-              model: apiConfig.model,
-              userProfile: userProfile,
-              userId: user?.id
-            }
-          });
+        let replyChars: any[];
+        if (selectedGuestbookChars.size > 0) {
+          replyChars = characters.filter(c => selectedGuestbookChars.has(c.id));
+        } else {
+          replyChars = [characters[Math.floor(Math.random() * characters.length)]];
+        }
+        setSelectedGuestbookChars(new Set()); // 重置选择
 
-          if (replyData?.content) {
-            await supabase.from('guestbook').insert({
-              user_id: user?.id,
-              content: replyData.content,
-              character_id: char.id,
-              is_character_reply: true
+        for (const char of replyChars) {
+          try {
+            const { data: replyData } = await supabase.functions.invoke('generate-moment', {
+              body: { 
+                character: char, 
+                type: 'reply',
+                userPost: newGuestbookContent.trim(),
+                userApiKey: apiConfig.apiKey,
+                provider: apiConfig.provider,
+                baseUrl: apiConfig.baseUrl,
+                model: apiConfig.model,
+                userProfile: userProfile,
+                userId: user?.id
+              }
             });
-            fetchGuestbook();
+
+            if (replyData?.content) {
+              await supabase.from('guestbook').insert({
+                user_id: user?.id,
+                content: replyData.content,
+                character_id: char.id,
+                is_character_reply: true
+              });
+              fetchGuestbook();
+            }
+          } catch (err) {
+            console.error('AI guestbook reply error:', err);
           }
-        } catch (err) {
-          console.error('AI guestbook reply error:', err);
         }
       }
     } catch (err) {
@@ -1003,13 +1013,55 @@ const SpacePage: React.FC = () => {
         {/* 留言板 Tab */}
         <TabsContent value="guestbook" className="p-4 space-y-4 pb-24 mt-0">
           {/* Post Guestbook */}
-          <div className="bg-card rounded-xl p-4 border border-border/50">
+          <div className="bg-card rounded-xl p-4 border border-border/50 space-y-3">
             <Textarea
               value={newGuestbookContent}
               onChange={(e) => setNewGuestbookContent(e.target.value)}
               placeholder="写点什么..."
-              className="min-h-[80px] resize-none mb-3"
+              className="min-h-[80px] resize-none"
             />
+            
+            {/* 选择回复角色 */}
+            {characters.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">选择回复的角色（不选则随机）</p>
+                <div className="flex flex-wrap gap-2">
+                  {characters.map(char => (
+                    <button
+                      key={char.id}
+                      onClick={() => {
+                        setSelectedGuestbookChars(prev => {
+                          const next = new Set(prev);
+                          if (next.has(char.id)) {
+                            next.delete(char.id);
+                          } else {
+                            next.add(char.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                        selectedGuestbookChars.has(char.id)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full overflow-hidden bg-primary/20 shrink-0">
+                        {char.avatar_url ? (
+                          <img src={char.avatar_url} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs">
+                            {char.name[0]}
+                          </div>
+                        )}
+                      </div>
+                      <span>{char.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <Button 
               onClick={handleGuestbookPost}
               disabled={!newGuestbookContent.trim() || postingGuestbook}
