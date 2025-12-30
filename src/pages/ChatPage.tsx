@@ -2004,8 +2004,12 @@ const ChatPage: React.FC = () => {
         });
         
         // 角色语音输出（sometimes模式时随机播放，不生成语音气泡）
-        if (ttsConfig?.enabled && voiceMode === 'sometimes' && Math.random() < 0.3) {
-          playTTS(cleanContent);
+        if (ttsConfig?.enabled && voiceMode === 'sometimes') {
+          const shouldPlay = Math.random() < 0.35; // 35%几率
+          console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig:', !!ttsConfig, 'shouldPlay:', shouldPlay);
+          if (shouldPlay) {
+            playTTS(cleanContent);
+          }
         }
         
         // 表情包发送逻辑
@@ -3831,7 +3835,7 @@ const ChatPage: React.FC = () => {
       {/* 通话弹窗（语音/视频） */}
       {showCallDialog && (
         <div 
-          className="fixed inset-0 z-50 flex flex-col"
+          className="fixed inset-0 z-50 flex flex-col overflow-hidden"
           style={{
             // Voice call: glass frosted light blue-gray like reference image 1
             // Video call: pink background like reference image 2
@@ -3840,6 +3844,21 @@ const ChatPage: React.FC = () => {
               : 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)',
           }}
         >
+          {/* 语音通话模糊头像背景 */}
+          {showCallDialog === 'voice' && character?.avatar_url && (
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              <img 
+                src={character.avatar_url} 
+                alt=""
+                className="w-full h-full object-cover scale-110"
+                style={{ 
+                  filter: 'blur(50px) brightness(0.9)',
+                  transform: 'scale(1.2)',
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/30" />
+            </div>
+          )}
           {/* 隐藏的视频上传input */}
           <input
             ref={callVideoInputRef}
