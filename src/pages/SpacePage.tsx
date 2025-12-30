@@ -595,47 +595,68 @@ const SpacePage: React.FC = () => {
   };
 
   const handleComment = async (moment: Moment) => {
-    const content = commentInputs[moment.id]?.trim();
-    if (!content) return;
+    const raw = commentInputs[moment.id]?.trim();
+    if (!raw) return;
+
+    const images = moment.image_url?.split(',').filter(Boolean) || [];
+
+    // 允许用户“点选某条角色评论 -> 回复该角色”，或手动输入 @角色名
+    const atMatch = raw.match(/^@([^\s]+)\s+/);
+    const explicitTargetName = atMatch?.[1]?.trim();
+    const targetName = explicitTargetName || commentReplyTargets[moment.id]?.name;
+
+    const normalizedContent = targetName && !explicitTargetName ? `@${targetName} ${raw}` : raw;
 
     await supabase.from('comments').insert({
       moment_id: moment.id,
       user_id: user?.id,
-      content,
-      is_character_reply: false
+      content: normalizedContent,
+      is_character_reply: false,
     });
 
-    setCommentInputs(prev => ({ ...prev, [moment.id]: '' }));
+    setCommentInputs((prev) => ({ ...prev, [moment.id]: '' }));
+    setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: undefined }));
     toast.success('评论成功!');
 
-    if (moment.character && apiConfig?.apiKey) {
+    if (!apiConfig?.apiKey) {
+      fetchMoments();
+      return;
+    }
+
+    // 选择要“回你评论”的角色：@优先，其次回帖作者（兼容旧逻辑）
+    const replyCharacter =
+      (targetName ? characters.find((c) => c.name === targetName) : null) || moment.character;
+
+    if (replyCharacter) {
       try {
         const { data } = await supabase.functions.invoke('generate-moment', {
-          body: { 
-            character: moment.character,
+          body: {
+            character: replyCharacter,
             type: 'reply',
-            userPost: content,
+            userPost: normalizedContent,
+            userImages: images.length > 0 ? images : undefined,
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
             userProfile: userProfile,
-            userId: user?.id
-          }
+            userId: user?.id,
+          },
         });
 
         if (data?.content) {
           await supabase.from('comments').insert({
             moment_id: moment.id,
             user_id: user?.id,
-            content: data.content,
-            is_character_reply: true
+            content: `[${replyCharacter.name}] ${data.content}`,
+            is_character_reply: true,
           });
         }
       } catch (err) {
         console.error('Reply error:', err);
       }
     }
+
     fetchMoments();
   };
 
@@ -762,20 +783,38 @@ const SpacePage: React.FC = () => {
             >
               {moment.comments?.map((comment) => {
                 const charMatch = comment.content.match(/^\[(.+?)\]\s*/);
-                const charName = charMatch ? charMatch[1] : (comment.is_character_reply ? moment.character?.name || 'AI' : null);
+                const charName = charMatch
+                  ? charMatch[1]
+                  : comment.is_character_reply
+                    ? moment.character?.name || 'AI'
+                    : null;
                 const displayContent = charMatch ? comment.content.replace(/^\[.+?\]\s*/, '') : comment.content;
+
                 const userName = userProfile?.nickname || '我';
-                
+                const replyToMatch = !comment.is_character_reply
+                  ? displayContent.match(/^@([^\s]+)\s+(.*)$/)
+                  : null;
+                const replyToName = replyToMatch?.[1];
+                const userDisplayContent = replyToMatch ? replyToMatch[2] : displayContent;
+
                 return (
-                  <div 
+                  <div
                     key={comment.id}
-                    className={`text-sm p-3 rounded-lg ${
-                      comment.is_character_reply ? 'bg-primary/10 ml-4' : 'bg-muted'
-                    }`}
+                    className={`text-sm p-3 rounded-lg ${comment.is_character_reply ? 'bg-primary/10 ml-4' : 'bg-muted'}`}
                   >
                     {comment.is_character_reply ? (
                       <span className="font-medium">
-                        <span className="text-primary">{charName}</span>
+                        <button
+                          type="button"
+                          className="text-primary hover:underline"
+                          onClick={() => {
+                            if (!charName) return;
+                            setExpandedComments((prev) => ({ ...prev, [moment.id]: true }));
+                            setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: { name: charName } }));
+                          }}
+                        >
+                          {charName}
+                        </button>
                         <span className="text-muted-foreground mx-1">回复</span>
                         <span className="text-foreground">{userName}</span>
                         <span className="text-muted-foreground">:</span>
@@ -784,11 +823,11 @@ const SpacePage: React.FC = () => {
                       <span className="font-medium">
                         <span className="text-foreground">{userName}</span>
                         <span className="text-muted-foreground mx-1">回复</span>
-                        <span className="text-primary">{moment.character?.name || '角色'}</span>
+                        <span className="text-primary">{replyToName || moment.character?.name || '角色'}</span>
                         <span className="text-muted-foreground">:</span>
                       </span>
                     )}
-                    <span className="ml-2 text-foreground">{displayContent}</span>
+                    <span className="ml-2 text-foreground">{comment.is_character_reply ? displayContent : userDisplayContent}</span>
                   </div>
                 );
               })}
