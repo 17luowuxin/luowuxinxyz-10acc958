@@ -3722,17 +3722,6 @@ const ChatPage: React.FC = () => {
                 </div>
                 <span className="text-[10px] text-muted-foreground">视频</span>
               </button>
-              
-              {/* 表情包管理 */}
-              <button 
-                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                onClick={() => setShowStickerUpload(true)}
-              >
-                <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center">
-                  <Settings className="w-5 h-5 text-pink-500" />
-                </div>
-                <span className="text-[10px] text-muted-foreground">管理</span>
-              </button>
             </div>
           </PopoverContent>
         </Popover>
