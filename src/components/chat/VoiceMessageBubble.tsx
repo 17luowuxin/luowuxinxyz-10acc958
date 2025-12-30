@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Play, Pause, Volume2 } from 'lucide-react';
 
 interface VoiceMessageBubbleProps {
@@ -9,6 +9,7 @@ interface VoiceMessageBubbleProps {
   onTranscriptRequest?: () => void;
   bubbleColor?: string;
   fontColor?: string;
+  bubbleStyle?: React.CSSProperties;
 }
 
 const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
@@ -19,6 +20,7 @@ const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   onTranscriptRequest,
   bubbleColor,
   fontColor = '#333',
+  bubbleStyle,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -27,10 +29,11 @@ const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
 
-  // Waveform bars - random heights for visual effect
-  const waveformBars = useRef(
-    Array.from({ length: 20 }, () => 0.3 + Math.random() * 0.7)
-  ).current;
+  // Waveform bars - random heights for visual effect (memoized)
+  const waveformBars = useMemo(
+    () => Array.from({ length: 16 }, () => 0.25 + Math.random() * 0.75),
+    []
+  );
 
   useEffect(() => {
     // Create audio element
@@ -109,87 +112,120 @@ const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
     return `${secs}''`;
   };
 
-  // Calculate bubble width based on duration (min 80px, max 200px)
-  const bubbleWidth = Math.min(200, Math.max(80, 80 + (currentDuration * 8)));
+  // Calculate bubble width based on duration (min 100px, max 180px)
+  const bubbleWidth = Math.min(180, Math.max(100, 100 + (currentDuration * 6)));
+
+  // Default bubble colors
+  const defaultBg = isUser 
+    ? 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' 
+    : 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)';
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      {/* Voice bubble */}
+      {/* Voice bubble - WeChat style with beautification */}
       <div
-        className={`relative flex items-center gap-2 px-3 py-2 rounded-2xl cursor-pointer transition-all hover:opacity-90 ${
-          isUser ? 'rounded-br-sm' : 'rounded-bl-sm'
+        className={`relative flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${
+          isUser ? 'rounded-2xl rounded-br-sm' : 'rounded-2xl rounded-bl-sm'
         }`}
         style={{
           width: bubbleWidth,
-          backgroundColor: bubbleColor || (isUser ? '#95ec69' : '#ffffff'),
+          background: bubbleColor || defaultBg,
           color: fontColor,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          ...bubbleStyle,
         }}
         onClick={togglePlay}
       >
-        {/* Play/Pause button */}
-        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-black/10 flex items-center justify-center">
+        {/* Play/Pause button - gradient circle */}
+        <div 
+          className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 ${
+            isPlaying ? 'scale-110' : ''
+          }`}
+          style={{
+            background: isUser 
+              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          }}
+        >
           {isPlaying ? (
-            <Pause className="w-3 h-3" />
+            <Pause className="w-3.5 h-3.5 text-white" />
           ) : (
-            <Play className="w-3 h-3 ml-0.5" />
+            <Play className="w-3.5 h-3.5 text-white ml-0.5" />
           )}
         </div>
 
-        {/* Waveform animation */}
-        <div className="flex-1 flex items-center gap-[2px] h-5 overflow-hidden">
+        {/* Waveform animation - more dynamic */}
+        <div className="flex-1 flex items-center gap-[3px] h-6 overflow-hidden">
           {waveformBars.map((height, i) => {
             const isActive = (i / waveformBars.length) * 100 <= progress;
+            const animationDelay = `${i * 80}ms`;
             return (
               <div
                 key={i}
-                className={`w-[3px] rounded-full transition-all duration-100 ${
-                  isPlaying ? 'animate-pulse' : ''
+                className={`w-[3px] rounded-full transition-all duration-150 ${
+                  isPlaying ? 'animate-bounce' : ''
                 }`}
                 style={{
                   height: `${height * 100}%`,
-                  backgroundColor: isActive 
-                    ? (isUser ? '#2d8c3c' : '#07c160') 
-                    : 'rgba(0,0,0,0.2)',
-                  animationDelay: isPlaying ? `${i * 50}ms` : '0ms',
+                  background: isActive 
+                    ? (isUser 
+                        ? 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)' 
+                        : 'linear-gradient(180deg, #f093fb 0%, #f5576c 100%)')
+                    : 'rgba(0,0,0,0.15)',
+                  animationDelay: isPlaying ? animationDelay : '0ms',
+                  animationDuration: '0.6s',
                 }}
               />
             );
           })}
         </div>
 
-        {/* Duration */}
-        <span className="flex-shrink-0 text-xs opacity-70 min-w-[24px] text-right">
+        {/* Duration badge */}
+        <span 
+          className="flex-shrink-0 text-[11px] font-medium min-w-[28px] text-right"
+          style={{ opacity: 0.75 }}
+        >
           {formatDuration(currentDuration)}
         </span>
 
-        {/* Sound wave indicator (WeChat style) */}
+        {/* Sound wave indicator (WeChat style) - only for friend messages */}
         {!isUser && (
-          <div className={`absolute ${isUser ? 'right-[-20px]' : 'left-[-20px]'} flex items-center`}>
-            <Volume2 className={`w-4 h-4 opacity-50 ${isPlaying ? 'animate-pulse' : ''}`} />
+          <div className="absolute left-[-22px] flex items-center">
+            <Volume2 
+              className={`w-4 h-4 transition-all duration-300 ${
+                isPlaying ? 'text-pink-400 animate-pulse' : 'text-gray-400'
+              }`} 
+            />
           </div>
         )}
       </div>
 
-      {/* Transcript toggle */}
+      {/* Transcript toggle button */}
       <button
         onClick={(e) => {
           e.stopPropagation();
           toggleTranscript();
         }}
-        className="text-[10px] text-muted-foreground mt-1 hover:text-foreground transition-colors"
+        className="text-[10px] text-muted-foreground mt-1.5 hover:text-foreground transition-colors px-1"
       >
         {showTranscript ? '收起文字' : '转文字'}
       </button>
 
-      {/* Transcript text */}
-      {showTranscript && transcript && (
+      {/* Transcript text with nice styling */}
+      {showTranscript && (
         <div
-          className={`mt-1 px-3 py-2 rounded-lg text-xs max-w-[200px] ${
-            isUser ? 'bg-primary/10' : 'bg-muted'
+          className={`mt-1.5 px-3 py-2 rounded-xl text-xs max-w-[200px] backdrop-blur-sm ${
+            isUser 
+              ? 'bg-gradient-to-r from-purple-100/80 to-pink-100/80' 
+              : 'bg-gradient-to-r from-blue-50/80 to-purple-50/80'
           }`}
-          style={{ color: fontColor }}
+          style={{ 
+            color: fontColor,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          }}
         >
-          {transcript}
+          {transcript || '正在识别...'}
         </div>
       )}
     </div>
