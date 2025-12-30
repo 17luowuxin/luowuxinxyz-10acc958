@@ -2077,12 +2077,46 @@ const ChatPage: React.FC = () => {
           audio_url: audioBase64 || null
         });
         
-        // 角色语音输出（sometimes模式时随机播放，不生成语音气泡）
+        // 角色语音输出（sometimes模式时随机生成语音气泡，70%几率）
+        // 用户明确要求发语音时，直接发送语音气泡
+        const userWantsVoice = /发.*语音|语音.*发|说.*话|听.*声音|想听.*/.test(messageContent);
         if (ttsConfig?.enabled && voiceMode === 'sometimes') {
-          const shouldPlay = Math.random() < 0.5; // 50%几率
-          console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig:', !!ttsConfig, 'shouldPlay:', shouldPlay);
-          if (shouldPlay) {
-            playTTS(cleanContent);
+          const shouldSendVoice = userWantsVoice || Math.random() < 0.7; // 用户要求或70%几率
+          console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig:', !!ttsConfig, 'shouldSendVoice:', shouldSendVoice, 'userWantsVoice:', userWantsVoice);
+          if (shouldSendVoice) {
+            // 延迟发送1-2条语音气泡
+            const voiceCount = userWantsVoice ? (Math.random() < 0.5 ? 2 : 1) : 1;
+            setTimeout(async () => {
+              for (let i = 0; i < voiceCount; i++) {
+                const voiceAudio = await generateTTSAudio(cleanContent);
+                if (voiceAudio) {
+                  const voiceMsg = {
+                    id: Date.now() + 10 + i,
+                    role: 'assistant',
+                    content: cleanContent,
+                    audioBase64: voiceAudio
+                  };
+                  setMessages(prev => [...prev, voiceMsg]);
+                  
+                  // 播放语音
+                  const audioUrl = `data:audio/mpeg;base64,${voiceAudio}`;
+                  audioQueue.enqueue({ src: audioUrl }).catch(console.error);
+                  
+                  // 保存语音消息到数据库
+                  await supabase.from('chat_messages').insert({
+                    user_id: user?.id,
+                    character_id: characterId,
+                    role: 'assistant',
+                    content: cleanContent,
+                    audio_url: voiceAudio
+                  });
+                  
+                  if (i < voiceCount - 1) {
+                    await new Promise(r => setTimeout(r, 800)); // 两条语音之间间隔
+                  }
+                }
+              }
+            }, 600 + Math.random() * 400);
           }
         }
         
