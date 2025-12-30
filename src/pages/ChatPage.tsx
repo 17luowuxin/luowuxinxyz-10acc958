@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -3567,6 +3567,119 @@ const ChatPage: React.FC = () => {
           onChange={handleImageSelect}
         />
         
+        {/* 加号按钮 - 展开工具菜单 */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="flex-shrink-0 w-9 h-9 text-muted-foreground">
+              <Plus className="w-5 h-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-3 bg-background border shadow-lg z-50" align="start" side="top">
+            <div className="grid grid-cols-4 gap-3">
+              {/* 图片 */}
+              <button 
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={loading || uploadingImage}
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                  <ImagePlus className="w-5 h-5 text-blue-500" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">图片</span>
+              </button>
+              
+              {/* 表情包 */}
+              <button 
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                onClick={() => {
+                  setShowStickerPicker(true);
+                }}
+              >
+                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Sticker className="w-5 h-5 text-orange-500" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">表情包</span>
+              </button>
+              
+              {/* 语音通话 */}
+              <button 
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                onClick={() => startCall('voice')}
+              >
+                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <Phone className="w-5 h-5 text-green-500" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">语音</span>
+              </button>
+              
+              {/* 视频通话 */}
+              <button 
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                onClick={() => startCall('video')}
+              >
+                <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <Video className="w-5 h-5 text-purple-500" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">视频</span>
+              </button>
+              
+              {/* 表情包管理 */}
+              <button 
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                onClick={() => setShowStickerUpload(true)}
+              >
+                <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-pink-500" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">管理</span>
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* 表情包快捷发送弹窗 - 单独控制 */}
+        <Popover open={showStickerPicker} onOpenChange={setShowStickerPicker}>
+          <PopoverTrigger asChild>
+            <span className="hidden" />
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="start" side="top">
+            <div className="text-xs font-medium text-muted-foreground mb-2 px-1">点击表情包直接发送</div>
+            <div className="max-h-48 overflow-y-auto">
+              {userStickers.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-muted-foreground mb-1 px-1">我的表情包</div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {userStickers.map(sticker => (
+                      <button
+                        key={sticker.id}
+                        onClick={() => sendStickerDirectly(sticker)}
+                        className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                      >
+                        <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] text-muted-foreground mb-1 px-1">默认表情包</div>
+                <div className="grid grid-cols-4 gap-1">
+                  {defaultStickers.map(sticker => (
+                    <button
+                      key={sticker.id}
+                      onClick={() => sendStickerDirectly(sticker)}
+                      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
+                    >
+                      <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+        
+        {/* 表情按钮 */}
         <Popover open={showEmoji} onOpenChange={setShowEmoji}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
@@ -3604,81 +3717,6 @@ const ChatPage: React.FC = () => {
             </div>
           </PopoverContent>
         </Popover>
-        
-        {/* 图片按钮 */}
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
-          onClick={() => imageInputRef.current?.click()}
-          disabled={loading || uploadingImage}
-        >
-          <ImagePlus className="w-4 h-4" />
-        </Button>
-
-        {/* 表情包快捷发送按钮 */}
-        <Popover open={showStickerPicker} onOpenChange={setShowStickerPicker}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
-              <Sticker className="w-4 h-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="center" side="top">
-            <div className="text-xs font-medium text-muted-foreground mb-2 px-1">点击表情包直接发送</div>
-            <div className="max-h-48 overflow-y-auto">
-              {userStickers.length > 0 && (
-                <div className="mb-2">
-                  <div className="text-[10px] text-muted-foreground mb-1 px-1">我的表情包</div>
-                  <div className="grid grid-cols-4 gap-1">
-                    {userStickers.map(sticker => (
-                      <button
-                        key={sticker.id}
-                        onClick={() => sendStickerDirectly(sticker)}
-                        className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-                      >
-                        <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
-                <div className="text-[10px] text-muted-foreground mb-1 px-1">默认表情包</div>
-                <div className="grid grid-cols-4 gap-1">
-                  {defaultStickers.map(sticker => (
-                    <button
-                      key={sticker.id}
-                      onClick={() => sendStickerDirectly(sticker)}
-                      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-                    >
-                      <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* 语音通话按钮 */}
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
-          onClick={() => startCall('voice')}
-        >
-          <Phone className="w-4 h-4" />
-        </Button>
-
-        {/* 视频通话按钮 */}
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="flex-shrink-0 w-8 h-8 text-muted-foreground"
-          onClick={() => startCall('video')}
-        >
-          <Video className="w-4 h-4" />
-        </Button>
         
         <Input 
           value={input} 
@@ -3940,14 +3978,12 @@ const ChatPage: React.FC = () => {
               
               {/* 名字和时长 */}
               <h2 
-                className="text-xl font-bold mb-1"
-                style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
+                className="text-xl font-bold mb-1 text-white"
               >
                 {character?.name}
               </h2>
               <p 
-                className="text-sm"
-                style={{ color: showCallDialog === 'video' ? 'rgba(255,255,255,0.8)' : '#7f8c8d' }}
+                className="text-sm text-white/80"
               >
                 {callRinging 
                   ? (showCallDialog === 'video' ? '视频来电...' : '正在呼叫...') 
@@ -3970,15 +4006,14 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
-            {/* 通话消息区域 - 只显示纯文字，不用气泡 */}
+              {/* 通话消息区域 - 只显示纯文字，不用气泡 */}
             {inCall && (
               <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
                 {/* 只显示最后一条用户消息 */}
                 {callMessages.length > 0 && callMessages.filter(m => m.role === 'user').slice(-1).map((msg, idx) => (
                   <p 
                     key={`user-${idx}`}
-                    className="text-center text-sm opacity-70"
-                    style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
+                    className="text-center text-sm text-white/70"
                   >
                     {msg.content}
                   </p>
@@ -3987,17 +4022,16 @@ const ChatPage: React.FC = () => {
                 {callMessages.length > 0 && callMessages.filter(m => m.role === 'assistant').slice(-1).map((msg, idx) => (
                   <p 
                     key={`ai-${idx}`}
-                    className="text-center text-lg font-medium"
-                    style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
+                    className="text-center text-lg font-medium text-white"
                   >
                     {msg.content}
                   </p>
                 ))}
                 {callLoading && (
                   <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '0ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '150ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '300ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce opacity-60" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce opacity-60" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce opacity-60" style={{ animationDelay: '300ms' }} />
                   </div>
                 )}
               </div>
@@ -4031,7 +4065,7 @@ const ChatPage: React.FC = () => {
                 {!isAISpeaking && !interimTranscript && !callLoading && speechToText.isListening && (
                   <div className="flex flex-col items-center gap-2">
                     <VoiceWaveform isActive={true} color="#ef4444" bars={7} />
-                    <span className="text-sm" style={{ color: showCallDialog === 'video' ? 'white' : '#7f8c8d' }}>
+                    <span className="text-sm text-white/80">
                       正在听你说话...
                     </span>
                   </div>
