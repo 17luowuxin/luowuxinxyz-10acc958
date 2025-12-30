@@ -99,6 +99,7 @@ const SpacePage: React.FC = () => {
   const [deleteLogId, setDeleteLogId] = useState<string | null>(null);
   const [viewingLog, setViewingLog] = useState<SpaceLog | null>(null);
   const [charSelectOpen, setCharSelectOpen] = useState(false);
+  const [selectedReplyChars, setSelectedReplyChars] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -445,9 +446,15 @@ const SpacePage: React.FC = () => {
       setPostDialogOpen(false);
       fetchMoments();
 
-      // AI reply in background
-      const numReplies = Math.min(Math.floor(Math.random() * 3) + 1, characters.length);
-      const replyChars = [...characters].sort(() => Math.random() - 0.5).slice(0, numReplies);
+      // AI reply in background - 使用用户选择的角色，如果没选则随机
+      let replyChars: any[];
+      if (selectedReplyChars.size > 0) {
+        replyChars = characters.filter(c => selectedReplyChars.has(c.id));
+      } else {
+        const numReplies = Math.min(Math.floor(Math.random() * 3) + 1, characters.length);
+        replyChars = [...characters].sort(() => Math.random() - 0.5).slice(0, numReplies);
+      }
+      setSelectedReplyChars(new Set()); // 重置选择
 
       (async () => {
         for (const char of replyChars) {
@@ -1096,8 +1103,49 @@ const SpacePage: React.FC = () => {
                 value={newPostContent}
                 onChange={(e) => setNewPostContent(e.target.value)}
                 placeholder="分享你的心情..."
-                className="min-h-[120px] resize-none"
+                className="min-h-[100px] resize-none"
               />
+              
+              {/* 选择回复角色 */}
+              {characters.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">选择回复的角色（不选则随机）</p>
+                  <div className="flex flex-wrap gap-2">
+                    {characters.map(char => (
+                      <button
+                        key={char.id}
+                        onClick={() => {
+                          setSelectedReplyChars(prev => {
+                            const next = new Set(prev);
+                            if (next.has(char.id)) {
+                              next.delete(char.id);
+                            } else {
+                              next.add(char.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                          selectedReplyChars.has(char.id)
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted hover:bg-muted/80'
+                        }`}
+                      >
+                        <div className="w-5 h-5 rounded-full overflow-hidden bg-primary/20 shrink-0">
+                          {char.avatar_url ? (
+                            <img src={char.avatar_url} className="w-full h-full object-cover" alt="" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs">
+                              {char.name[0]}
+                            </div>
+                          )}
+                        </div>
+                        <span>{char.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {/* Image Preview */}
               {postImages.length > 0 && (
