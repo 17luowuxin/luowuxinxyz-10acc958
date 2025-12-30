@@ -10,6 +10,10 @@ type UseSpeechToTextOptions = {
   onFinal?: (text: string) => void;
   onInterim?: (text: string) => void;
   onError?: (message: string) => void;
+  /** Callback when audio starts being detected */
+  onAudioStart?: () => void;
+  /** Callback when audio stops being detected */
+  onAudioEnd?: () => void;
 };
 
 const getSpeechRecognitionCtor = (): (new () => SpeechRecognition) | null => {
@@ -45,10 +49,14 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const permissionStreamRef = useRef<MediaStream | null>(null);
   const persistentModeRef = useRef(false); // Track if persistent mode is enabled
   const shouldRestartRef = useRef(false); // Track if we should restart after end
+  const restartCountRef = useRef(0); // Track restart attempts
+  const lastRestartTimeRef = useRef(0); // Prevent rapid restarts
 
   const onFinalRef = useRef(options.onFinal);
   const onInterimRef = useRef(options.onInterim);
   const onErrorRef = useRef(options.onError);
+  const onAudioStartRef = useRef(options.onAudioStart);
+  const onAudioEndRef = useRef(options.onAudioEnd);
 
   useEffect(() => {
     onFinalRef.current = options.onFinal;
@@ -62,9 +70,18 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     onErrorRef.current = options.onError;
   }, [options.onError]);
 
+  useEffect(() => {
+    onAudioStartRef.current = options.onAudioStart;
+  }, [options.onAudioStart]);
+
+  useEffect(() => {
+    onAudioEndRef.current = options.onAudioEnd;
+  }, [options.onAudioEnd]);
+
   const isSupported = useMemo(() => Boolean(getSpeechRecognitionCtor()), []);
   const [isListening, setIsListening] = useState(false);
   const [isPersistentEnabled, setIsPersistentEnabled] = useState(false);
+  const [hasAudioActivity, setHasAudioActivity] = useState(false);
 
   const cleanupPermissionStream = useCallback(() => {
     const stream = permissionStreamRef.current;
@@ -77,16 +94,28 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const restartRecognition = useCallback(() => {
     if (!shouldRestartRef.current || !recognitionRef.current) return;
     
-    // Small delay before restarting to avoid rapid restarts
+    const now = Date.now();
+    const timeSinceLastRestart = now - lastRestartTimeRef.current;
+    
+    // Prevent rapid restarts - wait at least 300ms between restarts
+    const delay = Math.max(300, 500 - timeSinceLastRestart);
+    
     setTimeout(() => {
       if (shouldRestartRef.current && recognitionRef.current) {
         try {
+          console.log('[SpeechToText] Restarting recognition...');
+          lastRestartTimeRef.current = Date.now();
+          restartCountRef.current++;
           recognitionRef.current.start();
-        } catch {
-          // Recognition might already be running
+        } catch (e) {
+          console.log('[SpeechToText] Restart failed, will retry:', e);
+          // If start fails, try again after a longer delay
+          if (shouldRestartRef.current) {
+            setTimeout(() => restartRecognition(), 500);
+          }
         }
       }
-    }, 100);
+    }, delay);
   }, []);
 
   const ensureRecognition = useCallback(() => {
@@ -100,20 +129,45 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     rec.continuous = true; // Always use continuous for persistent mode
     rec.interimResults = interimResults;
 
-    rec.onstart = () => setIsListening(true);
+    rec.onstart = () => {
+      console.log('[SpeechToText] Recognition started');
+      setIsListening(true);
+      restartCountRef.current = 0; // Reset restart count on successful start
+    };
     
     rec.onend = () => {
+      console.log('[SpeechToText] Recognition ended, shouldRestart:', shouldRestartRef.current);
       setIsListening(false);
+      setHasAudioActivity(false);
       // In persistent mode, auto-restart unless explicitly stopped
       if (shouldRestartRef.current) {
         restartRecognition();
       }
     };
 
+    rec.onaudiostart = () => {
+      console.log('[SpeechToText] Audio detected');
+      setHasAudioActivity(true);
+      onAudioStartRef.current?.();
+    };
+
+    rec.onaudioend = () => {
+      console.log('[SpeechToText] Audio ended');
+      setHasAudioActivity(false);
+      onAudioEndRef.current?.();
+    };
+
+    rec.onspeechstart = () => {
+      console.log('[SpeechToText] Speech detected');
+    };
+
     rec.onerror = (e: any) => {
       const errorType = String(e?.error || "unknown");
+      console.log('[SpeechToText] Error:', errorType, 'shouldRestart:', shouldRestartRef.current);
+      
       // Don't show error for no-speech in persistent mode, just restart
       if (errorType === "no-speech" && shouldRestartRef.current) {
+        console.log('[SpeechToText] No speech detected, restarting...');
         restartRecognition();
         return;
       }
@@ -187,8 +241,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   }, [cleanupPermissionStream, ensureRecognition, persistent]);
 
   const stop = useCallback(() => {
+    console.log('[SpeechToText] Stopping recognition');
     shouldRestartRef.current = false;
     setIsPersistentEnabled(false);
+    setHasAudioActivity(false);
     try {
       recognitionRef.current?.stop();
     } finally {
@@ -216,6 +272,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     isSupported, 
     isListening, 
     isPersistentEnabled, // New: whether persistent mode is active
+    hasAudioActivity, // New: whether audio is being detected
     start, 
     stop, 
     toggle 
