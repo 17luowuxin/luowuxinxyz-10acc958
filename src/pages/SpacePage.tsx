@@ -71,6 +71,7 @@ const SpacePage: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
   const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
+  const [commentReplyTargets, setCommentReplyTargets] = useState<{ [key: string]: string }>({});
   const [likedMoments, setLikedMoments] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState('shuoshuo');
   const [newPostContent, setNewPostContent] = useState('');
@@ -603,7 +604,7 @@ const SpacePage: React.FC = () => {
     // 允许用户“点选某条角色评论 -> 回复该角色”，或手动输入 @角色名
     const atMatch = raw.match(/^@([^\s]+)\s+/);
     const explicitTargetName = atMatch?.[1]?.trim();
-    const targetName = explicitTargetName || commentReplyTargets[moment.id]?.name;
+    const targetName = explicitTargetName || commentReplyTargets[moment.id];
 
     const normalizedContent = targetName && !explicitTargetName ? `@${targetName} ${raw}` : raw;
 
@@ -810,7 +811,7 @@ const SpacePage: React.FC = () => {
                           onClick={() => {
                             if (!charName) return;
                             setExpandedComments((prev) => ({ ...prev, [moment.id]: true }));
-                            setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: { name: charName } }));
+                            setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: charName }));
                           }}
                         >
                           {charName}
