@@ -188,34 +188,34 @@ serve(async (req) => {
 
     let systemPrompt = `你是${character.name}，性格特点：${character.persona || '活泼开朗'}。
 你正在和朋友们玩真心话大冒险游戏。请根据你的性格特点来提问或回答。
-回答要简短有趣，符合你的人设。不要太长，控制在50字以内。`;
+回答要自然有趣，符合你的人设。`;
 
     let userPrompt = '';
     
     switch (action) {
       case 'ask_truth':
         userPrompt = `轮到你向${targetCharacter.name}提问真心话了。请提出一个有趣但不过分的真心话问题。
-问题要符合朋友之间的互动，可以调皮但要尊重对方。只输出问题，不要其他内容。`;
+问题要符合朋友之间的互动，可以调皮但要尊重对方。直接输出完整的问题。`;
         break;
         
       case 'ask_dare':
         userPrompt = `轮到你向${targetCharacter.name}提出大冒险了。请提出一个有趣但可以完成的大冒险挑战。
-挑战要好玩但不要太过分，适合朋友之间玩。只输出挑战内容，不要其他内容。`;
+挑战要好玩但不要太过分，适合朋友之间玩。直接输出完整的挑战内容，确保描述清晰完整。`;
         break;
         
       case 'answer_truth':
         userPrompt = `${targetCharacter.name}问你真心话："${gameHistory}"
-请根据你的性格诚实地回答这个问题。回答要自然有趣。只输出回答，不要其他内容。`;
+请根据你的性格诚实地回答这个问题。回答要自然有趣。直接输出完整的回答。`;
         break;
         
       case 'do_dare':
         userPrompt = `${targetCharacter.name}给你的大冒险是："${gameHistory}"
-请描述你如何完成这个挑战，以及你的反应。描述要生动有趣。只输出描述，不要其他内容。`;
+请描述你如何完成这个挑战，以及你的反应。描述要生动有趣。直接输出完整的描述。`;
         break;
         
       case 'react':
         userPrompt = `游戏中发生了这件事：${gameHistory}
-作为旁观者，请给出一句简短的反应或评论。可以是调侃、鼓励或搞笑的话。只输出一句话。`;
+作为旁观者，请给出一句简短的反应或评论。可以是调侃、鼓励或搞笑的话。直接输出一句话。`;
         break;
         
       default:
