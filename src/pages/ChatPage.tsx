@@ -2399,41 +2399,57 @@ const ChatPage: React.FC = () => {
     
     // 播放来电铃声
     try {
-      // 使用Web Audio API生成铃声
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const playRingtone = () => {
-        if (!callRinging) return;
+      // 优先使用角色自定义铃声
+      const customRingtoneUrl = (character as any)?.ringtone_url;
+      if (customRingtoneUrl) {
+        // 使用自定义音频文件
+        const audio = new Audio(customRingtoneUrl);
+        audio.loop = true;
+        audio.volume = 0.7;
+        audio.play().catch(console.log);
+        ringtoneAudioRef.current = { 
+          stop: () => { 
+            audio.pause(); 
+            audio.currentTime = 0; 
+          } 
+        } as any;
+      } else {
+        // 回退到Web Audio API生成铃声
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const playRingtone = () => {
+          if (!callRinging) return;
+          
+          // 创建简单的铃声音调
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+          oscillator.type = 'sine';
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.5);
+        };
         
-        // 创建简单的铃声音调
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
-        oscillator.type = 'sine';
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
-      };
-      
-      // 立即播放一次
-      playRingtone();
-      
-      // 设置循环铃声
-      const ringtoneInterval = setInterval(() => {
-        if (ringtoneAudioRef.current === null) {
-          clearInterval(ringtoneInterval);
-          return;
-        }
+        // 立即播放一次
         playRingtone();
-      }, 1500);
-      
-      // 保存interval ID用于停止
-      ringtoneAudioRef.current = { stop: () => clearInterval(ringtoneInterval) } as any;
+        
+        // 设置循环铃声
+        const ringtoneInterval = setInterval(() => {
+          if (ringtoneAudioRef.current === null) {
+            clearInterval(ringtoneInterval);
+            return;
+          }
+          playRingtone();
+        }, 1500);
+        
+        // 保存interval ID用于停止
+        ringtoneAudioRef.current = { stop: () => clearInterval(ringtoneInterval) } as any;
+      }
     } catch (err) {
       console.log('Ringtone playback failed:', err);
     }
@@ -3921,27 +3937,37 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
-            {/* 通话消息区域 - 滚动 */}
+            {/* 通话消息区域 - 只显示当前最新消息，不累积 */}
             {inCall && (
-              <div className="flex-1 overflow-y-auto mb-4 space-y-3 px-2">
-                {callMessages.map((msg, idx) => (
+              <div className="flex-1 flex flex-col items-center justify-center px-4">
+                {/* 只显示最后一条用户消息 */}
+                {callMessages.length > 0 && callMessages.filter(m => m.role === 'user').slice(-1).map((msg, idx) => (
                   <div 
-                    key={idx}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    key={`user-${idx}`}
+                    className="mb-3 max-w-[85%]"
                   >
                     <div 
-                      className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${
-                        msg.role === 'user' 
-                          ? 'bg-blue-500 text-white rounded-br-sm' 
-                          : 'bg-white/90 text-gray-800 rounded-bl-sm shadow-sm'
-                      }`}
+                      className="px-4 py-2 rounded-2xl text-sm bg-blue-500 text-white rounded-br-sm"
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {/* 只显示最后一条AI消息 */}
+                {callMessages.length > 0 && callMessages.filter(m => m.role === 'assistant').slice(-1).map((msg, idx) => (
+                  <div 
+                    key={`ai-${idx}`}
+                    className="max-w-[85%]"
+                  >
+                    <div 
+                      className="px-4 py-3 rounded-2xl text-base bg-white/90 text-gray-800 rounded-bl-sm shadow-sm"
                     >
                       {msg.content}
                     </div>
                   </div>
                 ))}
                 {callLoading && (
-                  <div className="flex justify-start">
+                  <div className="mt-3">
                     <div className="bg-white/90 px-4 py-2 rounded-2xl rounded-bl-sm shadow-sm">
                       <span className="inline-flex gap-1">
                         <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -3951,7 +3977,6 @@ const ChatPage: React.FC = () => {
                     </div>
                   </div>
                 )}
-                <div ref={callMessagesEndRef} />
               </div>
             )}
             

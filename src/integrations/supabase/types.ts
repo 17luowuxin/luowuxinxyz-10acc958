@@ -145,6 +145,7 @@ export type Database = {
           opening_line: string | null
           persona: string | null
           reply_mode: string | null
+          ringtone_url: string | null
           sticker_enabled: boolean | null
           transfer_enabled: boolean | null
           updated_at: string
@@ -163,6 +164,7 @@ export type Database = {
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          ringtone_url?: string | null
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
@@ -181,6 +183,7 @@ export type Database = {
           opening_line?: string | null
           persona?: string | null
           reply_mode?: string | null
+          ringtone_url?: string | null
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string

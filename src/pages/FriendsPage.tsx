@@ -29,7 +29,10 @@ const FriendsPage: React.FC = () => {
   const [historyLimit, setHistoryLimit] = useState(10);
   const [transferEnabled, setTransferEnabled] = useState(true);
   const [voiceId, setVoiceId] = useState('');
+  const [ringtoneUrl, setRingtoneUrl] = useState('');
+  const [uploadingRingtone, setUploadingRingtone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ringtoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) fetchCharacters();
@@ -101,6 +104,49 @@ const FriendsPage: React.FC = () => {
     return publicUrl;
   };
 
+  // 上传铃声
+  const handleRingtoneUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !editingChar) return;
+
+    if (!file.type.startsWith('audio/')) {
+      toast.error('请选择音频文件');
+      return;
+    }
+
+    setUploadingRingtone(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/ringtones/${Date.now()}.${fileExt}`;
+      
+      const { error } = await supabase.storage
+        .from('music')
+        .upload(fileName, file, { upsert: true });
+      
+      if (error) {
+        console.error('Upload ringtone error:', error);
+        toast.error('铃声上传失败');
+        return;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('music')
+        .getPublicUrl(fileName);
+      
+      setRingtoneUrl(publicUrl);
+      
+      // 直接保存到数据库
+      await supabase.from('characters').update({ ringtone_url: publicUrl }).eq('id', editingChar.id);
+      toast.success('铃声已上传');
+    } catch (err) {
+      console.error('Upload ringtone error:', err);
+      toast.error('铃声上传失败');
+    } finally {
+      setUploadingRingtone(false);
+      e.target.value = '';
+    }
+  };
+
   const createCharacter = async () => {
     if (!name.trim()) { 
       toast.error('请输入角色名'); 
@@ -150,7 +196,8 @@ const FriendsPage: React.FC = () => {
         avatar_url: finalAvatarUrl,
         history_limit: historyLimit,
         transfer_enabled: transferEnabled,
-        voice_id: voiceId || null
+        voice_id: voiceId || null,
+        ringtone_url: ringtoneUrl || null
       })
       .eq('id', editingChar.id);
     
@@ -176,6 +223,7 @@ const FriendsPage: React.FC = () => {
     setHistoryLimit(10);
     setTransferEnabled(true);
     setVoiceId('');
+    setRingtoneUrl('');
   };
 
   const openEditDialog = async (char: any) => {
@@ -187,6 +235,7 @@ const FriendsPage: React.FC = () => {
     setHistoryLimit(char.history_limit ?? 10);
     setTransferEnabled(char.transfer_enabled ?? true);
     setVoiceId(char.voice_id || '');
+    setRingtoneUrl(char.ringtone_url || '');
     setMemorySummary('');
     setOpen(true);
     
@@ -438,6 +487,52 @@ const FriendsPage: React.FC = () => {
                     <p className="text-xs text-gray-400">
                       不同TTS服务的语音ID格式不同，请参考对应服务的文档
                     </p>
+                  </div>
+                  
+                  {/* Ringtone Upload */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📞</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">来电铃声</p>
+                        <p className="text-xs text-gray-400">语音/视频通话的自定义铃声</p>
+                      </div>
+                    </div>
+                    <input
+                      ref={ringtoneInputRef}
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={handleRingtoneUpload}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 rounded-xl bg-gray-50 border-gray-200"
+                        onClick={() => ringtoneInputRef.current?.click()}
+                        disabled={uploadingRingtone}
+                      >
+                        {uploadingRingtone ? '上传中...' : (ringtoneUrl ? '更换铃声' : '上传铃声')}
+                      </Button>
+                      {ringtoneUrl && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="rounded-xl"
+                          onClick={() => {
+                            const audio = new Audio(ringtoneUrl);
+                            audio.volume = 0.5;
+                            audio.play();
+                            setTimeout(() => audio.pause(), 3000);
+                          }}
+                        >
+                          ▶️
+                        </Button>
+                      )}
+                    </div>
+                    {ringtoneUrl && (
+                      <p className="text-xs text-green-500">✓ 已设置自定义铃声</p>
+                    )}
                   </div>
                   
                   <Button 
