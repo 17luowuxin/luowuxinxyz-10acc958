@@ -458,12 +458,14 @@ const GroupChatPage: React.FC = () => {
   const friendFontColor = (customization as any).friend_font_color || '#333333';
 
 // 气泡框预设 - 带图片气泡框支持 + 头像装饰
-  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; imageUrl?: string; decorIcon?: string; decorImage?: string }> = {
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; imageUrl?: string; decorIcon?: string; decorImage?: string; backdropFilter?: string }> = {
     'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
     'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
     'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
+    // 水滴透明磨砂气泡框
+    'water-drop': { type: 'css', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,230,255,0.3) 50%, rgba(180,220,255,0.2) 100%)', borderColor: 'rgba(255,255,255,0.6)', decorIcon: '💧', backdropFilter: 'blur(12px) saturate(180%)' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
@@ -488,7 +490,12 @@ const GroupChatPage: React.FC = () => {
           backgroundColor: 'transparent',
         };
       }
-      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      const style: React.CSSProperties = { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      if (frame.backdropFilter) {
+        style.backdropFilter = frame.backdropFilter;
+        style.WebkitBackdropFilter = frame.backdropFilter;
+      }
+      return style;
     }
     return { backgroundColor: customization.bubble_color || '#FFB5C5' };
   };
@@ -505,7 +512,12 @@ const GroupChatPage: React.FC = () => {
           backgroundColor: 'transparent',
         };
       }
-      return { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      const style: React.CSSProperties = { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      if (frame.backdropFilter) {
+        style.backdropFilter = frame.backdropFilter;
+        style.WebkitBackdropFilter = frame.backdropFilter;
+      }
+      return style;
     }
     return { backgroundColor: getCharacterBubbleColor() };
   };
