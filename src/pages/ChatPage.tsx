@@ -3837,26 +3837,26 @@ const ChatPage: React.FC = () => {
         <div 
           className="fixed inset-0 z-50 flex flex-col overflow-hidden"
           style={{
-            // Voice call: glass frosted light blue-gray like reference image 1
-            // Video call: pink background like reference image 2
+            // Video call: pink background
+            // Voice call: transparent (background comes from blurred avatar)
             background: showCallDialog === 'video' 
               ? '#FFB5C5' 
-              : 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)',
+              : (character?.avatar_url ? 'transparent' : 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)'),
           }}
         >
           {/* 语音通话模糊头像背景 */}
           {showCallDialog === 'voice' && character?.avatar_url && (
-            <div className="absolute inset-0 z-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden" style={{ zIndex: -1 }}>
               <img 
                 src={character.avatar_url} 
                 alt=""
-                className="w-full h-full object-cover scale-110"
+                className="w-full h-full object-cover"
                 style={{ 
-                  filter: 'blur(50px) brightness(0.9)',
-                  transform: 'scale(1.2)',
+                  filter: 'blur(60px) brightness(0.8) saturate(1.2)',
+                  transform: 'scale(1.3)',
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/30" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/40" />
             </div>
           )}
           {/* 隐藏的视频上传input */}
