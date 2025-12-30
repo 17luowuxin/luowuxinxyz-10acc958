@@ -3965,44 +3965,34 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
-            {/* 通话消息区域 - 只显示当前最新消息，不累积 */}
+            {/* 通话消息区域 - 只显示纯文字，不用气泡 */}
             {inCall && (
-              <div className="flex-1 flex flex-col items-center justify-center px-4">
+              <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
                 {/* 只显示最后一条用户消息 */}
                 {callMessages.length > 0 && callMessages.filter(m => m.role === 'user').slice(-1).map((msg, idx) => (
-                  <div 
+                  <p 
                     key={`user-${idx}`}
-                    className="mb-3 max-w-[85%]"
+                    className="text-center text-sm opacity-70"
+                    style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
                   >
-                    <div 
-                      className="px-4 py-2 rounded-2xl text-sm bg-blue-500 text-white rounded-br-sm"
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
+                    {msg.content}
+                  </p>
                 ))}
                 {/* 只显示最后一条AI消息 */}
                 {callMessages.length > 0 && callMessages.filter(m => m.role === 'assistant').slice(-1).map((msg, idx) => (
-                  <div 
+                  <p 
                     key={`ai-${idx}`}
-                    className="max-w-[85%]"
+                    className="text-center text-lg font-medium"
+                    style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
                   >
-                    <div 
-                      className="px-4 py-3 rounded-2xl text-base bg-white/90 text-gray-800 rounded-bl-sm shadow-sm"
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
+                    {msg.content}
+                  </p>
                 ))}
                 {callLoading && (
-                  <div className="mt-3">
-                    <div className="bg-white/90 px-4 py-2 rounded-2xl rounded-bl-sm shadow-sm">
-                      <span className="inline-flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '0ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
+                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '150ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
+                    <span className="w-2 h-2 bg-current rounded-full animate-bounce opacity-60" style={{ animationDelay: '300ms', color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }} />
                   </div>
                 )}
               </div>
