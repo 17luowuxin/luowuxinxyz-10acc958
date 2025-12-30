@@ -16,6 +16,7 @@ import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, 
 import { useSpeechToText } from '@/hooks/useSpeechToText';
 import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 import VoiceWaveform from '@/components/chat/VoiceWaveform';
+import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -190,6 +191,9 @@ const ChatPage: React.FC = () => {
   const callMessagesEndRef = useRef<HTMLDivElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null); // 当前播放的音频
   const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null); // 来电铃声音频
+
+  // 音频播放队列 - 确保语音串行播放
+  const audioQueue = useAudioPlaybackQueue();
 
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -1885,11 +1889,10 @@ const ChatPage: React.FC = () => {
               let audioBase64: string | null = null;
               if (ttsConfig?.enabled && voiceMode === 'always') {
                 audioBase64 = await generateTTSAudio(msgContent);
-                // 自动播放语音
+                // 使用音频队列串行播放
                 if (audioBase64) {
                   const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
-                  const audio = new Audio(audioUrl);
-                  audio.play().catch(console.error);
+                  audioQueue.enqueue({ src: audioUrl }).catch(console.error);
                 }
               }
               
@@ -1978,11 +1981,10 @@ const ChatPage: React.FC = () => {
         let audioBase64: string | null = null;
         if (ttsConfig?.enabled && voiceMode === 'always') {
           audioBase64 = await generateTTSAudio(cleanContent);
-          // 自动播放语音
+          // 使用音频队列串行播放
           if (audioBase64) {
             const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
-            const audio = new Audio(audioUrl);
-            audio.play().catch(console.error);
+            audioQueue.enqueue({ src: audioUrl }).catch(console.error);
           }
         }
         
@@ -2437,8 +2439,11 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 接听通话 - 自动开启语音识别
+  // 接听通话 - 先解锁音频，自动开启语音识别
   const answerCall = async () => {
+    // 先解锁音频自动播放（用户手势触发）
+    await audioQueue.unlock();
+    
     // 停止来电铃声
     if (ringtoneAudioRef.current) {
       (ringtoneAudioRef.current as any).stop?.();
@@ -2457,7 +2462,7 @@ const ChatPage: React.FC = () => {
     
     setCallMessages([{ role: 'assistant', content: greeting }]);
     
-    // 播放开场白TTS
+    // 播放开场白TTS（使用队列）
     if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
       try {
         setIsAISpeaking(true);
@@ -2480,27 +2485,27 @@ const ChatPage: React.FC = () => {
         const ttsData = await ttsResp.json();
         if (ttsData.audioContent) {
           const audioUrl = `data:audio/mpeg;base64,${ttsData.audioContent}`;
-          const audio = new Audio(audioUrl);
-          currentAudioRef.current = audio;
-          
-          audio.onended = () => {
+          // 使用队列播放，完成后开始语音识别
+          audioQueue.enqueue({
+            src: audioUrl,
+            onEnd: () => {
+              setIsAISpeaking(false);
+              if (speechToText.isSupported && !speechToText.isListening) {
+                speechToText.start();
+              }
+            },
+            onError: () => {
+              setIsAISpeaking(false);
+              if (speechToText.isSupported && !speechToText.isListening) {
+                speechToText.start();
+              }
+            },
+          }).catch(() => {
             setIsAISpeaking(false);
-            currentAudioRef.current = null;
-            // 开场白播放完毕后开始语音识别
             if (speechToText.isSupported && !speechToText.isListening) {
               speechToText.start();
             }
-          };
-          audio.onerror = () => {
-            setIsAISpeaking(false);
-            currentAudioRef.current = null;
-            // 即使出错也开始识别
-            if (speechToText.isSupported && !speechToText.isListening) {
-              speechToText.start();
-            }
-          };
-          
-          await audio.play();
+          });
         } else {
           setIsAISpeaking(false);
           // 没有语音则直接开始识别
@@ -2524,56 +2529,28 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 结束通话 - 保存对话记录到聊天历史
-  const endCall = async () => {
-    // 停止来电铃声
+  // 结束通话 - 立即关闭UI，后台保存记录
+  const endCall = () => {
+    // 立即停止所有音频和铃声
+    audioQueue.stop();
     if (ringtoneAudioRef.current) {
       (ringtoneAudioRef.current as any).stop?.();
       ringtoneAudioRef.current = null;
     }
-    
-    // 保存通话记录到聊天历史
-    if (callMessages.length > 0 && user?.id && characterId) {
-      const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
-      const durationStr = formatCallDuration(callDuration);
-      
-      // 将通话消息保存到聊天记录
-      for (const msg of callMessages) {
-        await supabase.from('chat_messages').insert({
-          user_id: user.id,
-          character_id: characterId,
-          role: msg.role,
-          content: msg.content,
-          audio_url: msg.audioBase64 || null
-        });
-      }
-      
-      // 添加通话结束系统消息
-      const endMsg = `[${callType}] 通话时长 ${durationStr}`;
-      await supabase.from('chat_messages').insert({
-        user_id: user.id,
-        character_id: characterId,
-        role: 'assistant',
-        content: endMsg
-      });
-      
-      // 更新本地消息列表
-      setMessages(prev => [
-        ...prev,
-        ...callMessages.map((m, i) => ({ id: Date.now() + i, role: m.role, content: m.content, audioBase64: m.audioBase64 })),
-        { id: Date.now() + callMessages.length, role: 'assistant', content: endMsg }
-      ]);
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    if (speechToText.isListening) {
+      speechToText.stop();
     }
     
-    // 播放挂断音效
-    try {
-      const hangupAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleC4DELI+lllQgJe7wJFECABX0OvYtIhWIB1ittbapnJHLjpYtuzknG5MKRNcqMzEkEMVFHy/18qVXicSLZfCu5dkQCIIAES7z8SMUC8NGXnIyqFqOxoJSKfU1a1wMREFVsrczJlTGQxhxNfPnUoVBlix0tKbVB4La8/i1JVPGhJvy+XXjEkZD2jI5NmMRhgScNXo3YY4Dxl61ePZgC0OIoDZ5diCMxETesnm04U2FRR1zOjYi0cbD2rF5teQTRoTbsvn2I9LGxJuzOfWjkwaEW7L5tiOShsRbcvn1o5LGxFuy+fWjksaEW3L59aOSxsRbcvn1o5KGxFty+bWj0sbEW7L59ePShsRbsvm1o9LGxFty+fWjkobEW7L59aOSxsRbsvm1o9LGxFuy+bWj0sbEW7L5taPSxoRbsvm1o9LGhFuy+bWj0saEW7L5taPSxoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGg==');
-      hangupAudio.volume = 0.5;
-      await hangupAudio.play();
-    } catch (err) {
-      console.log('Hangup sound skipped');
-    }
+    // 缓存需要保存的数据
+    const msgsToSave = [...callMessages];
+    const callTypeToSave = showCallDialog === 'video' ? '视频通话' : '语音通话';
+    const durationToSave = callDuration;
     
+    // 立即关闭UI
     setShowCallDialog(null);
     setInCall(false);
     setCallRinging(false);
@@ -2584,14 +2561,44 @@ const ChatPage: React.FC = () => {
     setCallVideoPlaying(false);
     setIsAISpeaking(false);
     setInterimTranscript('');
-    // 停止当前播放的音频
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
-    // 停止语音识别
-    if (speechToText.isListening) {
-      speechToText.stop();
+    
+    // 播放挂断音效（非阻塞）
+    try {
+      const hangupAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleC4DELI+lllQgJe7wJFECABX0OvYtIhWIB1ittbapnJHLjpYtuzknG5MKRNcqMzEkEMVFHy/18qVXicSLZfCu5dkQCIIAES7z8SMUC8NGXnIyqFqOxoJSKfU1a1wMREFVsrczJlTGQxhxNfPnUoVBlix0tKbVB4La8/i1JVPGhJvy+XXjEkZD2jI5NmMRhgScNXo3YY4Dxl61ePZgC0OIoDZ5diCMxETesnm04U2FRR1zOjYi0cbD2rF5teQTRoTbsvn2I9LGxJuzOfWjkwaEW7L5tiOShsRbcvn1o5LGxFuy+fWjksaEW3L59aOSxsRbcvn1o5KGxFty+bWj0sbEW7L59ePShsRbsvm1o9LGxFty+fWjkobEW7L59aOSxsRbsvm1o9LGxFuy+bWj0sbEW7L5taPSxoRbsvm1o9LGhFuy+bWj0saEW7L5taPSxoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGg==');
+      hangupAudio.volume = 0.5;
+      hangupAudio.play().catch(() => {});
+    } catch {}
+    
+    // 后台保存通话记录（非阻塞）
+    if (msgsToSave.length > 0 && user?.id && characterId) {
+      const durationStr = formatCallDuration(durationToSave);
+      const endMsg = `[${callTypeToSave}] 通话时长 ${durationStr}`;
+      
+      // 更新本地消息列表（立即）
+      setMessages(prev => [
+        ...prev,
+        ...msgsToSave.map((m, i) => ({ id: Date.now() + i, role: m.role, content: m.content, audioBase64: m.audioBase64 })),
+        { id: Date.now() + msgsToSave.length, role: 'assistant', content: endMsg }
+      ]);
+      
+      // 后台保存到数据库（不等待）
+      (async () => {
+        for (const msg of msgsToSave) {
+          await supabase.from('chat_messages').insert({
+            user_id: user.id,
+            character_id: characterId,
+            role: msg.role,
+            content: msg.content,
+            audio_url: msg.audioBase64 || null
+          });
+        }
+        await supabase.from('chat_messages').insert({
+          user_id: user.id,
+          character_id: characterId,
+          role: 'assistant',
+          content: endMsg
+        });
+      })().catch(console.error);
     }
   };
 
@@ -2791,16 +2798,28 @@ const ChatPage: React.FC = () => {
         // 调试日志
         console.log('TTS check - enabled:', ttsConfig?.enabled, 'apiKey:', !!ttsConfig?.apiKey, 'baseUrl:', !!ttsConfig?.baseUrl, 'voice_id:', character?.voice_id);
         
+        // 恢复语音识别的辅助函数
+        const resumeSpeechRecognition = () => {
+          setIsAISpeaking(false);
+          if (speechToText.isSupported && inCall && !speechToText.isListening) {
+            setTimeout(() => speechToText.start(), 200);
+          }
+        };
+        
         if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
+          // 暂停语音识别，避免识别到AI说话的声音
+          if (speechToText.isListening) {
+            speechToText.stop();
+          }
+          setIsAISpeaking(true);
+          
+          console.log('Generating TTS for:', assistantContent.slice(0, 50));
+          
+          // TTS请求带超时（8秒）
+          const ttsController = new AbortController();
+          const ttsTimeout = setTimeout(() => ttsController.abort(), 8000);
+          
           try {
-            // 暂停语音识别，避免识别到AI说话的声音
-            if (speechToText.isListening) {
-              speechToText.stop();
-            }
-            setIsAISpeaking(true);
-            
-            console.log('Generating TTS for:', assistantContent.slice(0, 50));
-            
             const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
               method: 'POST',
               headers: {
@@ -2816,94 +2835,48 @@ const ChatPage: React.FC = () => {
                   model: ttsConfig.model,
                 },
               }),
+              signal: ttsController.signal,
             });
+            clearTimeout(ttsTimeout);
             
             const ttsData = await ttsResp.json();
             console.log('TTS response:', ttsResp.ok, 'hasAudio:', !!ttsData.audioContent, 'error:', ttsData.error);
             
             if (ttsData.audioContent) {
               audioBase64 = ttsData.audioContent;
-              // 自动播放语音
+              // 使用队列播放语音
               const audioUrl = `data:audio/mpeg;base64,${ttsData.audioContent}`;
-              const audio = new Audio(audioUrl);
-              currentAudioRef.current = audio;
+              console.log('Playing TTS audio via queue...');
               
-              // 播放完成后恢复语音识别
-              audio.onended = () => {
-                console.log('TTS playback ended, resuming speech recognition');
-                setIsAISpeaking(false);
-                currentAudioRef.current = null;
-                // 恢复语音识别
-                if (speechToText.isSupported && inCall) {
-                  setTimeout(() => {
-                    if (!speechToText.isListening) {
-                      speechToText.start();
-                    }
-                  }, 300);
-                }
-              };
-              audio.onerror = (e) => {
-                console.error('TTS playback error:', e);
-                setIsAISpeaking(false);
-                currentAudioRef.current = null;
-                // 恢复语音识别
-                if (speechToText.isSupported && inCall) {
-                  setTimeout(() => {
-                    if (!speechToText.isListening) {
-                      speechToText.start();
-                    }
-                  }, 300);
-                }
-              };
-              
-              console.log('Playing TTS audio...');
-              audio.play().catch((err) => {
-                console.error('TTS play error:', err);
-                setIsAISpeaking(false);
-                currentAudioRef.current = null;
-                // 恢复语音识别
-                if (speechToText.isSupported && inCall) {
-                  setTimeout(() => {
-                    if (!speechToText.isListening) {
-                      speechToText.start();
-                    }
-                  }, 300);
-                }
-              });
+              audioQueue.enqueue({
+                src: audioUrl,
+                onEnd: () => {
+                  console.log('TTS playback ended, resuming speech recognition');
+                  resumeSpeechRecognition();
+                },
+                onError: () => {
+                  console.error('TTS playback error');
+                  resumeSpeechRecognition();
+                },
+              }).catch(() => resumeSpeechRecognition());
             } else {
               console.log('No audio content in TTS response');
-              setIsAISpeaking(false);
-              // 没有语音也恢复识别
-              if (speechToText.isSupported && inCall) {
-                setTimeout(() => {
-                  if (!speechToText.isListening) {
-                    speechToText.start();
-                  }
-                }, 300);
-              }
+              resumeSpeechRecognition();
             }
-          } catch (err) {
-            console.error('TTS generation error:', err);
-            setIsAISpeaking(false);
-            // 出错也恢复识别
-            if (speechToText.isSupported && inCall) {
-              setTimeout(() => {
-                if (!speechToText.isListening) {
-                  speechToText.start();
-                }
-              }, 300);
+          } catch (err: any) {
+            clearTimeout(ttsTimeout);
+            if (err.name === 'AbortError') {
+              console.log('TTS request timed out');
+              toast.error('语音生成超时');
+            } else {
+              console.error('TTS generation error:', err);
             }
+            resumeSpeechRecognition();
           }
         } else {
           console.log('TTS not configured or missing voice_id');
           // 没有TTS配置，直接恢复识别
-          if (speechToText.isSupported && inCall) {
-            setTimeout(() => {
-              if (!speechToText.isListening) {
-                speechToText.start();
-              }
-            }, 300);
-          }
+          resumeSpeechRecognition();
         }
         setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent, audioBase64 }]);
       }
@@ -2913,7 +2886,7 @@ const ChatPage: React.FC = () => {
     }
 
     setCallLoading(false);
-  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, speechToText, inCall]);
+  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, speechToText, inCall, audioQueue]);
 
   // 更新自动发送函数引用
   useEffect(() => {
