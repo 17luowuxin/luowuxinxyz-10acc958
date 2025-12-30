@@ -26,8 +26,8 @@ const bubbleFramePresets = [
   { id: 'cute-yellow', name: '柠檬黄', type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorColor: '#FFD93D', decorIcon: '⭐', decorImage: '' },
   { id: 'cute-green', name: '薄荷绿', type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀', decorImage: '' },
   { id: 'cute-purple', name: '梦幻紫', type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜', decorImage: '' },
-  // 水滴透明磨砂气泡框
-  { id: 'water-drop', name: '水滴磨砂', type: 'css', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,230,255,0.3) 50%, rgba(180,220,255,0.2) 100%)', borderColor: 'rgba(255,255,255,0.6)', decorColor: '#87CEEB', decorIcon: '', decorImage: '' },
+  // 水滴透明磨砂气泡框 - 立体效果
+  { id: 'water-drop', name: '水滴磨砂', type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.6) 0%, rgba(220,240,255,0.4) 30%, rgba(180,220,255,0.25) 70%, rgba(150,200,255,0.15) 100%)', borderColor: 'rgba(255,255,255,0.7)', decorColor: '#87CEEB', decorIcon: '', decorImage: '', boxShadow: 'inset 0 2px 8px rgba(255,255,255,0.5), inset 0 -2px 6px rgba(100,180,255,0.2), 0 4px 12px rgba(100,150,200,0.25), 0 1px 3px rgba(0,0,0,0.1)' },
   // 带卡通头像装饰的黑红渐变气泡框
   { id: 'anime-head', name: '动漫头像', type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorColor: '', decorIcon: '', decorImage: animeHeadDecor },
 ];
