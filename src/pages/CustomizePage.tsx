@@ -46,6 +46,7 @@ const bubbleStyles = [
   { id: 'rounded', label: '圆润' },
   { id: 'cloud', label: '云朵' },
   { id: 'square', label: '方正' },
+  { id: 'glass', label: '玻璃' },
 ];
 
 // Theme options
