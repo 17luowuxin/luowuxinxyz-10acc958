@@ -530,6 +530,7 @@ const FriendsPage: React.FC = () => {
                         </Button>
                       )}
                     </div>
+                    <p className="text-xs text-gray-400">建议上传5-15秒的音频文件</p>
                     {ringtoneUrl && (
                       <p className="text-xs text-green-500">✓ 已设置自定义铃声</p>
                     )}

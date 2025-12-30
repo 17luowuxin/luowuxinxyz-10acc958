@@ -2005,7 +2005,7 @@ const ChatPage: React.FC = () => {
         
         // 角色语音输出（sometimes模式时随机播放，不生成语音气泡）
         if (ttsConfig?.enabled && voiceMode === 'sometimes') {
-          const shouldPlay = Math.random() < 0.35; // 35%几率
+          const shouldPlay = Math.random() < 0.5; // 50%几率
           console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig:', !!ttsConfig, 'shouldPlay:', shouldPlay);
           if (shouldPlay) {
             playTTS(cleanContent);
@@ -3836,28 +3836,37 @@ const ChatPage: React.FC = () => {
       {showCallDialog && (
         <div 
           className="fixed inset-0 z-50 flex flex-col overflow-hidden"
-          style={{
-            // Video call: pink background
-            // Voice call: transparent (background comes from blurred avatar)
-            background: showCallDialog === 'video' 
-              ? '#FFB5C5' 
-              : (character?.avatar_url ? 'transparent' : 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)'),
-          }}
         >
-          {/* 语音通话模糊头像背景 */}
-          {showCallDialog === 'voice' && character?.avatar_url && (
-            <div className="absolute inset-0 overflow-hidden" style={{ zIndex: -1 }}>
-              <img 
-                src={character.avatar_url} 
-                alt=""
-                className="w-full h-full object-cover"
-                style={{ 
-                  filter: 'blur(60px) brightness(0.8) saturate(1.2)',
-                  transform: 'scale(1.3)',
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/40" />
+          {/* 语音通话模糊头像背景 - 完全覆盖 */}
+          {showCallDialog === 'voice' && (
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              {character?.avatar_url ? (
+                <>
+                  <img 
+                    src={character.avatar_url} 
+                    alt=""
+                    className="w-full h-full object-cover"
+                    style={{ 
+                      filter: 'blur(60px) brightness(0.7) saturate(1.3)',
+                      transform: 'scale(1.4)',
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50" />
+                </>
+              ) : (
+                <div 
+                  className="w-full h-full"
+                  style={{ background: 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)' }}
+                />
+              )}
             </div>
+          )}
+          {/* 视频通话背景 */}
+          {showCallDialog === 'video' && (
+            <div 
+              className="absolute inset-0 z-0"
+              style={{ background: '#FFB5C5' }}
+            />
           )}
           {/* 隐藏的视频上传input */}
           <input
