@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -194,6 +195,69 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
     return (data?.choices?.[0]?.message?.content as string | undefined)?.trim() || '';
   };
 
+  const toDataUrl = async (url: string): Promise<string | null> => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const ct = r.headers.get('content-type') || 'image/jpeg';
+      const buf = new Uint8Array(await r.arrayBuffer());
+      // 防止拉取过大的图片导致函数超时/内存飙升
+      if (buf.byteLength > 2_500_000) return null;
+      return `data:${ct};base64,${encodeBase64(buf)}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const callVision = async (apiUrl: string, headers: Record<string, string>, model: string, img: string, imageUrlShape: 'object' | 'string') => {
+    const imagePart =
+      imageUrlShape === 'string'
+        ? { type: 'image_url', image_url: img }
+        : { type: 'image_url', image_url: { url: img } };
+
+    let response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: visionPrompt }, imagePart],
+          },
+        ],
+        max_tokens: 80,
+        stream: false,
+      }),
+    });
+
+    if (response.status === 400) {
+      // 某些 OpenAI 兼容实现不支持 max_tokens/stream 或 content 结构，最小参数重试
+      response = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: visionPrompt }, imagePart],
+            },
+          ],
+        }),
+      });
+    }
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.error('Vision API error:', response.status, t.slice(0, 600));
+      return '';
+    }
+
+    const content = await tryParseContent(response);
+    return content;
+  };
+
   // 1) 优先走用户配置（你填的“可识别图片”的模型就能真正派上用场）
   try {
     const canUseUserVision =
@@ -202,70 +266,39 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
       (config.provider !== 'custom' || !!config.baseUrl);
 
     if (canUseUserVision) {
-      let apiUrl = '';
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
       };
 
-      let model = config.model || (config.provider === 'openai' ? 'gpt-4o-mini' : 'deepseek-chat');
-
-      if (config.provider === 'custom') {
-        let baseUrl = (config.baseUrl || '').replace(/\/+$/, '');
-        if (!baseUrl.endsWith('/chat/completions')) baseUrl = `${baseUrl}/chat/completions`;
-        apiUrl = baseUrl;
-      } else {
-        apiUrl = 'https://api.openai.com/v1/chat/completions';
-      }
+      const model = config.model || (config.provider === 'openai' ? 'gpt-4o-mini' : 'deepseek-chat');
+      const apiUrl =
+        config.provider === 'custom'
+          ? (() => {
+              let baseUrl = (config.baseUrl || '').replace(/\/+$/, '');
+              if (!baseUrl.endsWith('/chat/completions')) baseUrl = `${baseUrl}/chat/completions`;
+              return baseUrl;
+            })()
+          : 'https://api.openai.com/v1/chat/completions';
 
       console.log('Vision via user provider:', config.provider, 'model:', model);
 
-      let response = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: visionPrompt },
-                { type: 'image_url', image_url: { url: imageUrl } },
-              ],
-            },
-          ],
-          max_tokens: 80,
-          stream: false,
-        }),
-      });
+      // A) 先按 OpenAI 官方结构尝试（image_url: { url }）
+      let content = await callVision(apiUrl, headers, model, imageUrl, 'object');
 
-      if (response.status === 400) {
-        console.log('Vision user provider 400, retry minimal params...');
-        response = await fetch(apiUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: visionPrompt },
-                  { type: 'image_url', image_url: { url: imageUrl } },
-                ],
-              },
-            ],
-          }),
-        });
+      // B) 有些兼容实现需要 image_url 直接是字符串
+      if (!content) content = await callVision(apiUrl, headers, model, imageUrl, 'string');
+
+      // C) 如果对方模型无法抓取公网 URL，则转 data URL 再试一次
+      if (!content) {
+        const dataUrl = await toDataUrl(imageUrl);
+        if (dataUrl) {
+          content = await callVision(apiUrl, headers, model, dataUrl, 'object');
+          if (!content) content = await callVision(apiUrl, headers, model, dataUrl, 'string');
+        }
       }
 
-      if (response.ok) {
-        const content = await tryParseContent(response);
-        if (content) return content;
-      } else {
-        const t = await response.text();
-        console.error('User vision API error:', response.status, t.slice(0, 400));
-      }
+      if (content) return content;
     }
   } catch (err) {
     console.error('User vision error:', err);
