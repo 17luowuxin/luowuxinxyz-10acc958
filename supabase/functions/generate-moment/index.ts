@@ -453,6 +453,22 @@ ${conversationContext}
 - 简短自然，像朋友评论
 - 可以使用emoji
 - 1-2句话`;
+    } else if (type === "guestbook-reply") {
+      // 留言板回复 - 更简短亲切
+      const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
+      
+      prompt = `你是一个名叫"${character.name}"的虚拟角色。
+${character.persona ? `你的人设是: ${character.persona}` : ''}
+
+你的好友在留言板给你留言："${userPost}"
+${userPersona ? `关于这位好友: ${userPersona}` : ''}
+
+请以你的角色身份回复这条留言。要求：
+- 符合你的角色性格和说话方式
+- 亲切自然，像好朋友聊天
+- 偶尔叫"${shortName}"或用亲昵称呼
+- 可以使用emoji
+- 1-2句话`;
     }
 
     // 日志：显示实际使用的API
