@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Send, Settings, User, AtSign, Smile, Trash2, RotateCcw, MoreVertical, Upload, Image, Quote } from 'lucide-react';
+import { ChevronLeft, Send, Settings, User, AtSign, Smile, Trash2, RotateCcw, MoreVertical, Upload, Image, Quote, Flame, Sliders } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -96,6 +96,16 @@ const GroupChatPage: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   
   const bgInputRef = useRef<HTMLInputElement>(null);
+  
+  // 热闹模式和角色互动设置
+  const [livelyMode, setLivelyMode] = useState(false);
+  const [interactionSettings, setInteractionSettings] = useState({
+    maxRounds: 3,
+    firstTriggerChance: 50, // 百分比
+    continueChanceBase: 40, // 百分比
+    continueChanceDecay: 10 // 每轮递减百分比
+  });
+  const [showInteractionSettings, setShowInteractionSettings] = useState(false);
 
   useEffect(() => {
     if (user && groupId) {
@@ -426,17 +436,24 @@ const GroupChatPage: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      // 角色回角色功能：连续多轮互动
+      // 角色回角色功能：连续多轮互动（根据设置调整）
       if (lastCharacterResponse && members.length > 1) {
-        const maxRounds = 3; // 最多互动轮数
+        // 热闹模式下提高概率和轮数
+        const settings = livelyMode ? {
+          maxRounds: Math.min(interactionSettings.maxRounds + 2, 8),
+          firstTriggerChance: Math.min(interactionSettings.firstTriggerChance + 30, 95),
+          continueChanceBase: Math.min(interactionSettings.continueChanceBase + 20, 80),
+          continueChanceDecay: Math.max(interactionSettings.continueChanceDecay - 5, 5)
+        } : interactionSettings;
+        
         let currentRound = 0;
-        let continueInteraction = Math.random() < 0.5; // 50%概率触发第一轮
+        let continueInteraction = Math.random() < (settings.firstTriggerChance / 100);
         let currentTrigger = lastCharacterResponse;
 
-        while (continueInteraction && currentRound < maxRounds) {
+        while (continueInteraction && currentRound < settings.maxRounds) {
           currentRound++;
-          console.log(`Character-to-character round ${currentRound}...`);
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          console.log(`Character-to-character round ${currentRound}/${settings.maxRounds}...`);
+          await new Promise(resolve => setTimeout(resolve, livelyMode ? 800 : 1200));
           
           const c2cBody: any = {
             messages: currentMessages.map((m: any) => ({
@@ -479,7 +496,6 @@ const GroupChatPage: React.FC = () => {
                   characterAvatar: c2cMsg.characters?.avatar_url
                 }]);
                 
-                // 更新当前消息列表和触发者
                 currentMessages.push({
                   sender_type: 'character',
                   content: c2cResponse.content,
@@ -488,8 +504,8 @@ const GroupChatPage: React.FC = () => {
                 currentTrigger = c2cResponse;
                 
                 // 递减概率决定是否继续
-                const continueChance = 0.4 - (currentRound * 0.1); // 40% -> 30% -> 20%
-                continueInteraction = Math.random() < continueChance;
+                const continueChance = (settings.continueChanceBase - (currentRound * settings.continueChanceDecay)) / 100;
+                continueInteraction = Math.random() < Math.max(continueChance, 0.05);
               } else {
                 continueInteraction = false;
               }
@@ -686,6 +702,10 @@ const GroupChatPage: React.FC = () => {
               <Image className="w-4 h-4 mr-2" />
               更换群聊背景
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowInteractionSettings(true)}>
+              <Sliders className="w-4 h-4 mr-2" />
+              角色互动设置
+            </DropdownMenuItem>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
@@ -709,24 +729,117 @@ const GroupChatPage: React.FC = () => {
         <input ref={bgInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
       </div>
 
-      {/* Member avatars */}
+      {/* Member avatars + Lively Mode Toggle */}
       <div className="flex items-center gap-2 p-3 bg-muted/50 overflow-x-auto no-scrollbar">
-        {members.map((member) => (
-          <div key={member.id} className="flex flex-col items-center gap-1 min-w-fit">
-            <div 
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white overflow-hidden"
-              style={{ backgroundColor: getCharacterAvatarColor(member.id) }}
-            >
-              {member.avatar_url ? (
-                <img src={member.avatar_url} className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-5 h-5" />
-              )}
+        <div className="flex items-center gap-2 flex-1">
+          {members.map((member) => (
+            <div key={member.id} className="flex flex-col items-center gap-1 min-w-fit">
+              <div 
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white overflow-hidden"
+                style={{ backgroundColor: getCharacterAvatarColor(member.id) }}
+              >
+                {member.avatar_url ? (
+                  <img src={member.avatar_url} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-5 h-5" />
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground max-w-[50px] truncate">{member.name}</span>
             </div>
-            <span className="text-xs text-muted-foreground max-w-[50px] truncate">{member.name}</span>
-          </div>
-        ))}
+          ))}
+        </div>
+        
+        {/* 热闹模式开关 */}
+        <button
+          onClick={() => setLivelyMode(!livelyMode)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
+            livelyMode 
+              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/30' 
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          <Flame className={`w-3.5 h-3.5 ${livelyMode ? 'animate-pulse' : ''}`} />
+          热闹模式
+        </button>
       </div>
+
+      {/* 角色互动设置面板 */}
+      <AnimatePresence>
+        {showInteractionSettings && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-card border-b overflow-hidden"
+          >
+            <div className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">角色互动设置</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowInteractionSettings(false)}>
+                  关闭
+                </Button>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">最大互动轮数: {interactionSettings.maxRounds}轮</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="8"
+                    value={interactionSettings.maxRounds}
+                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, maxRounds: parseInt(e.target.value) }))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">首次触发概率: {interactionSettings.firstTriggerChance}%</label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    value={interactionSettings.firstTriggerChance}
+                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, firstTriggerChance: parseInt(e.target.value) }))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">继续互动基础概率: {interactionSettings.continueChanceBase}%</label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="80"
+                    step="5"
+                    value={interactionSettings.continueChanceBase}
+                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, continueChanceBase: parseInt(e.target.value) }))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">每轮递减: {interactionSettings.continueChanceDecay}%</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="5"
+                    value={interactionSettings.continueChanceDecay}
+                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, continueChanceDecay: parseInt(e.target.value) }))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                💡 开启「热闹模式」后，轮数+2、首次触发+30%、继续概率+20%
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Messages */}
       <div 
