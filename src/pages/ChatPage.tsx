@@ -2304,14 +2304,14 @@ const ChatPage: React.FC = () => {
   const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
   
 // 气泡框预设 - 带三丽鸥装饰 + 头像装饰
-  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string; decorImage?: string; backdropFilter?: string }> = {
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string; decorImage?: string; backdropFilter?: string; boxShadow?: string }> = {
     'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
     'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
     'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
-    // 水滴透明磨砂气泡框
-    'water-drop': { type: 'css', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,230,255,0.3) 50%, rgba(180,220,255,0.2) 100%)', borderColor: 'rgba(255,255,255,0.6)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)' },
+    // 水滴透明磨砂气泡框 - 立体效果
+    'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.6) 0%, rgba(220,240,255,0.4) 30%, rgba(180,220,255,0.25) 70%, rgba(150,200,255,0.15) 100%)', borderColor: 'rgba(255,255,255,0.7)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 2px 8px rgba(255,255,255,0.5), inset 0 -2px 6px rgba(100,180,255,0.2), 0 4px 12px rgba(100,150,200,0.25), 0 1px 3px rgba(0,0,0,0.1)' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
@@ -2352,6 +2352,9 @@ const ChatPage: React.FC = () => {
       if (frame.backdropFilter) {
         style.backdropFilter = frame.backdropFilter;
         style.WebkitBackdropFilter = frame.backdropFilter;
+      }
+      if (frame.boxShadow) {
+        style.boxShadow = frame.boxShadow;
       }
       return style;
     }
