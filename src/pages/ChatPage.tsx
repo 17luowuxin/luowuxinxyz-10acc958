@@ -3837,28 +3837,33 @@ const ChatPage: React.FC = () => {
         <div 
           className="fixed inset-0 z-50 flex flex-col overflow-hidden"
         >
-          {/* 语音通话模糊头像背景 - 完全覆盖 */}
+          {/* 语音通话模糊头像背景 - 完全覆盖（不透出聊天页） */}
           {showCallDialog === 'voice' && (
             <div className="absolute inset-0 z-0 overflow-hidden">
+              {/* 底色：即使头像是透明PNG也不会透出底下页面 */}
+              <div className="absolute inset-0 bg-foreground" />
+
               {character?.avatar_url ? (
-                <>
-                  <img 
-                    src={character.avatar_url} 
-                    alt=""
-                    className="w-full h-full object-cover"
-                    style={{ 
-                      filter: 'blur(60px) brightness(0.7) saturate(1.3)',
-                      transform: 'scale(1.4)',
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50" />
-                </>
-              ) : (
-                <div 
-                  className="w-full h-full"
-                  style={{ background: 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)' }}
+                <img
+                  src={character.avatar_url}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{
+                    filter: 'blur(64px) brightness(0.7) saturate(1.3)',
+                    transform: 'scale(1.5)',
+                  }}
+                  onError={(e) => {
+                    // 图片加载失败也不要露出底页
+                    e.currentTarget.style.display = 'none';
+                    console.log('[call-bg] avatar load failed:', character?.avatar_url);
+                  }}
                 />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-b from-background via-muted to-muted" />
               )}
+
+              {/* 罩层：压暗以更像系统来电界面 */}
+              <div className="absolute inset-0 bg-gradient-to-b from-foreground/70 via-foreground/40 to-foreground/80" />
             </div>
           )}
           {/* 视频通话背景 */}
