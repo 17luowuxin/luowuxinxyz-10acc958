@@ -189,6 +189,7 @@ const ChatPage: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const callMessagesEndRef = useRef<HTMLDivElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null); // 当前播放的音频
+  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null); // 来电铃声音频
 
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -2393,10 +2394,57 @@ const ChatPage: React.FC = () => {
     // 加载已保存的视频URL
     setCallVideoUrl(savedCallVideoUrl);
     setCallVideoPlaying(false);
+    
+    // 播放来电铃声
+    try {
+      // 使用Web Audio API生成铃声
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playRingtone = () => {
+        if (!callRinging) return;
+        
+        // 创建简单的铃声音调
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+        oscillator.type = 'sine';
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+      };
+      
+      // 立即播放一次
+      playRingtone();
+      
+      // 设置循环铃声
+      const ringtoneInterval = setInterval(() => {
+        if (ringtoneAudioRef.current === null) {
+          clearInterval(ringtoneInterval);
+          return;
+        }
+        playRingtone();
+      }, 1500);
+      
+      // 保存interval ID用于停止
+      ringtoneAudioRef.current = { stop: () => clearInterval(ringtoneInterval) } as any;
+    } catch (err) {
+      console.log('Ringtone playback failed:', err);
+    }
   };
 
   // 接听通话 - 自动开启语音识别
   const answerCall = async () => {
+    // 停止来电铃声
+    if (ringtoneAudioRef.current) {
+      (ringtoneAudioRef.current as any).stop?.();
+      ringtoneAudioRef.current = null;
+    }
+    
     setCallRinging(false);
     setInCall(true);
     setCallStartTime(Date.now());
@@ -2478,6 +2526,12 @@ const ChatPage: React.FC = () => {
 
   // 结束通话 - 保存对话记录到聊天历史
   const endCall = async () => {
+    // 停止来电铃声
+    if (ringtoneAudioRef.current) {
+      (ringtoneAudioRef.current as any).stop?.();
+      ringtoneAudioRef.current = null;
+    }
+    
     // 保存通话记录到聊天历史
     if (callMessages.length > 0 && user?.id && characterId) {
       const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
@@ -2733,10 +2787,19 @@ const ChatPage: React.FC = () => {
       if (assistantContent) {
         // 尝试生成语音并自动播放
         let audioBase64: string | undefined;
-        if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character.voice_id) {
+        
+        // 调试日志
+        console.log('TTS check - enabled:', ttsConfig?.enabled, 'apiKey:', !!ttsConfig?.apiKey, 'baseUrl:', !!ttsConfig?.baseUrl, 'voice_id:', character?.voice_id);
+        
+        if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
           try {
             // 暂停语音识别，避免识别到AI说话的声音
+            if (speechToText.isListening) {
+              speechToText.stop();
+            }
             setIsAISpeaking(true);
+            
+            console.log('Generating TTS for:', assistantContent.slice(0, 50));
             
             const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
               method: 'POST',
@@ -2754,7 +2817,10 @@ const ChatPage: React.FC = () => {
                 },
               }),
             });
+            
             const ttsData = await ttsResp.json();
+            console.log('TTS response:', ttsResp.ok, 'hasAudio:', !!ttsData.audioContent, 'error:', ttsData.error);
+            
             if (ttsData.audioContent) {
               audioBase64 = ttsData.audioContent;
               // 自动播放语音
@@ -2764,54 +2830,79 @@ const ChatPage: React.FC = () => {
               
               // 播放完成后恢复语音识别
               audio.onended = () => {
+                console.log('TTS playback ended, resuming speech recognition');
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
                 // 恢复语音识别
-                if (speechToText.isSupported && !speechToText.isListening && inCall) {
-                  setTimeout(() => speechToText.start(), 300);
+                if (speechToText.isSupported && inCall) {
+                  setTimeout(() => {
+                    if (!speechToText.isListening) {
+                      speechToText.start();
+                    }
+                  }, 300);
                 }
               };
-              audio.onerror = () => {
+              audio.onerror = (e) => {
+                console.error('TTS playback error:', e);
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
                 // 恢复语音识别
-                if (speechToText.isSupported && !speechToText.isListening && inCall) {
-                  setTimeout(() => speechToText.start(), 300);
+                if (speechToText.isSupported && inCall) {
+                  setTimeout(() => {
+                    if (!speechToText.isListening) {
+                      speechToText.start();
+                    }
+                  }, 300);
                 }
               };
               
-              // 播放前暂停语音识别
-              if (speechToText.isListening) {
-                speechToText.stop();
-              }
-              
-              audio.play().catch(() => {
+              console.log('Playing TTS audio...');
+              audio.play().catch((err) => {
+                console.error('TTS play error:', err);
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
                 // 恢复语音识别
-                if (speechToText.isSupported && !speechToText.isListening && inCall) {
-                  setTimeout(() => speechToText.start(), 300);
+                if (speechToText.isSupported && inCall) {
+                  setTimeout(() => {
+                    if (!speechToText.isListening) {
+                      speechToText.start();
+                    }
+                  }, 300);
                 }
               });
             } else {
+              console.log('No audio content in TTS response');
               setIsAISpeaking(false);
               // 没有语音也恢复识别
-              if (speechToText.isSupported && !speechToText.isListening && inCall) {
-                setTimeout(() => speechToText.start(), 300);
+              if (speechToText.isSupported && inCall) {
+                setTimeout(() => {
+                  if (!speechToText.isListening) {
+                    speechToText.start();
+                  }
+                }, 300);
               }
             }
           } catch (err) {
             console.error('TTS generation error:', err);
             setIsAISpeaking(false);
             // 出错也恢复识别
-            if (speechToText.isSupported && !speechToText.isListening && inCall) {
-              setTimeout(() => speechToText.start(), 300);
+            if (speechToText.isSupported && inCall) {
+              setTimeout(() => {
+                if (!speechToText.isListening) {
+                  speechToText.start();
+                }
+              }, 300);
             }
           }
         } else {
+          console.log('TTS not configured or missing voice_id');
           // 没有TTS配置，直接恢复识别
-          if (speechToText.isSupported && !speechToText.isListening && inCall) {
-            setTimeout(() => speechToText.start(), 300);
+          if (speechToText.isSupported && inCall) {
+            setTimeout(() => {
+              if (!speechToText.isListening) {
+                speechToText.start();
+              }
+            }, 300);
           }
         }
         setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent, audioBase64 }]);
@@ -3215,10 +3306,35 @@ const ChatPage: React.FC = () => {
                   const displayContent = transferData ? removeTransferCommand(msg.content) : msg.content;
                   const showBubble = displayContent && !displayContent.startsWith('[STICKER:') && !(msg.image_url && displayContent.startsWith('[图片]'));
                   
+                  // 检测是否是通话记录消息
+                  const callRecordMatch = displayContent?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
+                  const isCallRecord = !!callRecordMatch;
+                  const callType = callRecordMatch?.[1];
+                  const callDurationStr = callRecordMatch?.[3];
+                  
                   return (
                     <>
+                      {/* 通话记录特殊样式 */}
+                      {isCallRecord && (
+                        <div 
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-green-100 to-emerald-100 border border-green-200/50 shadow-sm"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                            {callType === '视频通话' ? (
+                              <Video className="w-4 h-4 text-white" />
+                            ) : (
+                              <Phone className="w-4 h-4 text-white" />
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-green-800">{callType}</span>
+                            <span className="text-xs text-green-600">{callDurationStr}</span>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* 语音消息气泡 - 如果有 audioBase64 则显示语音气泡 */}
-                      {msg.audioBase64 && showBubble && (
+                      {msg.audioBase64 && showBubble && !isCallRecord && (
                         <VoiceMessageBubble
                           audioBase64={msg.audioBase64}
                           transcript={displayContent}
@@ -3232,8 +3348,8 @@ const ChatPage: React.FC = () => {
                         />
                       )}
                       
-                      {/* 普通文本气泡 - 没有语音时显示 */}
-                      {showBubble && !msg.audioBase64 && (
+                      {/* 普通文本气泡 - 没有语音时显示（排除通话记录） */}
+                      {showBubble && !msg.audioBase64 && !isCallRecord && (
                         <div
                           className={getBubbleStyle(msg.role === 'user')}
                           style={{
