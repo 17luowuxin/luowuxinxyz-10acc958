@@ -616,7 +616,11 @@ const SpacePage: React.FC = () => {
     });
 
     setCommentInputs((prev) => ({ ...prev, [moment.id]: '' }));
-    setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: undefined }));
+    setCommentReplyTargets((prev) => {
+      const next = { ...prev };
+      delete next[moment.id];
+      return next;
+    });
     toast.success('评论成功!');
 
     if (!apiConfig?.apiKey) {
@@ -634,6 +638,7 @@ const SpacePage: React.FC = () => {
           body: {
             character: replyCharacter,
             type: 'reply',
+            momentId: moment.id,
             userPost: normalizedContent,
             userImages: images.length > 0 ? images : undefined,
             userApiKey: apiConfig.apiKey,
