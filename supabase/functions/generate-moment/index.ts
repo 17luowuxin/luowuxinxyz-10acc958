@@ -363,7 +363,7 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
         console.log("Recognizing user images:", userImages.length);
         const descriptions = [];
         for (const imgUrl of userImages.slice(0, 3)) { // 最多识别3张
-          const desc = await getImageDescription(imgUrl);
+          const desc = await getImageDescription(imgUrl, config);
           if (desc) descriptions.push(desc);
         }
         if (descriptions.length > 0) {
