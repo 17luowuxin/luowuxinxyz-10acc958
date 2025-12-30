@@ -2824,13 +2824,28 @@ const ChatPage: React.FC = () => {
 
     try {
       const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
-      // 修改系统提示：像线上对话一样，不要加动作描述，回复要极其简短
-      const systemHint = `你正在和用户进行${callType}。用户正在通过语音和你说话。
-【重要规则 - 必须严格遵守！】
-1. 回复必须极短：只说一句话，10-20个字！
-2. 禁止任何动作描写：不要用*动作*、（心理）、括号等
-3. 像微信语音一样自然，直接说话
-4. 只回答核心内容，不要啰嗦`;
+      // 修改系统提示：禁止一切描写，只要纯对话
+      const systemHint = `【通话模式 - 铁律！】
+你正在和用户${callType}，这是真实通话，不是写小说！
+
+【绝对禁止 - 违反就是失败！】
+- 禁止*动作*描写
+- 禁止（心理）描写  
+- 禁止场景描述
+- 禁止"他/她/我..."的第三人称叙述
+- 禁止任何括号、星号内容
+
+【必须做到】
+- 只说一句话，10-20个字
+- 直接说话，像打电话一样
+- 第一人称口语化
+
+【正确示例】
+用户：你好
+回复：嗯，怎么了？
+
+用户：看看我
+回复：哇，今天气色不错呀`;
 
       const body: any = {
         messages: [
@@ -2840,9 +2855,10 @@ const ChatPage: React.FC = () => {
         characterName: character.name,
         characterId: characterId,
         userId: user?.id,
-        persona: character.persona ? `${character.persona}\n\n${systemHint}` : systemHint,
+        persona: systemHint + (character.persona ? `\n\n【角色性格参考】${character.persona}` : ''),
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
-        replyMode: 'novel',
+        replyMode: 'online',
+        onlineMessageCount: '1-2',
         historyLimit: 10
       };
 
