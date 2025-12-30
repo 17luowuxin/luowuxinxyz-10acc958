@@ -392,6 +392,10 @@ const GroupChatPage: React.FC = () => {
 
       if (error) throw error;
 
+      // 保存最新消息列表用于角色回角色
+      let currentMessages = [...messages, { sender_type: 'user', content: userMessage }];
+      let lastCharacterResponse: { characterId: string; characterName: string; content: string } | null = null;
+
       for (const response of data.responses || []) {
         const { data: charMsg } = await supabase
           .from('group_messages')
@@ -411,9 +415,68 @@ const GroupChatPage: React.FC = () => {
             characterName: charMsg.characters?.name,
             characterAvatar: charMsg.characters?.avatar_url
           }]);
+          currentMessages.push({
+            sender_type: 'character',
+            content: response.content,
+            characterName: response.characterName
+          });
+          lastCharacterResponse = response;
         }
 
         await new Promise(resolve => setTimeout(resolve, 800));
+      }
+
+      // 角色回角色功能：有概率让另一个角色回复上一个角色
+      if (lastCharacterResponse && members.length > 1 && Math.random() < 0.4) {
+        console.log('Triggering character-to-character response...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const c2cBody: any = {
+          messages: currentMessages.map((m: any) => ({
+            role: m.sender_type === 'user' ? 'user' : 'assistant',
+            content: m.sender_type === 'user' ? m.content : `${m.characterName}: ${m.content}`
+          })),
+          characters: members,
+          userMessage: lastCharacterResponse.content,
+          userProfile,
+          isCharacterToCharacter: true,
+          triggerCharacterId: lastCharacterResponse.characterId,
+          userId: user?.id,
+          userApiKey: apiConfig.apiKey,
+          provider: apiConfig.provider,
+        };
+        if (apiConfig.baseUrl) c2cBody.baseUrl = apiConfig.baseUrl;
+        if (apiConfig.model) c2cBody.model = apiConfig.model;
+
+        try {
+          const { data: c2cData, error: c2cError } = await supabase.functions.invoke('group-chat', { body: c2cBody });
+          
+          if (!c2cError && c2cData?.responses?.length > 0) {
+            for (const c2cResponse of c2cData.responses) {
+              const { data: c2cMsg } = await supabase
+                .from('group_messages')
+                .insert({
+                  group_id: groupId,
+                  sender_type: 'character',
+                  character_id: c2cResponse.characterId,
+                  content: c2cResponse.content
+                })
+                .select('*, characters(name, avatar_url)')
+                .single();
+
+              if (c2cMsg) {
+                setMessages(prev => [...prev, {
+                  ...c2cMsg,
+                  sender_type: 'character' as const,
+                  characterName: c2cMsg.characters?.name,
+                  characterAvatar: c2cMsg.characters?.avatar_url
+                }]);
+              }
+            }
+          }
+        } catch (c2cErr) {
+          console.error('Character-to-character error:', c2cErr);
+        }
       }
     } catch (err) {
       console.error('Group chat error:', err);
