@@ -2495,8 +2495,10 @@ const ChatPage: React.FC = () => {
       } else {
         // 回退到Web Audio API生成铃声
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        let isRinging = true; // 使用局部变量避免闭包问题
+        
         const playRingtone = () => {
-          if (!callRinging) return;
+          if (!isRinging) return;
           
           // 创建简单的铃声音调
           const oscillator = audioContext.createOscillator();
@@ -2519,15 +2521,22 @@ const ChatPage: React.FC = () => {
         
         // 设置循环铃声
         const ringtoneInterval = setInterval(() => {
-          if (ringtoneAudioRef.current === null) {
+          if (!isRinging) {
             clearInterval(ringtoneInterval);
+            audioContext.close();
             return;
           }
           playRingtone();
         }, 1500);
         
-        // 保存interval ID用于停止
-        ringtoneAudioRef.current = { stop: () => clearInterval(ringtoneInterval) } as any;
+        // 保存停止函数
+        ringtoneAudioRef.current = { 
+          stop: () => {
+            isRinging = false;
+            clearInterval(ringtoneInterval);
+            audioContext.close();
+          }
+        } as any;
       }
     } catch (err) {
       console.log('Ringtone playback failed:', err);
