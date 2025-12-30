@@ -458,14 +458,14 @@ const GroupChatPage: React.FC = () => {
   const friendFontColor = (customization as any).friend_font_color || '#333333';
 
 // 气泡框预设 - 带图片气泡框支持 + 头像装饰
-  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; imageUrl?: string; decorIcon?: string; decorImage?: string; backdropFilter?: string; boxShadow?: string }> = {
+  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; imageUrl?: string; decorIcon?: string; decorImage?: string; backdropFilter?: string; boxShadow?: string; highlight?: string }> = {
     'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
     'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
     'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
     'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
     'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
-    // 水滴透明磨砂气泡框 - 立体效果
-    'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.6) 0%, rgba(220,240,255,0.4) 30%, rgba(180,220,255,0.25) 70%, rgba(150,200,255,0.15) 100%)', borderColor: 'rgba(255,255,255,0.7)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 2px 8px rgba(255,255,255,0.5), inset 0 -2px 6px rgba(100,180,255,0.2), 0 4px 12px rgba(100,150,200,0.25), 0 1px 3px rgba(0,0,0,0.1)' },
+    // 水滴透明磨砂气泡框 - 高光立体效果
+    'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
   };
@@ -490,7 +490,12 @@ const GroupChatPage: React.FC = () => {
           backgroundColor: 'transparent',
         };
       }
-      const style: React.CSSProperties = { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      const style: React.CSSProperties = { 
+        background: frame.highlight 
+          ? `${frame.highlight}, ${frame.gradient}`
+          : frame.gradient, 
+        border: `2px solid ${frame.borderColor}` 
+      };
       if (frame.backdropFilter) {
         style.backdropFilter = frame.backdropFilter;
         style.WebkitBackdropFilter = frame.backdropFilter;
@@ -515,7 +520,12 @@ const GroupChatPage: React.FC = () => {
           backgroundColor: 'transparent',
         };
       }
-      const style: React.CSSProperties = { background: frame.gradient, border: `2px solid ${frame.borderColor}` };
+      const style: React.CSSProperties = { 
+        background: frame.highlight 
+          ? `${frame.highlight}, ${frame.gradient}`
+          : frame.gradient, 
+        border: `2px solid ${frame.borderColor}` 
+      };
       if (frame.backdropFilter) {
         style.backdropFilter = frame.backdropFilter;
         style.WebkitBackdropFilter = frame.backdropFilter;
