@@ -2077,18 +2077,29 @@ const ChatPage: React.FC = () => {
           audio_url: audioBase64 || null
         });
         
-        // 角色语音输出（sometimes模式时随机生成语音气泡，70%几率）
+        // 角色语音输出（sometimes模式时随机生成语音气泡）
         // 用户明确要求发语音时，直接发送语音气泡
-        const userWantsVoice = /发.*语音|语音.*发|说.*话|听.*声音|想听.*/.test(messageContent);
+        const voiceKeywords = ['发语音', '发个语音', '语音', '说话', '听你声音', '想听', '给我发语音', '发条语音', '声音', '说点什么'];
+        const userWantsVoice = voiceKeywords.some(kw => messageContent.includes(kw));
+        console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig enabled:', ttsConfig?.enabled, 'userWantsVoice:', userWantsVoice, 'message:', messageContent);
+        
         if (ttsConfig?.enabled && voiceMode === 'sometimes') {
-          const shouldSendVoice = userWantsVoice || Math.random() < 0.7; // 用户要求或70%几率
-          console.log('[TTS sometimes] voiceMode:', voiceMode, 'ttsConfig:', !!ttsConfig, 'shouldSendVoice:', shouldSendVoice, 'userWantsVoice:', userWantsVoice);
+          // 用户明确要求时100%发，否则80%几率
+          const shouldSendVoice = userWantsVoice || Math.random() < 0.8;
+          console.log('[TTS sometimes] shouldSendVoice:', shouldSendVoice);
+          
           if (shouldSendVoice) {
-            // 延迟发送1-2条语音气泡
+            // 用户要求时发1-2条，随机时发1条
             const voiceCount = userWantsVoice ? (Math.random() < 0.5 ? 2 : 1) : 1;
+            console.log('[TTS sometimes] generating', voiceCount, 'voice message(s)');
+            
+            // 延迟发送语音气泡
             setTimeout(async () => {
               for (let i = 0; i < voiceCount; i++) {
+                console.log('[TTS sometimes] generating voice', i + 1);
                 const voiceAudio = await generateTTSAudio(cleanContent);
+                console.log('[TTS sometimes] voiceAudio result:', voiceAudio ? 'success' : 'failed');
+                
                 if (voiceAudio) {
                   const voiceMsg = {
                     id: Date.now() + 10 + i,
@@ -2116,7 +2127,7 @@ const ChatPage: React.FC = () => {
                   }
                 }
               }
-            }, 600 + Math.random() * 400);
+            }, 500);
           }
         }
         
