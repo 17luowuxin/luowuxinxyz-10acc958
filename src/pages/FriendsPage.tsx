@@ -539,7 +539,7 @@ const FriendsPage: React.FC = () => {
                     <input
                       ref={ringtoneInputRef}
                       type="file"
-                      accept="audio/*"
+                      accept="audio/*,video/mp4,.mp3,.m4a,.wav,.ogg,.aac,.mp4"
                       className="hidden"
                       onChange={handleRingtoneUpload}
                     />
