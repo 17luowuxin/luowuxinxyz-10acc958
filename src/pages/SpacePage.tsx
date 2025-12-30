@@ -457,6 +457,7 @@ const SpacePage: React.FC = () => {
                 character: char, 
                 type: 'reply',
                 userPost: postContent,
+                userImages: postImages.length > 0 ? postImages : undefined,
                 userApiKey: apiConfig.apiKey,
                 provider: apiConfig.provider,
                 baseUrl: apiConfig.baseUrl,
