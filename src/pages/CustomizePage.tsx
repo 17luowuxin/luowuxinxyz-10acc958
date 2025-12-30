@@ -372,7 +372,7 @@ const CustomizePage: React.FC = () => {
 
       <div className="p-4 space-y-6 pb-24">
         {/* Video Background */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Film className="w-5 h-5 text-primary" />
@@ -427,7 +427,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Theme Colors */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-2">
             <Palette className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">主题颜色</h3>
@@ -465,7 +465,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Font Selection */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-2">
             <Type className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">全局字体</h3>
@@ -494,7 +494,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Global Text Color & Size */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-2">
             <Palette className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">桌面文字设置</h3>
@@ -562,7 +562,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Global App Background */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-primary" />
@@ -604,7 +604,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Chat Background */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">聊天背景</h3>
@@ -635,7 +635,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Avatar Frame Selection */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">
             <User className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">头像框</h3>
@@ -701,7 +701,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Bubble Frame Selection */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">
             <MessageCircle className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">气泡框</h3>
@@ -790,7 +790,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* User bubble settings */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <h3 className="font-bold text-lg mb-4">用户气泡</h3>
           
           <div className="space-y-4">
@@ -881,7 +881,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Friend bubble settings */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <h3 className="font-bold text-lg mb-4">角色气泡</h3>
           
           <div className="space-y-4">
@@ -948,7 +948,7 @@ const CustomizePage: React.FC = () => {
         </div>
 
         {/* Preview */}
-        <div className="glass-bubble p-5">
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <h3 className="font-bold text-lg mb-4">预览</h3>
           <div 
             className="rounded-2xl p-4 space-y-3"
