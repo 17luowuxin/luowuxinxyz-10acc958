@@ -15,7 +15,9 @@ import UserTransferCard from '@/components/chat/UserTransferCard';
 import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
 import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
+import VoiceWaveform from '@/components/chat/VoiceWaveform';
 // 头像装饰图片
+// 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 
 // Emoji categories with comprehensive emoji list
@@ -2474,8 +2476,50 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 结束通话
-  const endCall = () => {
+  // 结束通话 - 保存对话记录到聊天历史
+  const endCall = async () => {
+    // 保存通话记录到聊天历史
+    if (callMessages.length > 0 && user?.id && characterId) {
+      const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
+      const durationStr = formatCallDuration(callDuration);
+      
+      // 将通话消息保存到聊天记录
+      for (const msg of callMessages) {
+        await supabase.from('chat_messages').insert({
+          user_id: user.id,
+          character_id: characterId,
+          role: msg.role,
+          content: msg.content,
+          audio_url: msg.audioBase64 || null
+        });
+      }
+      
+      // 添加通话结束系统消息
+      const endMsg = `[${callType}] 通话时长 ${durationStr}`;
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        character_id: characterId,
+        role: 'assistant',
+        content: endMsg
+      });
+      
+      // 更新本地消息列表
+      setMessages(prev => [
+        ...prev,
+        ...callMessages.map((m, i) => ({ id: Date.now() + i, role: m.role, content: m.content, audioBase64: m.audioBase64 })),
+        { id: Date.now() + callMessages.length, role: 'assistant', content: endMsg }
+      ]);
+    }
+    
+    // 播放挂断音效
+    try {
+      const hangupAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleC4DELI+lllQgJe7wJFECABX0OvYtIhWIB1ittbapnJHLjpYtuzknG5MKRNcqMzEkEMVFHy/18qVXicSLZfCu5dkQCIIAES7z8SMUC8NGXnIyqFqOxoJSKfU1a1wMREFVsrczJlTGQxhxNfPnUoVBlix0tKbVB4La8/i1JVPGhJvy+XXjEkZD2jI5NmMRhgScNXo3YY4Dxl61ePZgC0OIoDZ5diCMxETesnm04U2FRR1zOjYi0cbD2rF5teQTRoTbsvn2I9LGxJuzOfWjkwaEW7L5tiOShsRbcvn1o5LGxFuy+fWjksaEW3L59aOSxsRbcvn1o5KGxFty+bWj0sbEW7L59ePShsRbsvm1o9LGxFty+fWjkobEW7L59aOSxsRbsvm1o9LGxFuy+bWj0sbEW7L5taPSxoRbsvm1o9LGhFuy+bWj0saEW7L5taPSxoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGhFuy+bWj0oaEW7L5taPShoRbsvm1o9KGg==');
+      hangupAudio.volume = 0.5;
+      await hangupAudio.play();
+    } catch (err) {
+      console.log('Hangup sound skipped');
+    }
+    
     setShowCallDialog(null);
     setInCall(false);
     setCallRinging(false);
@@ -2599,12 +2643,19 @@ const ChatPage: React.FC = () => {
 
     try {
       const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
-      const systemHint = `你正在和用户进行${callType}。用户正在通过语音和你说话。请用简短、口语化、亲切的方式回复，像真的在打电话一样。不要用书面语，多用语气词和口头禅。回复控制在1-2句话。`;
+      // 修改系统提示：像线上对话一样，不要加动作描述
+      const systemHint = `你正在和用户进行${callType}。用户正在通过语音和你说话。
+请用简短、口语化、亲切的方式回复，像真的在打电话一样。
+【重要规则】
+1. 不要用*动作*、（心理）、括号描写任何动作或表情
+2. 直接说话，像微信语音一样自然
+3. 回复控制在1-2句话，简短有力
+4. 多用语气词让对话更自然`;
 
       const body: any = {
         messages: [
           ...callMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: `[语音消息] ${userText}` }
+          { role: 'user', content: userText }
         ],
         characterName: character.name,
         characterId: characterId,
@@ -2715,22 +2766,52 @@ const ChatPage: React.FC = () => {
               audio.onended = () => {
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
+                // 恢复语音识别
+                if (speechToText.isSupported && !speechToText.isListening && inCall) {
+                  setTimeout(() => speechToText.start(), 300);
+                }
               };
               audio.onerror = () => {
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
+                // 恢复语音识别
+                if (speechToText.isSupported && !speechToText.isListening && inCall) {
+                  setTimeout(() => speechToText.start(), 300);
+                }
               };
+              
+              // 播放前暂停语音识别
+              if (speechToText.isListening) {
+                speechToText.stop();
+              }
               
               audio.play().catch(() => {
                 setIsAISpeaking(false);
                 currentAudioRef.current = null;
+                // 恢复语音识别
+                if (speechToText.isSupported && !speechToText.isListening && inCall) {
+                  setTimeout(() => speechToText.start(), 300);
+                }
               });
             } else {
               setIsAISpeaking(false);
+              // 没有语音也恢复识别
+              if (speechToText.isSupported && !speechToText.isListening && inCall) {
+                setTimeout(() => speechToText.start(), 300);
+              }
             }
           } catch (err) {
             console.error('TTS generation error:', err);
             setIsAISpeaking(false);
+            // 出错也恢复识别
+            if (speechToText.isSupported && !speechToText.isListening && inCall) {
+              setTimeout(() => speechToText.start(), 300);
+            }
+          }
+        } else {
+          // 没有TTS配置，直接恢复识别
+          if (speechToText.isSupported && !speechToText.isListening && inCall) {
+            setTimeout(() => speechToText.start(), 300);
           }
         }
         setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent, audioBase64 }]);
@@ -2741,7 +2822,7 @@ const ChatPage: React.FC = () => {
     }
 
     setCallLoading(false);
-  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading]);
+  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, speechToText, inCall]);
 
   // 更新自动发送函数引用
   useEffect(() => {
@@ -3772,37 +3853,31 @@ const ChatPage: React.FC = () => {
             {/* 语音状态显示区域 - 微信风格纯语音通话 */}
             {inCall && (
               <div className="flex flex-col items-center gap-3 px-4 py-3">
-                {/* AI正在说话状态 */}
+                {/* AI正在说话状态 - 带波形动画 */}
                 {isAISpeaking && (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-green-500/80 rounded-full">
-                    <Volume2 className="w-4 h-4 text-white animate-pulse" />
-                    <span className="text-white text-sm">{character?.name}正在说话...</span>
-                  </div>
-                )}
-                
-                {/* 正在识别临时文字 */}
-                {interimTranscript && !isAISpeaking && (
-                  <div className="px-4 py-2 bg-white/90 rounded-2xl shadow-sm max-w-[80%]">
-                    <span className="text-gray-600 text-sm">{interimTranscript}</span>
-                    <span className="inline-block w-1 h-4 bg-gray-400 ml-1 animate-pulse" />
-                  </div>
-                )}
-                
-                {/* 等待用户说话 */}
-                {!isAISpeaking && !interimTranscript && !callLoading && speechToText.isListening && (
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 mb-2">
-                      {[0, 1, 2, 3, 4].map((i) => (
-                        <div
-                          key={i}
-                          className="w-1 bg-red-500 rounded-full animate-pulse"
-                          style={{
-                            height: `${12 + Math.sin(i * 0.8) * 8}px`,
-                            animationDelay: `${i * 100}ms`,
-                          }}
-                        />
-                      ))}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="px-4 py-2 bg-green-500/80 rounded-full flex items-center gap-3">
+                      <VoiceWaveform isActive={true} color="#ffffff" bars={5} />
+                      <span className="text-white text-sm">{character?.name}正在说话</span>
                     </div>
+                  </div>
+                )}
+                
+                {/* 正在识别临时文字 - 带波形动画 */}
+                {interimTranscript && !isAISpeaking && (
+                  <div className="flex flex-col items-center gap-2">
+                    <VoiceWaveform isActive={true} color="#ef4444" bars={5} />
+                    <div className="px-4 py-2 bg-white/90 rounded-2xl shadow-sm max-w-[80%]">
+                      <span className="text-gray-600 text-sm">{interimTranscript}</span>
+                      <span className="inline-block w-1 h-4 bg-gray-400 ml-1 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+                
+                {/* 等待用户说话 - 带波形动画 */}
+                {!isAISpeaking && !interimTranscript && !callLoading && speechToText.isListening && (
+                  <div className="flex flex-col items-center gap-2">
+                    <VoiceWaveform isActive={true} color="#ef4444" bars={7} />
                     <span className="text-sm" style={{ color: showCallDialog === 'video' ? 'white' : '#7f8c8d' }}>
                       正在听你说话...
                     </span>
