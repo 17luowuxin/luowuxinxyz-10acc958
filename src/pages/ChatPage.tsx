@@ -184,14 +184,16 @@ const ChatPage: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const callMessagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 语音输入 Hook
+  // 语音输入 Hook - 开启后持续识别
   const speechToText = useSpeechToText({
     lang: 'zh-CN',
-    continuous: false,
+    continuous: true,
     interimResults: true,
+    persistent: true, // 点一次持续生效
     onFinal: (text) => {
       if (text.trim() && showCallDialog && inCall) {
-        setCallInput(prev => prev + text);
+        // 添加语音标记，让角色知道是语音消息
+        setCallInput(prev => prev + text + ' ');
       }
     },
     onError: (message) => {
@@ -2388,10 +2390,10 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 处理视频通话上传6秒视频
-  const handleCallVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 处理视频通话上传6秒视频 - 保存到storage
+  const handleCallVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !user?.id) return;
 
     // 验证是视频文件
     if (!file.type.startsWith('video/')) {
@@ -2399,23 +2401,49 @@ const ChatPage: React.FC = () => {
       return;
     }
 
-    // 创建预览URL
-    const url = URL.createObjectURL(file);
+    // 创建预览URL用于验证时长
+    const tempUrl = URL.createObjectURL(file);
     
     // 验证视频时长
     const video = document.createElement('video');
     video.preload = 'metadata';
-    video.onloadedmetadata = () => {
+    video.onloadedmetadata = async () => {
       URL.revokeObjectURL(video.src);
       if (video.duration > 6) {
         toast.error('视频时长不能超过6秒');
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(tempUrl);
         return;
       }
-      setCallVideoUrl(url);
-      toast.success('视频上传成功');
+      
+      // 上传到storage
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/call-videos/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('photos')
+          .upload(fileName, file);
+        
+        if (uploadError) {
+          console.error('Upload video error:', uploadError);
+          toast.error('视频上传失败');
+          URL.revokeObjectURL(tempUrl);
+          return;
+        }
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('photos')
+          .getPublicUrl(fileName);
+        
+        setCallVideoUrl(publicUrl);
+        toast.success('视频上传成功，已保存');
+      } catch (err) {
+        console.error('Upload video error:', err);
+        toast.error('视频上传失败');
+      }
+      URL.revokeObjectURL(tempUrl);
     };
-    video.src = url;
+    video.src = tempUrl;
 
     // Reset input
     e.target.value = '';
@@ -2461,12 +2489,14 @@ const ChatPage: React.FC = () => {
 
     try {
       const callType = showCallDialog === 'video' ? '视频通话' : '语音通话';
-      const systemHint = `你正在和用户进行${callType}。请用简短、口语化、亲切的方式回复，像真的在打电话一样。不要用书面语，多用语气词和口头禅。回复控制在1-2句话。`;
+      const isVoiceInput = speechToText.isPersistentEnabled;
+      const voiceHint = isVoiceInput ? '用户正在通过语音和你说话。' : '';
+      const systemHint = `你正在和用户进行${callType}。${voiceHint}请用简短、口语化、亲切的方式回复，像真的在打电话一样。不要用书面语，多用语气词和口头禅。回复控制在1-2句话。`;
 
       const body: any = {
         messages: [
           ...callMessages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: userText }
+          { role: 'user', content: isVoiceInput ? `[语音消息] ${userText}` : userText }
         ],
         characterName: character.name,
         characterId: characterId,
@@ -3467,7 +3497,16 @@ const ChatPage: React.FC = () => {
 
       {/* 通话弹窗（语音/视频） */}
       {showCallDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
+        <div 
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{
+            // Voice call: glass frosted light blue-gray like reference image 1
+            // Video call: pink background like reference image 2
+            background: showCallDialog === 'video' 
+              ? '#FFB5C5' 
+              : 'linear-gradient(180deg, #e8ecf0 0%, #d4dbe3 50%, #c5cdd6 100%)',
+          }}
+        >
           {/* 隐藏的视频上传input */}
           <input
             ref={callVideoInputRef}
@@ -3477,260 +3516,158 @@ const ChatPage: React.FC = () => {
             onChange={handleCallVideoUpload}
           />
           
-          <div className="bg-background rounded-2xl w-[90%] max-w-sm mx-4 overflow-hidden shadow-2xl flex flex-col" style={{ maxHeight: '85vh' }}>
-            {/* 通话头部 - 视频通话时显示视频 */}
-            <div className={`relative p-6 text-center ${showCallDialog === 'video' ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-gradient-to-br from-green-500 to-teal-500'}`}>
-              {/* 视频通话背景视频 */}
-              {showCallDialog === 'video' && callVideoUrl && !callRinging && (
-                <div className="absolute inset-0 overflow-hidden">
-                  <video
-                    ref={callVideoRef}
-                    src={callVideoUrl}
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover opacity-60"
-                    onEnded={() => setCallVideoPlaying(false)}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
-                </div>
-              )}
-              
-              {/* 来电铃声动画 */}
-              <div className="relative mx-auto w-24 h-24 mb-3">
-                {callRinging && (
-                  <>
-                    <div className="absolute inset-0 rounded-full bg-white/20 animate-ping" style={{ animationDuration: '1.5s' }} />
-                    <div className="absolute inset-[-8px] rounded-full border-2 border-white/30 animate-pulse" />
-                    <div className="absolute inset-[-16px] rounded-full border border-white/20 animate-pulse" style={{ animationDelay: '0.3s' }} />
-                  </>
-                )}
-                <div className="relative w-full h-full">
+          {/* 视频通话右上角上传按钮 */}
+          {showCallDialog === 'video' && !callRinging && (
+            <div className="absolute top-4 right-4 z-20">
+              <button
+                onClick={() => callVideoInputRef.current?.click()}
+                className="text-white/90 text-sm font-medium hover:text-white transition-colors"
+              >
+                上传动态视频
+              </button>
+            </div>
+          )}
+          
+          {/* 视频通话背景视频 */}
+          {showCallDialog === 'video' && callVideoUrl && !callRinging && (
+            <div className="absolute inset-0 overflow-hidden z-0">
+              <video
+                ref={callVideoRef}
+                src={callVideoUrl}
+                loop
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+                onPlay={() => setCallVideoPlaying(true)}
+                onPause={() => setCallVideoPlaying(false)}
+              />
+              <div className="absolute inset-0 bg-black/20" />
+            </div>
+          )}
+          
+          {/* 主内容区域 */}
+          <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
+            {/* 头像区域 - 语音通话参考图1样式 */}
+            {showCallDialog === 'voice' && (
+              <div className="mb-8">
+                <div 
+                  className="w-32 h-32 rounded-lg overflow-hidden shadow-lg"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.3)' }}
+                >
                   {character?.avatar_url ? (
                     <img 
                       src={character.avatar_url} 
                       alt={character.name} 
-                      className={`w-full h-full rounded-full object-cover border-4 border-white/30 ${callRinging ? 'animate-pulse' : ''}`} 
+                      className="w-full h-full object-cover grayscale-[30%]"
                     />
                   ) : (
-                    <div className={`w-full h-full rounded-full bg-white/20 flex items-center justify-center text-2xl text-white font-bold ${callRinging ? 'animate-pulse' : ''}`}>
+                    <div className="w-full h-full flex items-center justify-center text-4xl text-gray-600 font-bold">
                       {character?.name?.charAt(0) || '?'}
                     </div>
                   )}
-                  {showCallDialog === 'video' && (
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center">
-                      <Video className="w-3 h-3 text-purple-500" />
-                    </div>
-                  )}
                 </div>
               </div>
-              <h3 className="text-white font-semibold text-lg relative z-10">{character?.name}</h3>
-              <p className="text-white/80 text-sm mt-1 relative z-10">
-                {callRinging 
-                  ? (showCallDialog === 'video' ? '视频来电...' : '语音来电...') 
-                  : (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                      {formatCallDuration(callDuration)}
-                    </span>
-                  )
-                }
-              </p>
-              
-              {/* 视频通话控制按钮 */}
-              {showCallDialog === 'video' && !callRinging && (
-                <div className="relative z-10 mt-3 flex justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
-                    onClick={() => callVideoInputRef.current?.click()}
-                  >
-                    <Upload className="w-3 h-3 mr-1" />
-                    上传视频(≤6s)
-                  </Button>
-                  {callVideoUrl && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
-                      onClick={toggleCallVideo}
-                    >
-                      {callVideoPlaying ? <Pause className="w-3 h-3 mr-1" /> : <Play className="w-3 h-3 mr-1" />}
-                      {callVideoPlaying ? '暂停' : '播放'}
-                    </Button>
-                  )}
+            )}
+            
+            {/* 名字和时长 */}
+            <h2 
+              className="text-2xl font-bold mb-2"
+              style={{ color: showCallDialog === 'video' ? '#ffffff' : '#2c3e50' }}
+            >
+              {character?.name}
+            </h2>
+            <p 
+              className="text-lg"
+              style={{ color: showCallDialog === 'video' ? 'rgba(255,255,255,0.8)' : '#7f8c8d' }}
+            >
+              {callRinging 
+                ? (showCallDialog === 'video' ? '视频来电...' : '正在呼叫...') 
+                : formatCallDuration(callDuration)
+              }
+            </p>
+            
+            {/* 视频通话装饰线 - 参考图2 */}
+            {showCallDialog === 'video' && !callRinging && (
+              <div className="mt-8 w-64 flex items-center justify-center">
+                <div className="flex-1 h-px bg-white/30" />
+                <div className="mx-4 flex items-center gap-1">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div 
+                      key={i} 
+                      className={`rounded-full bg-white/60 ${i === 2 ? 'w-2 h-2' : 'w-1 h-1'}`}
+                    />
+                  ))}
                 </div>
-              )}
-            </div>
-
-            {/* 来电铃声界面 */}
+                <div className="flex-1 h-px bg-white/30" />
+              </div>
+            )}
+          </div>
+          
+          {/* 底部控制栏 */}
+          <div className="relative z-10 pb-12 px-6">
             {callRinging ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/30" style={{ minHeight: '200px' }}>
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="flex gap-1">
-                    {[0, 1, 2].map((i) => (
-                      <div 
-                        key={i}
-                        className="w-1 bg-primary rounded-full animate-bounce"
-                        style={{ 
-                          height: `${12 + i * 4}px`,
-                          animationDelay: `${i * 0.15}s`,
-                          animationDuration: '0.6s'
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-muted-foreground text-sm ml-2">正在呼叫...</span>
-                  <div className="flex gap-1">
-                    {[2, 1, 0].map((i) => (
-                      <div 
-                        key={i}
-                        className="w-1 bg-primary rounded-full animate-bounce"
-                        style={{ 
-                          height: `${12 + i * 4}px`,
-                          animationDelay: `${(2 - i) * 0.15 + 0.3}s`,
-                          animationDuration: '0.6s'
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                
-                {/* 接听和挂断按钮 */}
-                <div className="flex items-center gap-8">
-                  <Button
-                    variant="destructive"
-                    size="lg"
-                    className="w-16 h-16 rounded-full"
-                    onClick={endCall}
-                  >
-                    <Phone className="w-7 h-7 rotate-[135deg]" />
-                  </Button>
-                  <Button
-                    size="lg"
-                    className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600"
-                    onClick={answerCall}
-                  >
-                    <Phone className="w-7 h-7" />
-                  </Button>
-                </div>
+              /* 来电接听/挂断按钮 */
+              <div className="flex items-center justify-center gap-16">
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg"
+                  onClick={endCall}
+                >
+                  <Phone className="w-7 h-7 rotate-[135deg]" />
+                </Button>
+                <Button
+                  size="lg"
+                  className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 text-white shadow-lg"
+                  onClick={answerCall}
+                >
+                  <Phone className="w-7 h-7" />
+                </Button>
               </div>
             ) : (
-              <>
-                {/* 通话消息区域 */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30" style={{ minHeight: '200px', maxHeight: '300px' }}>
-                  {callMessages.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      {msg.audioBase64 ? (
-                        // 语音消息气泡
-                        <VoiceMessageBubble
-                          audioBase64={msg.audioBase64}
-                          transcript={msg.content}
-                          isUser={msg.role === 'user'}
-                          bubbleColor={msg.role === 'user' ? '#95ec69' : '#ffffff'}
-                        />
-                      ) : (
-                        // 普通文字消息
-                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-                          msg.role === 'user' 
-                            ? 'bg-primary text-primary-foreground rounded-br-md' 
-                            : 'bg-muted text-foreground rounded-bl-md'
-                        }`}>
-                          {msg.content}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {callLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md text-sm text-muted-foreground flex items-center gap-2">
-                        <div className="flex gap-0.5">
-                          {[0, 1, 2].map((i) => (
-                            <div 
-                              key={i}
-                              className="w-1 h-3 bg-primary/50 rounded-full animate-bounce"
-                              style={{ animationDelay: `${i * 0.15}s` }}
-                            />
-                          ))}
-                        </div>
-                        正在说话...
-                      </div>
-                    </div>
-                  )}
-                  <div ref={callMessagesEndRef} />
-                </div>
-
-                {/* 通话输入区域 */}
-                <div className="p-3 border-t bg-background">
-                  {/* 语音输入提示 */}
-                  {speechToText.isListening && (
-                    <div className="mb-2 px-3 py-2 bg-primary/10 rounded-lg flex items-center gap-2">
-                      <div className="flex gap-0.5">
-                        {[0, 1, 2, 3, 4].map((i) => (
-                          <div 
-                            key={i}
-                            className="w-1 bg-primary rounded-full animate-pulse"
-                            style={{ 
-                              height: `${8 + Math.random() * 12}px`,
-                              animationDelay: `${i * 0.1}s`
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs text-primary">正在听你说话...</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center gap-2">
-                    {/* 语音输入按钮 */}
-                    {speechToText.isSupported && (
-                      <Button
-                        variant={speechToText.isListening ? "default" : "outline"}
-                        size="icon"
-                        className={`w-10 h-10 rounded-full flex-shrink-0 ${speechToText.isListening ? 'bg-red-500 hover:bg-red-600 animate-pulse' : ''}`}
-                        onClick={speechToText.toggle}
-                        disabled={callLoading}
-                      >
-                        {speechToText.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                      </Button>
-                    )}
-                    
-                    <Input
-                      value={callInput}
-                      onChange={(e) => setCallInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && sendCallMessage()}
-                      placeholder={speechToText.isListening ? "正在听..." : "说点什么..."}
-                      className="flex-1 h-10 rounded-full"
-                      disabled={callLoading}
-                    />
-                    <Button
-                      size="icon"
-                      onClick={sendCallMessage}
-                      disabled={callLoading || !callInput.trim()}
-                      className="w-10 h-10 rounded-full bg-primary"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-
+              /* 通话中控制栏 - 参考图1底部样式 */
+              <div className="flex items-center justify-center gap-8">
                 {/* 挂断按钮 */}
-                <div className="p-4 flex justify-center bg-background border-t">
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg"
+                  onClick={endCall}
+                >
+                  <Phone className="w-6 h-6 rotate-[135deg]" />
+                </Button>
+                
+                {/* 麦克风按钮 - 语音输入切换 */}
+                {speechToText.isSupported && (
                   <Button
-                    variant="destructive"
+                    variant="ghost"
                     size="lg"
-                    className="w-14 h-14 rounded-full"
-                    onClick={endCall}
+                    className={`w-14 h-14 rounded-full shadow-lg transition-all ${
+                      speechToText.isListening 
+                        ? 'bg-red-500 hover:bg-red-600 text-white' 
+                        : 'bg-white hover:bg-gray-100 text-gray-700'
+                    }`}
+                    onClick={speechToText.toggle}
                   >
-                    <Phone className="w-6 h-6 rotate-[135deg]" />
+                    {speechToText.isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                   </Button>
-                </div>
-              </>
+                )}
+                
+                {/* 扬声器按钮 */}
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="w-14 h-14 rounded-full bg-white hover:bg-gray-100 text-gray-700 shadow-lg"
+                >
+                  <Volume2 className="w-6 h-6" />
+                </Button>
+              </div>
             )}
           </div>
         </div>
       )}
+
     </div>
   );
 };
