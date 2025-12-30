@@ -136,6 +136,7 @@ export type Database = {
       characters: {
         Row: {
           avatar_url: string | null
+          call_video_url: string | null
           created_at: string
           history_limit: number | null
           id: string
@@ -153,6 +154,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          call_video_url?: string | null
           created_at?: string
           history_limit?: number | null
           id?: string
@@ -170,6 +172,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          call_video_url?: string | null
           created_at?: string
           history_limit?: number | null
           id?: string
@@ -189,6 +192,7 @@ export type Database = {
       }
       chat_messages: {
         Row: {
+          audio_url: string | null
           character_id: string
           content: string
           created_at: string
@@ -198,6 +202,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audio_url?: string | null
           character_id: string
           content: string
           created_at?: string
@@ -207,6 +212,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audio_url?: string | null
           character_id?: string
           content?: string
           created_at?: string
