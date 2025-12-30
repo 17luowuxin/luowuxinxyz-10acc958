@@ -766,6 +766,8 @@ const ChatPage: React.FC = () => {
         return `${baseClasses} rounded-2xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
       case 'square':
         return `${baseClasses} rounded-lg ${isUser ? 'rounded-br-none' : 'rounded-bl-none'}`;
+      case 'glass':
+        return `${baseClasses} chat-bubble-glass rounded-[1.5rem] ${isUser ? 'rounded-br-md' : 'rounded-bl-md'}`;
       default:
         return `${baseClasses} rounded-xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
     }
