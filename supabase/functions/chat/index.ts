@@ -400,7 +400,7 @@ ${transferPrompt}
               content: [
                 {
                   type: "text",
-                  text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
+                  text: "请用一句话（20字以内）简洁描述这张图片的主要内容。只说核心内容，不要详细描述。"
                 },
                 {
                   type: "image_url",
@@ -416,7 +416,7 @@ ${transferPrompt}
             body: JSON.stringify({
               model,
               messages: visionMessages,
-              max_tokens: 500,
+              max_tokens: 100,
             }),
           });
           
@@ -444,14 +444,14 @@ ${transferPrompt}
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "google/gemini-2.5-flash",
+                model: "google/gemini-2.5-flash-lite",
                 messages: [
                   {
                     role: "user",
                     content: [
                       {
                         type: "text",
-                        text: "请用中文简要描述这张图片的内容，包括场景、人物、物品、颜色、氛围等。不要添加任何额外评论或解释，只描述图片内容。"
+                        text: "请用一句话（20字以内）简洁描述这张图片的主要内容。只说核心内容，不要详细描述。"
                       },
                       {
                         type: "image_url",
