@@ -442,6 +442,10 @@ const SpacePage: React.FC = () => {
       if (error) throw error;
 
       toast.success('发布成功!');
+      
+      // 保存图片URLs用于AI回复（在清空状态前）
+      const savedImages = [...postImages];
+      
       setNewPostContent('');
       setPostImages([]);
       setPostDialogOpen(false);
@@ -465,7 +469,7 @@ const SpacePage: React.FC = () => {
                 character: char, 
                 type: 'reply',
                 userPost: postContent,
-                userImages: postImages.length > 0 ? postImages : undefined,
+                userImages: savedImages.length > 0 ? savedImages : undefined,
                 userApiKey: apiConfig.apiKey,
                 provider: apiConfig.provider,
                 baseUrl: apiConfig.baseUrl,
