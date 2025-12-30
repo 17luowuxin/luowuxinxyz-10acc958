@@ -185,19 +185,104 @@ async function getAICompletion(
   return content.trim().replace(/^\n+|\n+$/g, '');
 }
 
-// 用视觉模型识别图片内容
-async function getImageDescription(imageUrl: string): Promise<string> {
+// 用视觉能力识别图片内容（优先使用用户自定义/OpenAI配置；不行再用 Lovable AI 网关）
+async function getImageDescription(imageUrl: string, config: AIConfig): Promise<string> {
+  const visionPrompt = '用一句话(15字以内)描述这张图片的主要内容，只说核心内容。';
+
+  const tryParseContent = async (resp: Response) => {
+    const data = await resp.json();
+    return (data?.choices?.[0]?.message?.content as string | undefined)?.trim() || '';
+  };
+
+  // 1) 优先走用户配置（你填的“可识别图片”的模型就能真正派上用场）
+  try {
+    const canUseUserVision =
+      !!config.apiKey &&
+      (config.provider === 'custom' || config.provider === 'openai') &&
+      (config.provider !== 'custom' || !!config.baseUrl);
+
+    if (canUseUserVision) {
+      let apiUrl = '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      };
+
+      let model = config.model || (config.provider === 'openai' ? 'gpt-4o-mini' : 'deepseek-chat');
+
+      if (config.provider === 'custom') {
+        let baseUrl = (config.baseUrl || '').replace(/\/+$/, '');
+        if (!baseUrl.endsWith('/chat/completions')) baseUrl = `${baseUrl}/chat/completions`;
+        apiUrl = baseUrl;
+      } else {
+        apiUrl = 'https://api.openai.com/v1/chat/completions';
+      }
+
+      console.log('Vision via user provider:', config.provider, 'model:', model);
+
+      let response = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: visionPrompt },
+                { type: 'image_url', image_url: { url: imageUrl } },
+              ],
+            },
+          ],
+          max_tokens: 80,
+          stream: false,
+        }),
+      });
+
+      if (response.status === 400) {
+        console.log('Vision user provider 400, retry minimal params...');
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: visionPrompt },
+                  { type: 'image_url', image_url: { url: imageUrl } },
+                ],
+              },
+            ],
+          }),
+        });
+      }
+
+      if (response.ok) {
+        const content = await tryParseContent(response);
+        if (content) return content;
+      } else {
+        const t = await response.text();
+        console.error('User vision API error:', response.status, t.slice(0, 400));
+      }
+    }
+  } catch (err) {
+    console.error('User vision error:', err);
+  }
+
+  // 2) 兜底：Lovable AI 网关（如果额度不足会返回 402）
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
-    console.log("No LOVABLE_API_KEY, skip image recognition");
+    console.log('No LOVABLE_API_KEY, skip image recognition');
     return '';
   }
-  
+
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -206,24 +291,25 @@ async function getImageDescription(imageUrl: string): Promise<string> {
           {
             role: 'user',
             content: [
-              { type: 'text', text: '用一句话(15字以内)描述这张图片的主要内容，只说核心内容。' },
-              { type: 'image_url', image_url: { url: imageUrl } }
-            ]
-          }
+              { type: 'text', text: visionPrompt },
+              { type: 'image_url', image_url: { url: imageUrl } },
+            ],
+          },
         ],
-        max_tokens: 50,
+        max_tokens: 80,
       }),
     });
-    
+
     if (!response.ok) {
-      console.error('Vision API error:', response.status);
+      const t = await response.text();
+      console.error('Lovable vision API error:', response.status, t.slice(0, 400));
       return '';
     }
-    
+
     const data = await response.json();
     return data.choices?.[0]?.message?.content?.trim() || '';
   } catch (err) {
-    console.error('Image recognition error:', err);
+    console.error('Lovable image recognition error:', err);
     return '';
   }
 }
