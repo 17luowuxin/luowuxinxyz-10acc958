@@ -185,13 +185,56 @@ async function getAICompletion(
   return content.trim().replace(/^\n+|\n+$/g, '');
 }
 
+// 用视觉模型识别图片内容
+async function getImageDescription(imageUrl: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log("No LOVABLE_API_KEY, skip image recognition");
+    return '';
+  }
+  
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '用一句话(15字以内)描述这张图片的主要内容，只说核心内容。' },
+              { type: 'image_url', image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        max_tokens: 50,
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error('Vision API error:', response.status);
+      return '';
+    }
+    
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || '';
+  } catch (err) {
+    console.error('Image recognition error:', err);
+    return '';
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { character, type, userPost, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+    const { character, type, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
     // 检查是否使用默认API
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
@@ -228,15 +271,29 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
     } else if (type === "reply") {
       const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
       
+      // 如果有图片，识别图片内容
+      let imageDescriptions = '';
+      if (userImages && userImages.length > 0) {
+        console.log("Recognizing user images:", userImages.length);
+        const descriptions = [];
+        for (const imgUrl of userImages.slice(0, 3)) { // 最多识别3张
+          const desc = await getImageDescription(imgUrl);
+          if (desc) descriptions.push(desc);
+        }
+        if (descriptions.length > 0) {
+          imageDescriptions = `\n好友还发了${userImages.length}张图片，内容是: ${descriptions.join('、')}`;
+        }
+      }
+      
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
-你的好友发了一条说说："${userPost}"
+你的好友发了一条说说："${userPost || '分享了图片'}"${imageDescriptions}
 ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
 请以你的角色身份回复这条说说。要求：
 - 符合你的角色性格和说话方式
-- 回复要针对说说的具体内容
+- 回复要针对说说的具体内容${imageDescriptions ? '，可以评论图片内容' : ''}
 - 不要每次都叫对方名字，偶尔叫"${shortName}"或用亲昵称呼如"亲"、"宝"等
 - 简短自然，像朋友评论
 - 可以使用emoji
@@ -247,7 +304,7 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     const usingCustom = userApiKey && (provider === 'custom' || provider === 'deepseek' || provider === 'openai');
     console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl });
     console.log(`Using provider: ${usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : 'lovable-ai')}`);
-    console.log(`User: ${userName}`);
+    console.log(`User: ${userName}, hasImages: ${!!userImages}`);
 
     const content = await getAICompletion(
       [{ role: "user", content: prompt }],
