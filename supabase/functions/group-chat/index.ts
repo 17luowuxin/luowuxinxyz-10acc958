@@ -222,7 +222,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds, userId } = await req.json();
+    const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds, userId, isCharacterToCharacter, triggerCharacterId } = await req.json();
     
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     
@@ -241,6 +241,7 @@ serve(async (req) => {
     console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl, model: customModel });
     console.log("Using provider:", usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : "lovable-ai"));
     console.log("Mentioned characters:", mentionedCharacterIds);
+    console.log("Is character-to-character:", isCharacterToCharacter);
 
     const userName = userProfile?.nickname || '用户';
     const userPersona = userProfile?.persona || '';
@@ -250,6 +251,14 @@ serve(async (req) => {
     if (mentionedCharacterIds && mentionedCharacterIds.length > 0) {
       responders = characters.filter((c: any) => mentionedCharacterIds.includes(c.id));
       console.log("Using mentioned characters:", responders.map((r: any) => r.name));
+    } else if (isCharacterToCharacter && triggerCharacterId) {
+      // 角色回角色模式：排除触发者，随机选一个其他角色回复
+      const otherCharacters = characters.filter((c: any) => c.id !== triggerCharacterId);
+      if (otherCharacters.length > 0) {
+        const shuffled = [...otherCharacters].sort(() => Math.random() - 0.5);
+        responders = shuffled.slice(0, 1);
+      }
+      console.log("Character-to-character mode, responder:", responders.map((r: any) => r.name));
     } else {
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
       responders = shuffled.slice(0, 1);
@@ -259,6 +268,10 @@ serve(async (req) => {
 
     for (const character of responders) {
       const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
+      
+      // 获取触发角色的名字（如果是角色回角色模式）
+      const triggerCharacter = triggerCharacterId ? characters.find((c: any) => c.id === triggerCharacterId) : null;
+      const triggerName = triggerCharacter?.name || userName;
       
       const systemPrompt = `你正在模拟微信群聊中的角色"${character.name}"。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
@@ -272,6 +285,7 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 4. 回复要简短自然，像真实微信群聊，一般1-3句话
 5. 可以用括号表达动作或情绪，如(笑)(无语)
 6. 保持"${character.name}"的性格特点
+${isCharacterToCharacter ? `7. 你现在是在回复"${triggerName}"说的话，像朋友之间聊天一样自然回应` : ''}
 
 【禁止行为】
 - 禁止写出其他角色的回复
@@ -289,7 +303,7 @@ ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
           [
             { role: "system", content: systemPrompt },
             ...messages.slice(-10),
-            { role: "user", content: `${userName}: ${userMessage}` }
+            { role: "user", content: `${triggerName}: ${userMessage}` }
           ],
           config
         );
