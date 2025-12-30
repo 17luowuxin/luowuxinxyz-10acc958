@@ -400,7 +400,7 @@ ${transferPrompt}
               content: [
                 {
                   type: "text",
-                  text: "请用一句话（20字以内）简洁描述这张图片的主要内容。只说核心内容，不要详细描述。"
+                  text: "用3-5个字描述这张图片的核心主题。只说关键词，如：自拍、风景、猫咪、美食等。"
                 },
                 {
                   type: "image_url",
@@ -416,7 +416,7 @@ ${transferPrompt}
             body: JSON.stringify({
               model,
               messages: visionMessages,
-              max_tokens: 100,
+              max_tokens: 50,
             }),
           });
           
@@ -451,7 +451,7 @@ ${transferPrompt}
                     content: [
                       {
                         type: "text",
-                        text: "请用一句话（20字以内）简洁描述这张图片的主要内容。只说核心内容，不要详细描述。"
+                        text: "用3-5个字描述这张图片的核心主题。只说关键词，如：自拍、风景、猫咪、美食等。"
                       },
                       {
                         type: "image_url",
@@ -460,6 +460,7 @@ ${transferPrompt}
                     ]
                   }
                 ],
+                max_tokens: 50,
               }),
             });
             
@@ -477,11 +478,12 @@ ${transferPrompt}
       }
     }
 
-    // 如果有图片描述，添加到最后一条消息
+    // 如果有图片描述，添加到最后一条消息（简洁处理，不详细描述）
     if (imageDescription && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.role === 'user') {
-        lastMessage.content = `[用户发送了一张图片，图片内容: ${imageDescription}]\n\n用户说: ${lastMessage.content}`;
+        // 简化格式：让AI像看到图片一样自然回复，不要描述图片
+        lastMessage.content = `[用户发了一张图片(${imageDescription})]\n${lastMessage.content || '看看这个'}`;
       }
     }
 
