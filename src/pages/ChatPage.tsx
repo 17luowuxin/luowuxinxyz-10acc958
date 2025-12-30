@@ -647,47 +647,62 @@ const ChatPage: React.FC = () => {
     }
   };
   
-  // TTS生成函数 - 返回 audioBase64
-  const generateTTSAudio = async (text: string): Promise<string | null> => {
+  // TTS生成函数 - 返回 audioBase64，支持重试
+  const generateTTSAudio = async (text: string, retries: number = 2): Promise<string | null> => {
     if (!ttsConfig?.enabled || !ttsConfig.apiKey || !ttsConfig.baseUrl || !character) return null;
     
     const voiceId = character.voice_id;
     
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          text,
-          voiceId: voiceId || 'default',
-          ttsConfig: {
-            apiKey: ttsConfig.apiKey,
-            baseUrl: ttsConfig.baseUrl,
-            model: ttsConfig.model,
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-        }),
-      });
+          body: JSON.stringify({
+            text,
+            voiceId: voiceId || 'default',
+            ttsConfig: {
+              apiKey: ttsConfig.apiKey,
+              baseUrl: ttsConfig.baseUrl,
+              model: ttsConfig.model,
+            },
+          }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok || data.error) {
-        console.error('TTS error:', data.error || 'Unknown error');
+        if (!response.ok || data.error) {
+          console.error(`TTS error (attempt ${attempt + 1}):`, data.error || 'Unknown error');
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // 递增延迟重试
+            continue;
+          }
+          return null;
+        }
+
+        if (!data.audioContent) {
+          console.error(`TTS: No audio content received (attempt ${attempt + 1})`);
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            continue;
+          }
+          return null;
+        }
+
+        return data.audioContent;
+      } catch (err) {
+        console.error(`TTS generation error (attempt ${attempt + 1}):`, err);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
         return null;
       }
-
-      if (!data.audioContent) {
-        console.error('TTS: No audio content received');
-        return null;
-      }
-
-      return data.audioContent;
-    } catch (err) {
-      console.error('TTS generation error:', err);
-      return null;
     }
+    return null;
   };
 
   // TTS播放函数
@@ -1997,6 +2012,9 @@ const ChatPage: React.FC = () => {
                 if (audioBase64) {
                   const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
                   audioQueue.enqueue({ src: audioUrl }).catch(console.error);
+                } else {
+                  // 语音生成失败，在总是语音模式下提示用户
+                  console.warn('语音生成失败，回退到文本消息');
                 }
               }
               
@@ -2144,6 +2162,9 @@ const ChatPage: React.FC = () => {
           if (audioBase64) {
             const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
             audioQueue.enqueue({ src: audioUrl }).catch(console.error);
+          } else {
+            // 语音生成失败，在总是语音模式下提示用户
+            console.warn('语音生成失败，回退到文本消息');
           }
         }
         
