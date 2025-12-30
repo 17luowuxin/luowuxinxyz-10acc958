@@ -426,33 +426,40 @@ const GroupChatPage: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      // 角色回角色功能：有概率让另一个角色回复上一个角色
-      if (lastCharacterResponse && members.length > 1 && Math.random() < 0.4) {
-        console.log('Triggering character-to-character response...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const c2cBody: any = {
-          messages: currentMessages.map((m: any) => ({
-            role: m.sender_type === 'user' ? 'user' : 'assistant',
-            content: m.sender_type === 'user' ? m.content : `${m.characterName}: ${m.content}`
-          })),
-          characters: members,
-          userMessage: lastCharacterResponse.content,
-          userProfile,
-          isCharacterToCharacter: true,
-          triggerCharacterId: lastCharacterResponse.characterId,
-          userId: user?.id,
-          userApiKey: apiConfig.apiKey,
-          provider: apiConfig.provider,
-        };
-        if (apiConfig.baseUrl) c2cBody.baseUrl = apiConfig.baseUrl;
-        if (apiConfig.model) c2cBody.model = apiConfig.model;
+      // 角色回角色功能：连续多轮互动
+      if (lastCharacterResponse && members.length > 1) {
+        const maxRounds = 3; // 最多互动轮数
+        let currentRound = 0;
+        let continueInteraction = Math.random() < 0.5; // 50%概率触发第一轮
+        let currentTrigger = lastCharacterResponse;
 
-        try {
-          const { data: c2cData, error: c2cError } = await supabase.functions.invoke('group-chat', { body: c2cBody });
+        while (continueInteraction && currentRound < maxRounds) {
+          currentRound++;
+          console.log(`Character-to-character round ${currentRound}...`);
+          await new Promise(resolve => setTimeout(resolve, 1200));
           
-          if (!c2cError && c2cData?.responses?.length > 0) {
-            for (const c2cResponse of c2cData.responses) {
+          const c2cBody: any = {
+            messages: currentMessages.map((m: any) => ({
+              role: m.sender_type === 'user' ? 'user' : 'assistant',
+              content: m.sender_type === 'user' ? m.content : `${m.characterName}: ${m.content}`
+            })),
+            characters: members,
+            userMessage: currentTrigger.content,
+            userProfile,
+            isCharacterToCharacter: true,
+            triggerCharacterId: currentTrigger.characterId,
+            userId: user?.id,
+            userApiKey: apiConfig.apiKey,
+            provider: apiConfig.provider,
+          };
+          if (apiConfig.baseUrl) c2cBody.baseUrl = apiConfig.baseUrl;
+          if (apiConfig.model) c2cBody.model = apiConfig.model;
+
+          try {
+            const { data: c2cData, error: c2cError } = await supabase.functions.invoke('group-chat', { body: c2cBody });
+            
+            if (!c2cError && c2cData?.responses?.length > 0) {
+              const c2cResponse = c2cData.responses[0];
               const { data: c2cMsg } = await supabase
                 .from('group_messages')
                 .insert({
@@ -471,11 +478,28 @@ const GroupChatPage: React.FC = () => {
                   characterName: c2cMsg.characters?.name,
                   characterAvatar: c2cMsg.characters?.avatar_url
                 }]);
+                
+                // 更新当前消息列表和触发者
+                currentMessages.push({
+                  sender_type: 'character',
+                  content: c2cResponse.content,
+                  characterName: c2cResponse.characterName
+                });
+                currentTrigger = c2cResponse;
+                
+                // 递减概率决定是否继续
+                const continueChance = 0.4 - (currentRound * 0.1); // 40% -> 30% -> 20%
+                continueInteraction = Math.random() < continueChance;
+              } else {
+                continueInteraction = false;
               }
+            } else {
+              continueInteraction = false;
             }
+          } catch (c2cErr) {
+            console.error('Character-to-character error:', c2cErr);
+            continueInteraction = false;
           }
-        } catch (c2cErr) {
-          console.error('Character-to-character error:', c2cErr);
         }
       }
     } catch (err) {
