@@ -2441,19 +2441,28 @@ const ChatPage: React.FC = () => {
 
   // 接听通话 - 先解锁音频，自动开启语音识别
   const answerCall = async () => {
-    // 先解锁音频自动播放（用户手势触发）
-    await audioQueue.unlock();
-    
+    // 先更新UI，避免某些浏览器在音频解锁阶段卡住导致“点了没反应”
+
     // 停止来电铃声
     if (ringtoneAudioRef.current) {
       (ringtoneAudioRef.current as any).stop?.();
       ringtoneAudioRef.current = null;
     }
-    
+
     setCallRinging(false);
     setInCall(true);
     setCallStartTime(Date.now());
     setInterimTranscript('');
+
+    // 再尝试解锁音频自动播放（不允许阻塞太久）
+    try {
+      await Promise.race([
+        audioQueue.unlock(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
+      ]);
+    } catch {
+      // ignore
+    }
     
     // 角色的开场白 + TTS播放
     const greeting = showCallDialog === 'voice'
@@ -2466,8 +2475,12 @@ const ChatPage: React.FC = () => {
     if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
       try {
         setIsAISpeaking(true);
+        const controller = new AbortController();
+        const ttsTimeout = window.setTimeout(() => controller.abort(), 8000);
+
         const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
@@ -2482,7 +2495,10 @@ const ChatPage: React.FC = () => {
             },
           }),
         });
-        const ttsData = await ttsResp.json();
+
+        window.clearTimeout(ttsTimeout);
+
+        const ttsData = await ttsResp.json().catch(() => ({} as any));
         if (ttsData.audioContent) {
           const audioUrl = `data:audio/mpeg;base64,${ttsData.audioContent}`;
           // 使用队列播放，完成后开始语音识别
