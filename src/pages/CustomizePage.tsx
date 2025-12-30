@@ -27,7 +27,7 @@ const bubbleFramePresets = [
   { id: 'cute-green', name: '薄荷绿', type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorColor: '#6BCB77', decorIcon: '🍀', decorImage: '' },
   { id: 'cute-purple', name: '梦幻紫', type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorColor: '#C77DFF', decorIcon: '💜', decorImage: '' },
   // 水滴透明磨砂气泡框
-  { id: 'water-drop', name: '水滴磨砂', type: 'css', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,230,255,0.3) 50%, rgba(180,220,255,0.2) 100%)', borderColor: 'rgba(255,255,255,0.6)', decorColor: '#87CEEB', decorIcon: '💧', decorImage: '' },
+  { id: 'water-drop', name: '水滴磨砂', type: 'css', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,230,255,0.3) 50%, rgba(180,220,255,0.2) 100%)', borderColor: 'rgba(255,255,255,0.6)', decorColor: '#87CEEB', decorIcon: '', decorImage: '' },
   // 带卡通头像装饰的黑红渐变气泡框
   { id: 'anime-head', name: '动漫头像', type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorColor: '', decorIcon: '', decorImage: animeHeadDecor },
 ];
