@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -767,12 +767,62 @@ const ChatPage: React.FC = () => {
     setLongPressedMsg(null);
   };
 
-  // 点击消息显示菜单
-  const handleMessageClick = (msg: any, e: React.MouseEvent | React.TouchEvent) => {
-    // 避免误触
+  // 长按消息显示菜单
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
+  
+  const handleMessageTouchStart = (msg: any) => {
+    if (msg.role === 'transfer') return;
+    isLongPressRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      setLongPressedMsg(msg);
+      // 触发轻微震动反馈（如果支持）
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms 长按触发
+  };
+  
+  const handleMessageTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  
+  const handleMessageTouchMove = () => {
+    // 移动时取消长按
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  
+  const handleMessageClick = (msg: any, e: React.MouseEvent) => {
+    // 只在桌面端点击时触发（移动端用长按）
     e.stopPropagation();
     if (msg.role === 'transfer') return;
-    setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
+    // 如果是长按触发的，不处理点击
+    if (isLongPressRef.current) {
+      isLongPressRef.current = false;
+      return;
+    }
+    // 桌面端可以点击切换菜单
+    if (window.matchMedia('(hover: hover)').matches) {
+      setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
+    }
+  };
+  
+  // 复制消息
+  const copyMessage = async (msg: any) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      toast.success('已复制');
+      setLongPressedMsg(null);
+    } catch (err) {
+      toast.error('复制失败');
+    }
   };
 
   // 转账相关函数 - 解析 AI 返回的转账指令
@@ -3258,7 +3308,10 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 <div 
-                  className={`relative overflow-visible flex items-start gap-2 cursor-pointer ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  className={`relative overflow-visible flex items-start gap-2 cursor-pointer select-none ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                  onTouchStart={() => handleMessageTouchStart(msg)}
+                  onTouchEnd={handleMessageTouchEnd}
+                  onTouchMove={handleMessageTouchMove}
                   onClick={(e) => handleMessageClick(msg, e)}
                 >
                   {/* Avatar with Frame - QQ风格顶部对齐 */}
@@ -3400,7 +3453,25 @@ const ChatPage: React.FC = () => {
                             <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
                           )}
 
-                          <span className="relative z-10" style={{ display: 'inline' }}>{displayContent}</span>
+                          {/* 引用内容显示 - 类似QQ样式 */}
+                          {msg.quotedMessage && (
+                            <div 
+                              className="mb-1.5 pb-1.5 border-b border-current/20 text-xs opacity-70"
+                              style={{ fontSize: `${Math.max(bubbleSize - 2, 10)}px` }}
+                            >
+                              <span className="text-pink-500 font-medium">
+                                回复 {msg.quotedMessage.role === 'user' ? (profile?.nickname || '我') : character?.name}：
+                              </span>
+                              <span className="ml-1">
+                                {msg.quotedMessage.content?.slice(0, 30)}{(msg.quotedMessage.content?.length || 0) > 30 ? '...' : ''}
+                              </span>
+                            </div>
+                          )}
+
+                          <span className="relative z-10" style={{ display: 'inline' }}>
+                            {/* 移除消息内容中的引用标记 */}
+                            {displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
+                          </span>
                         </div>
                       )}
                       
@@ -3428,25 +3499,35 @@ const ChatPage: React.FC = () => {
                 )}
               </div>
               
-              {/* 点击菜单 */}
+              {/* 长按菜单 */}
               {longPressedMsg?.id === msg.id && (
                 <div
-                  className={`absolute top-full mt-1 bg-background border rounded-lg shadow-lg p-1 flex gap-1 z-50 ${msg.role === 'user' ? 'right-0' : 'left-0'}`}
+                  className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${msg.role === 'user' ? 'right-0' : 'left-0'}`}
                   onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                 >
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="h-8 px-2 text-xs gap-1"
+                    className="h-9 px-3 text-xs gap-1.5 rounded-lg"
                     onClick={() => quoteMessage(msg)}
                   >
-                    <Quote className="w-3 h-3" />
+                    <Quote className="w-4 h-4" />
                     引用
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+                    onClick={() => copyMessage(msg)}
+                  >
+                    <Copy className="w-4 h-4" />
+                    复制
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive">
-                        <RotateCcw className="w-3 h-3" />
+                      <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
+                        <RotateCcw className="w-4 h-4" />
                         回溯
                       </Button>
                     </AlertDialogTrigger>
@@ -3465,14 +3546,6 @@ const ChatPage: React.FC = () => {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => setLongPressedMsg(null)}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
                 </div>
               )}
             </div>
@@ -3538,13 +3611,17 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* 引用消息提示 */}
+      {/* 引用消息提示 - 类似QQ样式 */}
       {quotedMessage && (
-        <div className="px-3 py-2 bg-muted/80 border-t flex items-center gap-2">
-          <Quote className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span className="text-xs text-muted-foreground truncate flex-1">
-            引用: {quotedMessage.content.slice(0, 40)}{quotedMessage.content.length > 40 ? '...' : ''}
-          </span>
+        <div className="px-3 py-2 bg-muted/60 border-t border-l-4 border-l-pink-400 flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <span className="text-xs text-pink-500 font-medium">
+              回复 {quotedMessage.role === 'user' ? (profile?.nickname || '我') : character?.name}：
+            </span>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {quotedMessage.content.slice(0, 50)}{quotedMessage.content.length > 50 ? '...' : ''}
+            </p>
+          </div>
           <Button 
             variant="ghost" 
             size="icon" 
