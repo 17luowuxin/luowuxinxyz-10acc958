@@ -109,34 +109,72 @@ const FriendsPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user || !editingChar) return;
 
-    if (!file.type.startsWith('audio/')) {
-      toast.error('请选择音频文件');
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const extOk = ['mp3', 'm4a', 'mp4', 'wav', 'ogg', 'aac'].includes(ext);
+    const typeOk = file.type ? file.type.startsWith('audio/') : extOk;
+
+    if (!typeOk) {
+      console.log('[ringtone] invalid file type:', { name: file.name, type: file.type });
+      toast.error('请选择音频文件（mp3/m4a/wav/ogg）');
+      e.target.value = '';
       return;
     }
 
+    const guessContentType = () => {
+      if (file.type) return file.type;
+      switch (ext) {
+        case 'mp3':
+          return 'audio/mpeg';
+        case 'm4a':
+        case 'mp4':
+          return 'audio/mp4';
+        case 'wav':
+          return 'audio/wav';
+        case 'ogg':
+          return 'audio/ogg';
+        case 'aac':
+          return 'audio/aac';
+        default:
+          return 'application/octet-stream';
+      }
+    };
+
     setUploadingRingtone(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/ringtones/${Date.now()}.${fileExt}`;
-      
+      // 使用已存在且可用的 bucket（avatars）存储铃声，避免 bucket 权限/不存在导致上传失败
+      const bucket = 'avatars';
+      const fileName = `${user.id}/ringtones/${Date.now()}.${ext || 'mp3'}`;
+
+      console.log('[ringtone] uploading...', { bucket, fileName, size: file.size, type: file.type });
+
       const { error } = await supabase.storage
-        .from('music')
-        .upload(fileName, file, { upsert: true });
-      
+        .from(bucket)
+        .upload(fileName, file, { upsert: true, contentType: guessContentType() });
+
       if (error) {
         console.error('Upload ringtone error:', error);
-        toast.error('铃声上传失败');
+        toast.error(`铃声上传失败：${error.message}`);
         return;
       }
-      
+
       const { data: { publicUrl } } = supabase.storage
-        .from('music')
+        .from(bucket)
         .getPublicUrl(fileName);
-      
+
+      console.log('[ringtone] uploaded:', publicUrl);
       setRingtoneUrl(publicUrl);
-      
-      // 直接保存到数据库
-      await supabase.from('characters').update({ ringtone_url: publicUrl }).eq('id', editingChar.id);
+
+      const { error: dbError } = await supabase
+        .from('characters')
+        .update({ ringtone_url: publicUrl })
+        .eq('id', editingChar.id);
+
+      if (dbError) {
+        console.error('Save ringtone_url error:', dbError);
+        toast.error(`保存铃声失败：${dbError.message}`);
+        return;
+      }
+
       toast.success('铃声已上传');
     } catch (err) {
       console.error('Upload ringtone error:', err);
