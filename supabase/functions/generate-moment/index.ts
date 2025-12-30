@@ -409,15 +409,46 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
         }
       }
       
+      // 【核心】拉取该动态下的历史评论，构建上下文
+      let conversationContext = '';
+      if (momentId) {
+        const { data: comments } = await supabase
+          .from('comments')
+          .select('content, is_character_reply, created_at')
+          .eq('moment_id', momentId)
+          .order('created_at', { ascending: true })
+          .limit(20); // 最多20条历史
+        
+        if (comments && comments.length > 0) {
+          const history = comments.map(c => {
+            // 角色回复格式: [角色名] 内容
+            const charMatch = c.content.match(/^\[([^\]]+)\]\s*/);
+            if (c.is_character_reply && charMatch) {
+              const charName = charMatch[1];
+              const text = c.content.replace(/^\[([^\]]+)\]\s*/, '');
+              return `${charName}: ${text}`;
+            } else {
+              return `${userName}: ${c.content}`;
+            }
+          });
+          conversationContext = `\n\n【之前的评论对话】\n${history.join('\n')}`;
+          console.log(`Loaded ${comments.length} comments as context`);
+        }
+      }
+      
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
 你的好友发了一条说说："${userPost || '分享了图片'}"${imageDescriptions}
 ${userPersona ? `关于这位好友: ${userPersona}` : ''}
+${conversationContext}
 
-请以你的角色身份回复这条说说。要求：
+【最新一条评论】${userName}: ${userPost}
+
+请以你的角色身份回复这条最新评论。要求：
 - 符合你的角色性格和说话方式
-- 回复要针对说说的具体内容${imageDescriptions ? '，可以评论图片内容' : ''}
+- 回复要针对最新评论的具体内容${imageDescriptions ? '，可以评论图片内容' : ''}
+- 如果有之前的对话，请接着上文自然回复，不要重复之前说过的话
 - 不要每次都叫对方名字，偶尔叫"${shortName}"或用亲昵称呼如"亲"、"宝"等
 - 简短自然，像朋友评论
 - 可以使用emoji
