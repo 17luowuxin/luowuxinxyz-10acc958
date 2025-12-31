@@ -27,7 +27,7 @@ interface Theme {
   created_at: string;
 }
 
-const ADMIN_PASSWORD = 'admin123456'; // 管理员密码
+const ADMIN_PASSWORD = '13160616007lxs'; // 管理员密码
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
