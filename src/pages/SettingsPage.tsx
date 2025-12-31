@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2 } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -1913,6 +1913,16 @@ const SettingsPage: React.FC = () => {
             一键恢复默认设置
           </button>
         </div>
+
+        {/* Admin Button */}
+        <Button 
+          variant="outline" 
+          className="w-full rounded-2xl py-5 bg-white/60 backdrop-blur-sm border-purple-200 text-purple-600 hover:bg-purple-50" 
+          onClick={() => navigate('/admin')}
+        >
+          <Shield className="w-4 h-4 mr-2" />
+          管理员后台
+        </Button>
 
         {/* Logout Button */}
         <Button 

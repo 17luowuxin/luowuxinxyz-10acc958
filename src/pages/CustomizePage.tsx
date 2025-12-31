@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';
+import ThemeGallery from '@/components/customize/ThemeGallery';
 
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
@@ -373,6 +374,9 @@ const CustomizePage: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-6 pb-24">
+        {/* Theme Gallery */}
+        <ThemeGallery onThemeApplied={fetchSettings} />
+
         {/* Video Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center justify-between mb-4">
