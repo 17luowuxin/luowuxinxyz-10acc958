@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -23,11 +24,32 @@ interface Theme {
   lock_screen_bg_url: string | null;
   lock_screen_video_url: string | null;
   video_background_url: string | null;
+  app_icons: Record<string, string> | null;
   is_active: boolean;
   created_at: string;
 }
 
 const ADMIN_PASSWORD = '13160616007lxs'; // 管理员密码
+
+// 所有APP图标配置
+const allAppIcons = [
+  { id: 'album', name: '相册', icon: Image, color: 'bg-[#F06292]' },
+  { id: 'camera', name: '相机', icon: Camera, color: 'bg-[#42A5F5]' },
+  { id: 'profile', name: '我的', icon: User, color: 'bg-[#26A69A]' },
+  { id: 'customize', name: '美化', icon: Palette, color: 'bg-[#FFA726]' },
+  { id: 'space', name: '空间', icon: Star, color: 'bg-[#EC407A]' },
+  { id: 'games', name: '游戏', icon: Gamepad2, color: 'bg-[#FFA726]' },
+  { id: 'bottle', name: '漂流瓶', icon: Mail, color: 'bg-[#AB47BC]' },
+  { id: 'diary', name: '日记', icon: BookOpen, color: 'bg-[#FF7043]' },
+  { id: 'stats', name: '统计', icon: BarChart3, color: 'bg-[#66BB6A]' },
+  { id: 'workshop', name: '工坊', icon: Hammer, color: 'bg-[#7E57C2]' },
+  { id: 'finance', name: '财务', icon: Wallet, color: 'bg-[#FF9800]' },
+  // Dock 图标
+  { id: 'friends', name: '好友', icon: MessageCircle, color: 'bg-[#42A5F5]' },
+  { id: 'group', name: '群聊', icon: Users, color: 'bg-[#26A69A]' },
+  { id: 'music', name: '音乐', icon: Music, color: 'bg-[#5C6BC0]' },
+  { id: 'settings', name: '设置', icon: Settings, color: 'bg-[#78909C]' },
+];
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -44,12 +66,12 @@ const AdminPage: React.FC = () => {
     name: '',
     description: '',
     preview_url: '',
-    app_icon_url: '',
     chat_background_url: '',
     global_background_url: '',
     lock_screen_bg_url: '',
     lock_screen_video_url: '',
     video_background_url: '',
+    app_icons: {} as Record<string, string>,
   });
   const [uploading, setUploading] = useState<string | null>(null);
 
@@ -100,7 +122,7 @@ const AdminPage: React.FC = () => {
       
       if (error) {
         console.error('Error adding admin role:', error);
-        toast.error('设置管理员权限失败');
+        toast.error('设置管理员权限失败: ' + error.message);
         return;
       }
       
@@ -124,7 +146,7 @@ const AdminPage: React.FC = () => {
       return;
     }
     
-    setThemes(data || []);
+    setThemes((data || []) as Theme[]);
   };
 
   const uploadFile = async (file: File, folder: string): Promise<string | null> => {
@@ -158,6 +180,22 @@ const AdminPage: React.FC = () => {
     setUploading(null);
   };
 
+  const handleAppIconUpload = async (e: React.ChangeEvent<HTMLInputElement>, appId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(`app_${appId}`);
+    const url = await uploadFile(file, `app_icons/${appId}`);
+    if (url) {
+      setNewTheme(prev => ({
+        ...prev,
+        app_icons: { ...prev.app_icons, [appId]: url }
+      }));
+      toast.success('图标上传成功');
+    }
+    setUploading(null);
+  };
+
   const handleSaveTheme = async () => {
     if (!newTheme.name) {
       toast.error('请输入主题名称');
@@ -167,7 +205,15 @@ const AdminPage: React.FC = () => {
     const { error } = await supabase
       .from('themes')
       .insert({
-        ...newTheme,
+        name: newTheme.name,
+        description: newTheme.description,
+        preview_url: newTheme.preview_url,
+        chat_background_url: newTheme.chat_background_url,
+        global_background_url: newTheme.global_background_url,
+        lock_screen_bg_url: newTheme.lock_screen_bg_url,
+        lock_screen_video_url: newTheme.lock_screen_video_url,
+        video_background_url: newTheme.video_background_url,
+        app_icons: newTheme.app_icons,
         created_by: user?.id,
         is_active: true,
       });
@@ -183,12 +229,12 @@ const AdminPage: React.FC = () => {
       name: '',
       description: '',
       preview_url: '',
-      app_icon_url: '',
       chat_background_url: '',
       global_background_url: '',
       lock_screen_bg_url: '',
       lock_screen_video_url: '',
       video_background_url: '',
+      app_icons: {},
     });
     fetchThemes();
   };
@@ -289,15 +335,16 @@ const AdminPage: React.FC = () => {
     );
   }
 
-  const uploadFields = [
+  const backgroundFields = [
     { key: 'preview_url', label: '主题预览图', accept: 'image/*' },
-    { key: 'app_icon_url', label: 'APP图标', accept: 'image/*' },
     { key: 'chat_background_url', label: '聊天背景', accept: 'image/*' },
     { key: 'global_background_url', label: '桌面壁纸', accept: 'image/*' },
     { key: 'lock_screen_bg_url', label: '锁屏壁纸', accept: 'image/*' },
     { key: 'lock_screen_video_url', label: '锁屏视频', accept: 'video/*' },
     { key: 'video_background_url', label: '动态壁纸', accept: 'video/*' },
   ];
+
+  const uploadedIconsCount = Object.keys(newTheme.app_icons).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -343,31 +390,88 @@ const AdminPage: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {uploadFields.map(({ key, label, accept }) => (
-                <div key={key} className="space-y-2">
-                  <Label className="text-xs">{label}</Label>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept={accept}
-                      onChange={(e) => handleFileUpload(e, key)}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      disabled={uploading === key}
-                    />
-                    <div className={`border-2 border-dashed rounded-lg p-3 text-center ${newTheme[key as keyof typeof newTheme] ? 'border-primary bg-primary/5' : 'border-muted'}`}>
-                      {uploading === key ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto" />
-                      ) : newTheme[key as keyof typeof newTheme] ? (
-                        <div className="text-xs text-primary truncate">已上传</div>
-                      ) : (
-                        <Upload className="w-5 h-5 mx-auto text-muted-foreground" />
-                      )}
+            <Tabs defaultValue="backgrounds" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="backgrounds">壁纸背景</TabsTrigger>
+                <TabsTrigger value="icons">
+                  APP图标 ({uploadedIconsCount}/15)
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="backgrounds" className="mt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {backgroundFields.map(({ key, label, accept }) => (
+                    <div key={key} className="space-y-2">
+                      <Label className="text-xs">{label}</Label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept={accept}
+                          onChange={(e) => handleFileUpload(e, key)}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          disabled={uploading === key}
+                        />
+                        <div className={`border-2 border-dashed rounded-lg p-3 text-center ${newTheme[key as keyof typeof newTheme] ? 'border-primary bg-primary/5' : 'border-muted'}`}>
+                          {uploading === key ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto" />
+                          ) : newTheme[key as keyof typeof newTheme] ? (
+                            <div className="text-xs text-primary truncate">已上传</div>
+                          ) : (
+                            <Upload className="w-5 h-5 mx-auto text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </TabsContent>
+              
+              <TabsContent value="icons" className="mt-4">
+                <p className="text-xs text-muted-foreground mb-3">
+                  上传15个APP图标，让用户一键应用完整主题
+                </p>
+                <div className="grid grid-cols-5 gap-2">
+                  {allAppIcons.map((app) => {
+                    const IconComponent = app.icon;
+                    const hasIcon = newTheme.app_icons[app.id];
+                    const isUploading = uploading === `app_${app.id}`;
+                    
+                    return (
+                      <div key={app.id} className="flex flex-col items-center gap-1">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleAppIconUpload(e, app.id)}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            disabled={isUploading}
+                          />
+                          {hasIcon ? (
+                            <div className="w-12 h-12 rounded-xl overflow-hidden ring-2 ring-primary">
+                              <img src={hasIcon} alt={app.name} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={`w-12 h-12 rounded-xl ${app.color} flex items-center justify-center relative`}>
+                              {isUploading ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                              ) : (
+                                <>
+                                  <IconComponent className="w-5 h-5 text-white" />
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-muted rounded-full flex items-center justify-center">
+                                    <Plus className="w-3 h-3" />
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{app.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </TabsContent>
+            </Tabs>
 
             <Button className="w-full" onClick={handleSaveTheme}>
               <Save className="w-4 h-4 mr-2" />
@@ -407,7 +511,7 @@ const AdminPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{theme.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {theme.description || '无描述'}
+                        {theme.app_icons ? `${Object.keys(theme.app_icons).length}个图标` : '无图标'} · {theme.description || '无描述'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
