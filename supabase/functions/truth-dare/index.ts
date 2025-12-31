@@ -95,7 +95,7 @@ async function getAICompletion(
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: 1500,
+      max_tokens: 300,
       stream: false,
     }),
   });
@@ -188,38 +188,33 @@ serve(async (req) => {
 
     let systemPrompt = `你是${character.name}，性格特点：${character.persona || '活泼开朗'}。
 你正在和朋友们玩真心话大冒险游戏。请根据你的性格特点来提问或回答。
-回答要自然有趣，符合你的人设。`;
+【重要】回复必须简短精炼，控制在50字以内！直接说重点，不要啰嗦。`;
 
     let userPrompt = '';
     
     switch (action) {
       case 'ask_truth':
-        userPrompt = `轮到你向${targetCharacter.name}提问真心话了。请提出一个有趣但不过分的真心话问题。
-问题要符合朋友之间的互动，可以调皮但要尊重对方。直接输出完整的问题。`;
+        userPrompt = `向${targetCharacter.name}提一个真心话问题。要求：1句话，20字以内，直接问。`;
         break;
         
       case 'ask_dare':
-        userPrompt = `轮到你向${targetCharacter.name}提出大冒险了。请提出一个有趣但可以完成的大冒险挑战。
-挑战要好玩但不要太过分，适合朋友之间玩。直接输出完整的挑战内容，确保描述清晰完整。`;
+        userPrompt = `给${targetCharacter.name}出一个大冒险。要求：1句话描述挑战，30字以内，简单可执行。`;
         break;
         
       case 'answer_truth':
-        userPrompt = `${targetCharacter.name}问你真心话："${gameHistory}"
-请根据你的性格诚实地回答这个问题。回答要自然有趣。直接输出完整的回答。`;
+        userPrompt = `问题："${gameHistory}" 用1-2句话回答，30字以内。`;
         break;
         
       case 'do_dare':
-        userPrompt = `${targetCharacter.name}给你的大冒险是："${gameHistory}"
-请描述你如何完成这个挑战，以及你的反应。描述要生动有趣。直接输出完整的描述。`;
+        userPrompt = `挑战："${gameHistory}" 用1-2句话描述你怎么完成的，30字以内。`;
         break;
         
       case 'react':
-        userPrompt = `游戏中发生了这件事：${gameHistory}
-作为旁观者，请给出一句简短的反应或评论。可以是调侃、鼓励或搞笑的话。直接输出一句话。`;
+        userPrompt = `${gameHistory} 用一句话评论，15字以内。`;
         break;
         
       default:
-        userPrompt = '请说一句开场白，准备开始真心话大冒险游戏。';
+        userPrompt = '说一句开场白，10字以内。';
     }
 
     const reply = await getAICompletion(
