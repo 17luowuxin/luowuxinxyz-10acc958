@@ -12,12 +12,12 @@ interface Theme {
   name: string;
   description: string | null;
   preview_url: string | null;
-  app_icon_url: string | null;
   chat_background_url: string | null;
   global_background_url: string | null;
   lock_screen_bg_url: string | null;
   lock_screen_video_url: string | null;
   video_background_url: string | null;
+  app_icons: Record<string, string> | null;
 }
 
 interface ThemeGalleryProps {
@@ -47,7 +47,7 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       return;
     }
     
-    setThemes(data || []);
+    setThemes((data || []) as Theme[]);
     setLoading(false);
   };
 
@@ -60,7 +60,8 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
     setApplying(theme.id);
 
     try {
-      const updateData: Record<string, string | null> = {};
+      // 准备更新数据
+      const updateData: Record<string, any> = {};
       
       if (theme.chat_background_url) {
         updateData.chat_background_url = theme.chat_background_url;
@@ -77,6 +78,24 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       if (theme.video_background_url) {
         updateData.video_background_url = theme.video_background_url;
       }
+      
+      // 合并 APP 图标
+      if (theme.app_icons && Object.keys(theme.app_icons).length > 0) {
+        // 先获取现有的 app_icons
+        const { data: existingData } = await supabase
+          .from('customization')
+          .select('app_icons')
+          .eq('user_id', user.id)
+          .single();
+        
+        const existingIcons = (existingData?.app_icons as Record<string, string>) || {};
+        
+        // 合并主题图标（主题图标覆盖现有的）
+        updateData.app_icons = {
+          ...existingIcons,
+          ...theme.app_icons
+        };
+      }
 
       const { error } = await supabase
         .from('customization')
@@ -92,7 +111,10 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       // 清除缓存
       sessionStorage.removeItem(`bg_${user.id}`);
       
-      toast.success(`已应用主题: ${theme.name}`);
+      const iconCount = theme.app_icons ? Object.keys(theme.app_icons).length : 0;
+      toast.success(`已应用主题: ${theme.name}`, {
+        description: iconCount > 0 ? `包含 ${iconCount} 个APP图标` : undefined
+      });
       onThemeApplied?.();
     } catch (err) {
       console.error('Error:', err);
@@ -146,49 +168,55 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3">
-          {themes.map((theme) => (
-            <motion.div
-              key={theme.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.02 }}
-              className="relative rounded-xl overflow-hidden border bg-card"
-            >
-              {theme.preview_url ? (
-                <img
-                  src={theme.preview_url}
-                  alt={theme.name}
-                  className="w-full aspect-[3/4] object-cover"
-                />
-              ) : (
-                <div className="w-full aspect-[3/4] bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                  <Palette className="w-12 h-12 text-muted-foreground" />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-3">
-                <p className="font-medium text-white text-sm truncate">{theme.name}</p>
-                {theme.description && (
-                  <p className="text-xs text-white/70 truncate">{theme.description}</p>
+          {themes.map((theme) => {
+            const iconCount = theme.app_icons ? Object.keys(theme.app_icons).length : 0;
+            
+            return (
+              <motion.div
+                key={theme.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.02 }}
+                className="relative rounded-xl overflow-hidden border bg-card"
+              >
+                {theme.preview_url ? (
+                  <img
+                    src={theme.preview_url}
+                    alt={theme.name}
+                    className="w-full aspect-[3/4] object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-[3/4] bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                    <Palette className="w-12 h-12 text-muted-foreground" />
+                  </div>
                 )}
-                <Button
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => applyTheme(theme)}
-                  disabled={applying === theme.id}
-                >
-                  {applying === theme.id ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 mr-1" />
-                      一键应用
-                    </>
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          ))}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                  <p className="font-medium text-white text-sm truncate">{theme.name}</p>
+                  <p className="text-xs text-white/70 truncate">
+                    {iconCount > 0 ? `${iconCount}个图标` : ''} 
+                    {theme.description && iconCount > 0 ? ' · ' : ''}
+                    {theme.description || (iconCount === 0 ? '壁纸主题' : '')}
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => applyTheme(theme)}
+                    disabled={applying === theme.id}
+                  >
+                    {applying === theme.id ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-1" />
+                        一键应用
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

@@ -898,6 +898,7 @@ export type Database = {
       themes: {
         Row: {
           app_icon_url: string | null
+          app_icons: Json | null
           chat_background_url: string | null
           created_at: string
           created_by: string | null
@@ -914,6 +915,7 @@ export type Database = {
         }
         Insert: {
           app_icon_url?: string | null
+          app_icons?: Json | null
           chat_background_url?: string | null
           created_at?: string
           created_by?: string | null
@@ -930,6 +932,7 @@ export type Database = {
         }
         Update: {
           app_icon_url?: string | null
+          app_icons?: Json | null
           chat_background_url?: string | null
           created_at?: string
           created_by?: string | null
