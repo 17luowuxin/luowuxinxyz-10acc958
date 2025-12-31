@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,8 +25,23 @@ interface Theme {
   lock_screen_video_url: string | null;
   video_background_url: string | null;
   app_icons: Record<string, string> | null;
+  desktop_widgets: string[] | null;
   is_active: boolean;
   created_at: string;
+}
+
+interface ThemeForm {
+  id?: string;
+  name: string;
+  description: string;
+  preview_url: string;
+  chat_background_url: string;
+  global_background_url: string;
+  lock_screen_bg_url: string;
+  lock_screen_video_url: string;
+  video_background_url: string;
+  app_icons: Record<string, string>;
+  desktop_widgets: string[];
 }
 
 const ADMIN_PASSWORD = '13160616007lxs'; // 管理员密码
@@ -51,6 +66,19 @@ const allAppIcons = [
   { id: 'settings', name: '设置', icon: Settings, color: 'bg-[#78909C]' },
 ];
 
+const emptyForm: ThemeForm = {
+  name: '',
+  description: '',
+  preview_url: '',
+  chat_background_url: '',
+  global_background_url: '',
+  lock_screen_bg_url: '',
+  lock_screen_video_url: '',
+  video_background_url: '',
+  app_icons: {},
+  desktop_widgets: ['', '', ''],
+};
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -61,18 +89,11 @@ const AdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   
-  // 新主题表单
-  const [newTheme, setNewTheme] = useState({
-    name: '',
-    description: '',
-    preview_url: '',
-    chat_background_url: '',
-    global_background_url: '',
-    lock_screen_bg_url: '',
-    lock_screen_video_url: '',
-    video_background_url: '',
-    app_icons: {} as Record<string, string>,
-  });
+  // 编辑状态
+  const [editingTheme, setEditingTheme] = useState<Theme | null>(null);
+  
+  // 主题表单
+  const [themeForm, setThemeForm] = useState<ThemeForm>(emptyForm);
   const [uploading, setUploading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -146,7 +167,10 @@ const AdminPage: React.FC = () => {
       return;
     }
     
-    setThemes((data || []) as Theme[]);
+    setThemes((data || []).map(theme => ({
+      ...theme,
+      desktop_widgets: theme.desktop_widgets || null,
+    })) as Theme[]);
   };
 
   const uploadFile = async (file: File, folder: string): Promise<string | null> => {
@@ -174,7 +198,7 @@ const AdminPage: React.FC = () => {
     setUploading(field);
     const url = await uploadFile(file, field);
     if (url) {
-      setNewTheme(prev => ({ ...prev, [field]: url }));
+      setThemeForm(prev => ({ ...prev, [field]: url }));
       toast.success('上传成功');
     }
     setUploading(null);
@@ -187,7 +211,7 @@ const AdminPage: React.FC = () => {
     setUploading(`app_${appId}`);
     const url = await uploadFile(file, `app_icons/${appId}`);
     if (url) {
-      setNewTheme(prev => ({
+      setThemeForm(prev => ({
         ...prev,
         app_icons: { ...prev.app_icons, [appId]: url }
       }));
@@ -196,47 +220,102 @@ const AdminPage: React.FC = () => {
     setUploading(null);
   };
 
+  const handleDesktopWidgetUpload = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(`widget_${index}`);
+    const url = await uploadFile(file, `desktop_widgets`);
+    if (url) {
+      setThemeForm(prev => {
+        const newWidgets = [...prev.desktop_widgets];
+        newWidgets[index] = url;
+        return { ...prev, desktop_widgets: newWidgets };
+      });
+      toast.success('桌面大图上传成功');
+    }
+    setUploading(null);
+  };
+
   const handleSaveTheme = async () => {
-    if (!newTheme.name) {
+    if (!themeForm.name) {
       toast.error('请输入主题名称');
       return;
     }
     
-    const { error } = await supabase
-      .from('themes')
-      .insert({
-        name: newTheme.name,
-        description: newTheme.description,
-        preview_url: newTheme.preview_url,
-        chat_background_url: newTheme.chat_background_url,
-        global_background_url: newTheme.global_background_url,
-        lock_screen_bg_url: newTheme.lock_screen_bg_url,
-        lock_screen_video_url: newTheme.lock_screen_video_url,
-        video_background_url: newTheme.video_background_url,
-        app_icons: newTheme.app_icons,
-        created_by: user?.id,
-        is_active: true,
-      });
-    
-    if (error) {
-      console.error('Error saving theme:', error);
-      toast.error('保存失败');
-      return;
+    const themeData = {
+      name: themeForm.name,
+      description: themeForm.description,
+      preview_url: themeForm.preview_url,
+      chat_background_url: themeForm.chat_background_url,
+      global_background_url: themeForm.global_background_url,
+      lock_screen_bg_url: themeForm.lock_screen_bg_url,
+      lock_screen_video_url: themeForm.lock_screen_video_url,
+      video_background_url: themeForm.video_background_url,
+      app_icons: themeForm.app_icons,
+      desktop_widgets: themeForm.desktop_widgets.filter(w => w),
+      is_active: true,
+    };
+
+    if (editingTheme) {
+      // 更新主题
+      const { error } = await supabase
+        .from('themes')
+        .update(themeData)
+        .eq('id', editingTheme.id);
+      
+      if (error) {
+        console.error('Error updating theme:', error);
+        toast.error('更新失败');
+        return;
+      }
+      
+      toast.success('主题更新成功');
+      setEditingTheme(null);
+    } else {
+      // 创建新主题
+      const { error } = await supabase
+        .from('themes')
+        .insert({
+          ...themeData,
+          created_by: user?.id,
+        });
+      
+      if (error) {
+        console.error('Error saving theme:', error);
+        toast.error('保存失败');
+        return;
+      }
+      
+      toast.success('主题保存成功');
     }
     
-    toast.success('主题保存成功');
-    setNewTheme({
-      name: '',
-      description: '',
-      preview_url: '',
-      chat_background_url: '',
-      global_background_url: '',
-      lock_screen_bg_url: '',
-      lock_screen_video_url: '',
-      video_background_url: '',
-      app_icons: {},
-    });
+    setThemeForm(emptyForm);
     fetchThemes();
+  };
+
+  const startEditTheme = (theme: Theme) => {
+    setEditingTheme(theme);
+    setThemeForm({
+      id: theme.id,
+      name: theme.name,
+      description: theme.description || '',
+      preview_url: theme.preview_url || '',
+      chat_background_url: theme.chat_background_url || '',
+      global_background_url: theme.global_background_url || '',
+      lock_screen_bg_url: theme.lock_screen_bg_url || '',
+      lock_screen_video_url: theme.lock_screen_video_url || '',
+      video_background_url: theme.video_background_url || '',
+      app_icons: theme.app_icons || {},
+      desktop_widgets: theme.desktop_widgets || ['', '', ''],
+    });
+    // 滚动到表单
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingTheme(null);
+    setThemeForm(emptyForm);
   };
 
   const toggleThemeActive = async (id: string, isActive: boolean) => {
@@ -344,7 +423,8 @@ const AdminPage: React.FC = () => {
     { key: 'video_background_url', label: '动态壁纸', accept: 'video/*' },
   ];
 
-  const uploadedIconsCount = Object.keys(newTheme.app_icons).length;
+  const uploadedIconsCount = Object.keys(themeForm.app_icons).length;
+  const uploadedWidgetsCount = themeForm.desktop_widgets.filter(w => w).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -362,20 +442,28 @@ const AdminPage: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-6 pb-20">
-        {/* 新建主题 */}
+        {/* 新建/编辑主题 */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              创建新主题
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {editingTheme ? <Edit className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                {editingTheme ? '编辑主题' : '创建新主题'}
+              </div>
+              {editingTheme && (
+                <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                  <X className="w-4 h-4 mr-1" />
+                  取消编辑
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <Label>主题名称 *</Label>
               <Input
-                value={newTheme.name}
-                onChange={(e) => setNewTheme(prev => ({ ...prev, name: e.target.value }))}
+                value={themeForm.name}
+                onChange={(e) => setThemeForm(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="输入主题名称"
               />
             </div>
@@ -383,18 +471,21 @@ const AdminPage: React.FC = () => {
             <div>
               <Label>主题描述</Label>
               <Textarea
-                value={newTheme.description}
-                onChange={(e) => setNewTheme(prev => ({ ...prev, description: e.target.value }))}
+                value={themeForm.description}
+                onChange={(e) => setThemeForm(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="输入主题描述"
                 rows={2}
               />
             </div>
 
             <Tabs defaultValue="backgrounds" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="backgrounds">壁纸背景</TabsTrigger>
                 <TabsTrigger value="icons">
                   APP图标 ({uploadedIconsCount}/15)
+                </TabsTrigger>
+                <TabsTrigger value="widgets">
+                  桌面大图 ({uploadedWidgetsCount}/3)
                 </TabsTrigger>
               </TabsList>
               
@@ -411,10 +502,10 @@ const AdminPage: React.FC = () => {
                           className="absolute inset-0 opacity-0 cursor-pointer"
                           disabled={uploading === key}
                         />
-                        <div className={`border-2 border-dashed rounded-lg p-3 text-center ${newTheme[key as keyof typeof newTheme] ? 'border-primary bg-primary/5' : 'border-muted'}`}>
+                        <div className={`border-2 border-dashed rounded-lg p-3 text-center ${themeForm[key as keyof ThemeForm] ? 'border-primary bg-primary/5' : 'border-muted'}`}>
                           {uploading === key ? (
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto" />
-                          ) : newTheme[key as keyof typeof newTheme] ? (
+                          ) : themeForm[key as keyof ThemeForm] ? (
                             <div className="text-xs text-primary truncate">已上传</div>
                           ) : (
                             <Upload className="w-5 h-5 mx-auto text-muted-foreground" />
@@ -433,7 +524,7 @@ const AdminPage: React.FC = () => {
                 <div className="grid grid-cols-5 gap-2">
                   {allAppIcons.map((app) => {
                     const IconComponent = app.icon;
-                    const hasIcon = newTheme.app_icons[app.id];
+                    const hasIcon = themeForm.app_icons[app.id];
                     const isUploading = uploading === `app_${app.id}`;
                     
                     return (
@@ -471,11 +562,54 @@ const AdminPage: React.FC = () => {
                   })}
                 </div>
               </TabsContent>
+
+              <TabsContent value="widgets" className="mt-4">
+                <p className="text-xs text-muted-foreground mb-3">
+                  上传3张桌面大图，显示在用户桌面上
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[0, 1, 2].map((index) => {
+                    const widgetUrl = themeForm.desktop_widgets[index];
+                    const isUploading = uploading === `widget_${index}`;
+                    
+                    return (
+                      <div key={index} className="space-y-2">
+                        <Label className="text-xs">大图 {index + 1}</Label>
+                        <div className="relative aspect-[4/3]">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleDesktopWidgetUpload(e, index)}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            disabled={isUploading}
+                          />
+                          {widgetUrl ? (
+                            <div className="w-full h-full rounded-lg overflow-hidden ring-2 ring-primary">
+                              <img src={widgetUrl} alt={`大图${index + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="w-full h-full border-2 border-dashed border-muted rounded-lg flex flex-col items-center justify-center">
+                              {isUploading ? (
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                              ) : (
+                                <>
+                                  <LayoutGrid className="w-6 h-6 text-muted-foreground mb-1" />
+                                  <span className="text-xs text-muted-foreground">点击上传</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </TabsContent>
             </Tabs>
 
             <Button className="w-full" onClick={handleSaveTheme}>
               <Save className="w-4 h-4 mr-2" />
-              保存主题
+              {editingTheme ? '更新主题' : '保存主题'}
             </Button>
           </CardContent>
         </Card>
@@ -495,7 +629,7 @@ const AdminPage: React.FC = () => {
                     key={theme.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex items-center gap-3 p-3 rounded-lg border bg-card"
+                    className={`flex items-center gap-3 p-3 rounded-lg border bg-card ${editingTheme?.id === theme.id ? 'ring-2 ring-primary' : ''}`}
                   >
                     {theme.preview_url ? (
                       <img
@@ -511,10 +645,19 @@ const AdminPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{theme.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {theme.app_icons ? `${Object.keys(theme.app_icons).length}个图标` : '无图标'} · {theme.description || '无描述'}
+                        {theme.app_icons ? `${Object.keys(theme.app_icons).length}个图标` : '无图标'} 
+                        · {theme.desktop_widgets ? `${theme.desktop_widgets.length}张大图` : '无大图'}
+                        · {theme.description || '无描述'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startEditTheme(theme)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
                       <Switch
                         checked={theme.is_active}
                         onCheckedChange={() => toggleThemeActive(theme.id, theme.is_active)}
