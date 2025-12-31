@@ -89,77 +89,97 @@ async function getAICompletion(
     throw new Error("请先在设置中配置API密钥");
   }
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 300,
-      stream: false,
-    }),
-  });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("AI API error:", response.status, errorText);
-    if (response.status === 429) {
-      throw new Error("请求太频繁，请稍后再试");
-    } else if (response.status === 402) {
-      throw new Error("AI额度不足，请充值");
+  const MAX_TOKENS_PER_CALL = 1500;
+  const MAX_CONTINUATIONS = 3;
+  const CONTINUE_PROMPT = '继续，直接接着上一句续写，不要重复前文。';
+
+  const extractContent = (data: any): string => {
+    if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content;
+    if (data?.choices?.[0]?.delta?.content) return data.choices[0].delta.content;
+    if (data?.choices?.[0]?.text) return data.choices[0].text;
+    if (data?.content) return data.content;
+    if (data?.result) return data.result;
+    if (data?.output?.text) return data.output.text;
+    if (data?.output?.content) return data.output.content;
+    if (data?.output) return typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
+    if (data?.response) return typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
+    if (data?.text) return data.text;
+    if (data?.answer) return data.answer;
+    if (data?.message?.content) return data.message.content;
+    if (typeof data === 'string') return data;
+    return '';
+  };
+
+  const appendWithoutOverlap = (prev: string, next: string) => {
+    if (!prev) return next;
+    if (!next) return prev;
+
+    const maxOverlap = Math.min(200, prev.length, next.length);
+    for (let i = maxOverlap; i > 0; i--) {
+      if (next.startsWith(prev.slice(-i))) {
+        return prev + next.slice(i);
+      }
     }
-    throw new Error(`AI API error: ${response.status}`);
+    return prev + next;
+  };
+
+  const requestOnce = async (requestMessages: Array<{ role: string; content: string }>) => {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: requestMessages,
+        max_tokens: MAX_TOKENS_PER_CALL,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI API error:", response.status, errorText);
+      if (response.status === 429) throw new Error("请求太频繁，请稍后再试");
+      if (response.status === 402) throw new Error("AI额度不足，请充值");
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const finishReason = data?.choices?.[0]?.finish_reason as string | undefined;
+    const content = extractContent(data);
+
+    console.log("Finish reason:", finishReason);
+    console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
+
+    return { content: (content || '').trim(), finishReason };
+  };
+
+  let accumulated = '';
+  let currentMessages = [...messages];
+
+  for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
+    const { content, finishReason } = await requestOnce(currentMessages);
+
+    accumulated = appendWithoutOverlap(accumulated, content);
+
+    if (!accumulated || accumulated.trim() === '') {
+      return '(AI暂时无法回复，请稍后再试)';
+    }
+
+    if (finishReason !== 'length') break;
+
+    if (i < MAX_CONTINUATIONS) {
+      currentMessages = [
+        ...messages,
+        { role: "assistant", content: accumulated },
+        { role: "user", content: CONTINUE_PROMPT },
+      ];
+    }
   }
 
-  const data = await response.json();
-  
-  // 检测是否被截断
-  const finishReason = data.choices?.[0]?.finish_reason;
-  console.log("Finish reason:", finishReason);
-  if (finishReason === 'length') {
-    console.warn("Response was truncated due to max_tokens limit");
-  }
-  
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
-  
-  let content = '';
-  if (data.choices?.[0]?.message?.content) {
-    content = data.choices[0].message.content;
-  } else if (data.choices?.[0]?.delta?.content) {
-    content = data.choices[0].delta.content;
-  } else if (data.choices?.[0]?.text) {
-    content = data.choices[0].text;
-  } else if (data.content) {
-    content = data.content;
-  } else if (data.result) {
-    content = data.result;
-  } else if (data.output?.text) {
-    content = data.output.text;
-  } else if (data.output?.content) {
-    content = data.output.content;
-  } else if (data.output) {
-    content = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
-  } else if (data.response) {
-    content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
-  } else if (data.text) {
-    content = data.text;
-  } else if (data.answer) {
-    content = data.answer;
-  } else if (data.message?.content) {
-    content = data.message.content;
-  } else if (typeof data === 'string') {
-    content = data;
-  }
-  
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
-  
-  if (!content || content.trim() === '') {
-    console.error("Empty content from API. Full response:", JSON.stringify(data));
-    return '(AI暂时无法回复，请稍后再试)';
-  }
-  
   // 清理内容 - 移除前后空白和多余换行
-  return content.trim().replace(/^\n+|\n+$/g, '');
+  return accumulated.trim().replace(/^\n+|\n+$/g, '');
+
 }
 
 serve(async (req) => {
@@ -188,33 +208,39 @@ serve(async (req) => {
 
     let systemPrompt = `你是${character.name}，性格特点：${character.persona || '活泼开朗'}。
 你正在和朋友们玩真心话大冒险游戏。请根据你的性格特点来提问或回答。
-【重要】回复必须简短精炼，控制在50字以内！直接说重点，不要啰嗦。`;
+回答要自然有趣，符合你的人设；允许分行/分点，但不要无意义铺垫。`;
 
     let userPrompt = '';
     
     switch (action) {
       case 'ask_truth':
-        userPrompt = `向${targetCharacter.name}提一个真心话问题。要求：1句话，20字以内，直接问。`;
+        userPrompt = `轮到你向${targetCharacter.name}提问真心话了。请提出1个有趣但不过分的问题。
+要求：一句话为主，尽量在40字内。直接输出问题。`;
         break;
         
       case 'ask_dare':
-        userPrompt = `给${targetCharacter.name}出一个大冒险。要求：1句话描述挑战，30字以内，简单可执行。`;
+        userPrompt = `轮到你向${targetCharacter.name}提出大冒险了。请提出一个有趣且可执行的挑战。
+要求：不超过200字；可以用2-4条分点描述步骤；不要太过分。直接输出挑战内容。`;
         break;
         
       case 'answer_truth':
-        userPrompt = `问题："${gameHistory}" 用1-2句话回答，30字以内。`;
+        userPrompt = `${targetCharacter.name}问你真心话："${gameHistory}"
+请根据你的人设诚实回答。要求：1-3句话，尽量在120字内。`;
         break;
         
       case 'do_dare':
-        userPrompt = `挑战："${gameHistory}" 用1-2句话描述你怎么完成的，30字以内。`;
+        userPrompt = `${targetCharacter.name}给你的大冒险是："${gameHistory}"
+请描述你如何完成挑战，以及你的反应。
+要求：1-4句话或分点，尽量在180字内，直接描述完成过程。`;
         break;
         
       case 'react':
-        userPrompt = `${gameHistory} 用一句话评论，15字以内。`;
+        userPrompt = `游戏中发生了这件事：${gameHistory}
+作为旁观者，请给出一句简短反应（尽量20字内）。`;
         break;
         
       default:
-        userPrompt = '说一句开场白，10字以内。';
+        userPrompt = '请说一句开场白，准备开始真心话大冒险游戏。';
     }
 
     const reply = await getAICompletion(
