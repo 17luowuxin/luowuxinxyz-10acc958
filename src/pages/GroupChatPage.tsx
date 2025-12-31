@@ -438,21 +438,26 @@ const GroupChatPage: React.FC = () => {
 
       // 角色回角色功能：连续多轮互动（根据设置调整）
       if (lastCharacterResponse && members.length > 1) {
-        // 热闹模式下提高概率和轮数
-        const settings = livelyMode ? {
+        // 获取实际设置（热闹模式下提高概率和轮数）
+        const effectiveSettings = livelyMode ? {
           maxRounds: Math.min(interactionSettings.maxRounds + 2, 8),
           firstTriggerChance: Math.min(interactionSettings.firstTriggerChance + 30, 95),
           continueChanceBase: Math.min(interactionSettings.continueChanceBase + 20, 80),
           continueChanceDecay: Math.max(interactionSettings.continueChanceDecay - 5, 5)
-        } : interactionSettings;
+        } : { ...interactionSettings };
+        
+        console.log('Interaction settings:', effectiveSettings, 'Lively mode:', livelyMode);
         
         let currentRound = 0;
-        let continueInteraction = Math.random() < (settings.firstTriggerChance / 100);
+        const firstRoll = Math.random() * 100;
+        let continueInteraction = firstRoll < effectiveSettings.firstTriggerChance;
         let currentTrigger = lastCharacterResponse;
+        
+        console.log(`First trigger roll: ${firstRoll.toFixed(1)} < ${effectiveSettings.firstTriggerChance}? ${continueInteraction}`);
 
-        while (continueInteraction && currentRound < settings.maxRounds) {
+        while (continueInteraction && currentRound < effectiveSettings.maxRounds) {
           currentRound++;
-          console.log(`Character-to-character round ${currentRound}/${settings.maxRounds}...`);
+          console.log(`Character-to-character round ${currentRound}/${effectiveSettings.maxRounds}...`);
           await new Promise(resolve => setTimeout(resolve, livelyMode ? 800 : 1200));
           
           const c2cBody: any = {
@@ -504,8 +509,10 @@ const GroupChatPage: React.FC = () => {
                 currentTrigger = c2cResponse;
                 
                 // 递减概率决定是否继续
-                const continueChance = (settings.continueChanceBase - (currentRound * settings.continueChanceDecay)) / 100;
-                continueInteraction = Math.random() < Math.max(continueChance, 0.05);
+                const continueChance = effectiveSettings.continueChanceBase - (currentRound * effectiveSettings.continueChanceDecay);
+                const continueRoll = Math.random() * 100;
+                continueInteraction = continueRoll < Math.max(continueChance, 5);
+                console.log(`Continue roll: ${continueRoll.toFixed(1)} < ${Math.max(continueChance, 5)}? ${continueInteraction}`);
               } else {
                 continueInteraction = false;
               }
