@@ -9,6 +9,7 @@ import kunleImg from '@/assets/stickers/kunle.jpg';
 import moyuImg from '@/assets/stickers/moyu.jpg';
 import ganfanImg from '@/assets/stickers/ganfan.jpg';
 import qinqinImg from '@/assets/stickers/qinqin.jpg';
+import cuteBoyImg from '@/assets/stickers/cute-boy.png';
 
 export interface Sticker {
   id: string;
@@ -124,6 +125,16 @@ export const defaultStickers: Sticker[] = [
       '💗', '💖', '💘', '💝', '😘', '😍', '🥰', '爱意', '表白', '告白', '在一起'
     ],
     text: '亲亲'
+  },
+  {
+    id: 'cute-boy',
+    imageUrl: cuteBoyImg,
+    keywords: [
+      '可爱', '萌', '萌萌哒', '好萌', '超萌', '小可爱', '软萌', '卡哇伊', 'kawaii',
+      '呆萌', '软软', '乖', '乖乖', '小宝贝', '小天使', '棉花糖', '甜', '甜甜',
+      '小奶音', '奶', '撒娇', '嘤', '嘤嘤', '超可爱', '太可爱', '萌死了'
+    ],
+    text: '萌萌哒'
   }
 ];
 

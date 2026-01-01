@@ -20,6 +20,7 @@ import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
+import cuteBoyFrame from '@/assets/bubble-frames/cute-boy-frame.jpeg';
 
 const VOICE_REQUEST_KEYWORDS = [
   "发语音",
@@ -2335,6 +2336,8 @@ const ChatPage: React.FC = () => {
     'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
+    // 可爱男孩气泡框 - 使用图片作为背景
+    'cute-boy': { type: 'image', imageUrl: cuteBoyFrame, borderColor: '#666666', decorIcon: '' },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
