@@ -167,9 +167,10 @@ const AdminPage: React.FC = () => {
       return;
     }
     
+    // Cast to Theme[] since desktop_widgets is a new column
     setThemes((data || []).map(theme => ({
       ...theme,
-      desktop_widgets: theme.desktop_widgets || null,
+      desktop_widgets: (theme as unknown as Theme).desktop_widgets || null,
     })) as Theme[]);
   };
 

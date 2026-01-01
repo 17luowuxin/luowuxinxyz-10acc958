@@ -903,6 +903,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          desktop_widgets: string[] | null
           global_background_url: string | null
           id: string
           is_active: boolean | null
@@ -920,6 +921,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          desktop_widgets?: string[] | null
           global_background_url?: string | null
           id?: string
           is_active?: boolean | null
@@ -937,6 +939,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          desktop_widgets?: string[] | null
           global_background_url?: string | null
           id?: string
           is_active?: boolean | null
