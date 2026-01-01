@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Theme {
   id: string;
@@ -86,6 +88,20 @@ interface AppStats {
   todayUsers: number;
 }
 
+interface TrendData {
+  date: string;
+  users: number;
+  messages: number;
+}
+
+interface UserProfile {
+  id: string;
+  user_id: string;
+  nickname: string | null;
+  avatar_url: string | null;
+  created_at: string;
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -96,6 +112,9 @@ const AdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [stats, setStats] = useState<AppStats>({ totalUsers: 0, totalCharacters: 0, totalMessages: 0, todayUsers: 0 });
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [userList, setUserList] = useState<UserProfile[]>([]);
+  const [showUserList, setShowUserList] = useState(false);
   
   // 编辑状态
   const [editingTheme, setEditingTheme] = useState<Theme | null>(null);
@@ -128,6 +147,8 @@ const AdminPage: React.FC = () => {
         setIsAuthenticated(true);
         fetchThemes();
         fetchStats();
+        fetchTrendData();
+        fetchUserList();
       } else {
         setIsAdmin(false);
       }
@@ -160,6 +181,8 @@ const AdminPage: React.FC = () => {
       setIsAuthenticated(true);
       fetchThemes();
       fetchStats();
+      fetchTrendData();
+      fetchUserList();
       toast.success('管理员登录成功');
     } else {
       toast.error('密码错误');
@@ -184,6 +207,78 @@ const AdminPage: React.FC = () => {
       });
     } catch (err) {
       console.error('Error fetching stats:', err);
+    }
+  };
+
+  const fetchTrendData = async () => {
+    try {
+      // 获取过去30天的数据
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const [usersRes, msgsRes] = await Promise.all([
+        supabase.from('profiles')
+          .select('created_at')
+          .gte('created_at', thirtyDaysAgo.toISOString()),
+        supabase.from('chat_messages')
+          .select('created_at')
+          .gte('created_at', thirtyDaysAgo.toISOString()),
+      ]);
+      
+      // 按日期分组
+      const dateMap: Record<string, { users: number; messages: number }> = {};
+      
+      // 初始化过去30天的日期
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        dateMap[dateStr] = { users: 0, messages: 0 };
+      }
+      
+      // 统计用户
+      (usersRes.data || []).forEach(item => {
+        const date = item.created_at.split('T')[0];
+        if (dateMap[date]) {
+          dateMap[date].users++;
+        }
+      });
+      
+      // 统计消息
+      (msgsRes.data || []).forEach(item => {
+        const date = item.created_at.split('T')[0];
+        if (dateMap[date]) {
+          dateMap[date].messages++;
+        }
+      });
+      
+      // 转换为数组
+      const trend = Object.entries(dateMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, data]) => ({
+          date: date.slice(5), // 只显示月-日
+          users: data.users,
+          messages: data.messages,
+        }));
+      
+      setTrendData(trend);
+    } catch (err) {
+      console.error('Error fetching trend data:', err);
+    }
+  };
+
+  const fetchUserList = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      
+      if (error) throw error;
+      setUserList(data || []);
+    } catch (err) {
+      console.error('Error fetching user list:', err);
     }
   };
 
@@ -551,6 +646,135 @@ const AdminPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 数据趋势图表 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              数据趋势（近30天）
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* 用户增长趋势 */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-500" />
+                每日新增用户
+              </h4>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Bar dataKey="users" fill="hsl(217.2 91.2% 59.8%)" name="新增用户" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* 消息活跃度趋势 */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-pink-500" />
+                每日消息量
+              </h4>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="messages" 
+                      stroke="hsl(330.4 81.2% 60.4%)" 
+                      strokeWidth={2}
+                      dot={{ fill: 'hsl(330.4 81.2% 60.4%)', strokeWidth: 0, r: 3 }}
+                      name="消息数量"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 用户列表 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                用户列表
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowUserList(!showUserList)}
+              >
+                {showUserList ? '收起' : '展开'}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          {showUserList && (
+            <CardContent>
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2">
+                  {userList.map((profile, index) => (
+                    <div 
+                      key={profile.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <span className="text-xs text-muted-foreground w-6">{index + 1}</span>
+                      {profile.avatar_url ? (
+                        <img 
+                          src={profile.avatar_url} 
+                          alt="" 
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                          <User className="w-5 h-5 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {profile.nickname || '未设置昵称'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ID: {profile.user_id.slice(0, 8)}...
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(profile.created_at).toLocaleDateString('zh-CN')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          )}
+        </Card>
+
         {/* 新建/编辑主题 */}
         <Card>
           <CardHeader>
