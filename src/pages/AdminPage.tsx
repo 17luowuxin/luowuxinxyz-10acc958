@@ -79,6 +79,13 @@ const emptyForm: ThemeForm = {
   desktop_widgets: ['', '', ''],
 };
 
+interface AppStats {
+  totalUsers: number;
+  totalCharacters: number;
+  totalMessages: number;
+  todayUsers: number;
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -88,6 +95,7 @@ const AdminPage: React.FC = () => {
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [stats, setStats] = useState<AppStats>({ totalUsers: 0, totalCharacters: 0, totalMessages: 0, todayUsers: 0 });
   
   // 编辑状态
   const [editingTheme, setEditingTheme] = useState<Theme | null>(null);
@@ -119,6 +127,7 @@ const AdminPage: React.FC = () => {
         setIsAdmin(true);
         setIsAuthenticated(true);
         fetchThemes();
+        fetchStats();
       } else {
         setIsAdmin(false);
       }
@@ -150,9 +159,31 @@ const AdminPage: React.FC = () => {
       setIsAdmin(true);
       setIsAuthenticated(true);
       fetchThemes();
+      fetchStats();
       toast.success('管理员登录成功');
     } else {
       toast.error('密码错误');
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const [usersRes, charsRes, msgsRes, todayRes] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('characters').select('*', { count: 'exact', head: true }),
+        supabase.from('chat_messages').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true })
+          .gte('created_at', new Date().toISOString().split('T')[0]),
+      ]);
+      
+      setStats({
+        totalUsers: usersRes.count || 0,
+        totalCharacters: charsRes.count || 0,
+        totalMessages: msgsRes.count || 0,
+        todayUsers: todayRes.count || 0,
+      });
+    } catch (err) {
+      console.error('Error fetching stats:', err);
     }
   };
 
@@ -455,13 +486,71 @@ const AdminPage: React.FC = () => {
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <h1 className="text-lg font-bold">主题管理</h1>
+            <h1 className="text-lg font-bold">管理后台</h1>
           </div>
           <Shield className="w-5 h-5 text-primary" />
         </div>
       </div>
 
       <div className="p-4 space-y-6 pb-20">
+        {/* 用户统计 */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalUsers}</p>
+                  <p className="text-xs text-muted-foreground">总用户数</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <User className="w-5 h-5 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.todayUsers}</p>
+                  <p className="text-xs text-muted-foreground">今日新增</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <Star className="w-5 h-5 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalCharacters}</p>
+                  <p className="text-xs text-muted-foreground">角色总数</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-pink-500/10 to-pink-600/5 border-pink-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
+                  <MessageCircle className="w-5 h-5 text-pink-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalMessages.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">消息总数</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
         {/* 新建/编辑主题 */}
         <Card>
           <CardHeader>
