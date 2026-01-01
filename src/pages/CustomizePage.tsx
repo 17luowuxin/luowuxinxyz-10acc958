@@ -13,6 +13,7 @@ import ThemeGallery from '@/components/customize/ThemeGallery';
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
+import cuteBoyFrame from '@/assets/bubble-frames/cute-boy-frame.jpeg';
 
 const avatarFramePresets = [
   { id: 'none', name: '无', url: '' },
@@ -31,6 +32,8 @@ const bubbleFramePresets = [
   { id: 'water-drop', name: '水滴磨砂', type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorColor: '#87CEEB', decorIcon: '', decorImage: '', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
   // 带卡通头像装饰的黑红渐变气泡框
   { id: 'anime-head', name: '动漫头像', type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorColor: '', decorIcon: '', decorImage: animeHeadDecor },
+  // 可爱男孩气泡框 - 左侧装饰角色
+  { id: 'cute-boy', name: '可爱男孩', type: 'image', gradient: '', borderColor: '#666666', decorColor: '', decorIcon: '', decorImage: cuteBoyFrame },
 ];
 
 // Pastel macaron colors
