@@ -167,11 +167,27 @@ const AdminPage: React.FC = () => {
       return;
     }
     
-    // Cast to Theme[] since desktop_widgets is a new column
-    setThemes((data || []).map(theme => ({
-      ...theme,
-      desktop_widgets: (theme as unknown as Theme).desktop_widgets || null,
-    })) as Theme[]);
+    // Cast to Theme[] since desktop_widgets is a new column not yet in generated types
+    const themesData = (data || []).map(item => {
+      const themeItem = item as Record<string, unknown>;
+      return {
+        id: themeItem.id as string,
+        name: themeItem.name as string,
+        description: themeItem.description as string | null,
+        preview_url: themeItem.preview_url as string | null,
+        app_icon_url: themeItem.app_icon_url as string | null,
+        chat_background_url: themeItem.chat_background_url as string | null,
+        global_background_url: themeItem.global_background_url as string | null,
+        lock_screen_bg_url: themeItem.lock_screen_bg_url as string | null,
+        lock_screen_video_url: themeItem.lock_screen_video_url as string | null,
+        video_background_url: themeItem.video_background_url as string | null,
+        app_icons: themeItem.app_icons as Record<string, string> | null,
+        desktop_widgets: (themeItem.desktop_widgets as string[]) || null,
+        is_active: themeItem.is_active as boolean,
+        created_at: themeItem.created_at as string,
+      };
+    });
+    setThemes(themesData);
   };
 
   const uploadFile = async (file: File, folder: string): Promise<string | null> => {
