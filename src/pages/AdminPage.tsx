@@ -196,11 +196,14 @@ const AdminPage: React.FC = () => {
     
     const { error } = await supabase.storage
       .from('themes')
-      .upload(fileName, file);
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
     
     if (error) {
       console.error('Upload error:', error);
-      toast.error('上传失败');
+      toast.error('上传失败: ' + error.message);
       return null;
     }
     
