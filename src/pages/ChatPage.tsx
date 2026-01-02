@@ -3664,13 +3664,13 @@ const ChatPage: React.FC = () => {
                         >
                           {/* 装饰图标 或 头像装饰图片 */}
                           {msg.role === 'user' && getUserBubbleDecorImage() && (
-                            <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-6 -right-6 w-12 h-12 object-contain z-20 pointer-events-none drop-shadow-md" />
+                            <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-3 -right-3 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
                           )}
                           {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
                             <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
                           )}
                           {msg.role !== 'user' && getFriendBubbleDecorImage() && (
-                            <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-6 -left-6 w-12 h-12 object-contain z-20 pointer-events-none drop-shadow-md" />
+                            <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-3 -left-3 w-8 h-8 object-contain z-20 pointer-events-none drop-shadow-sm" />
                           )}
                           {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
                             <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
