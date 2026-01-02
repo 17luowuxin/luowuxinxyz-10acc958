@@ -47,7 +47,7 @@ const allApps: AppConfig[] = [
   { id: 'diary', name: '日记', icon: BookOpen, bgColor: 'bg-[#FF7043]', route: '/diary' },
   { id: 'stats', name: '统计', icon: BarChart3, bgColor: 'bg-[#66BB6A]', route: '/stats' },
   { id: 'workshop', name: '工坊', icon: Hammer, bgColor: 'bg-[#7E57C2]', route: '/workshop' },
-  { id: 'finance', name: '财务', icon: Wallet, bgColor: 'bg-[#FF9800]', route: '/finance' },
+  { id: 'visual-novel', name: '剧场', icon: BookOpen, bgColor: 'bg-gradient-to-br from-pink-500 to-purple-600', route: '/visual-novel' },
 ];
 
 // 底部Dock固定的APP
