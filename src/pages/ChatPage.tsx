@@ -2336,8 +2336,8 @@ const ChatPage: React.FC = () => {
     'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
     // 带卡通头像装饰的黑红渐变气泡框
     'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
-    // 可爱男孩气泡框 - 边缘贴卡通小人
-    'cute-boy': { type: 'css', gradient: 'linear-gradient(135deg, #FFF5E6 0%, #FFE4CC 50%, #FFDAB9 100%)', borderColor: '#FFDAB9', decorIcon: '', decorImage: cuteBoyHead },
+    // 可爱男孩气泡框 - 白底黑边+边缘贴卡通小人
+    'cute-boy': { type: 'css', gradient: '#FFFFFF', borderColor: '#000000', decorIcon: '', decorImage: cuteBoyHead },
   };
   
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
@@ -2377,6 +2377,9 @@ const ChatPage: React.FC = () => {
           ? `${frame.highlight}, ${frame.gradient}`
           : frame.gradient 
       };
+      if (frame.borderColor) {
+        style.border = `2px solid ${frame.borderColor}`;
+      }
       if (frame.backdropFilter) {
         style.backdropFilter = frame.backdropFilter;
         style.WebkitBackdropFilter = frame.backdropFilter;
