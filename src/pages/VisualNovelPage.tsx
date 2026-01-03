@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
-import { ArrowLeft, Settings, ChevronLeft, ChevronRight, Send, Image, Volume2, VolumeX, User, Mic, MicOff, Play } from 'lucide-react';
+import { ArrowLeft, Settings, ChevronLeft, ChevronRight, Send, Image, Volume2, VolumeX, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Character {
@@ -14,11 +14,6 @@ interface Character {
   persona: string | null;
   sprite_url: string | null;
   voice_id: string | null;
-}
-
-interface Sprite {
-  emotion: string;
-  sprite_url: string;
 }
 
 interface Message {
@@ -33,17 +28,36 @@ const CharacterSelectPage: React.FC<{ onSelect: (id: string) => void }> = ({ onS
   const { user } = useAuth();
   const navigate = useNavigate();
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from('characters')
-      .select('id, name, avatar_url, persona, sprite_url, voice_id')
-      .eq('user_id', user.id)
-      .then(({ data }) => {
-        if (data) setCharacters(data);
-      });
+    
+    const loadCharacters = async () => {
+      const { data, error } = await supabase
+        .from('characters')
+        .select('id, name, avatar_url, persona, sprite_url, voice_id')
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Load characters error:', error);
+      }
+      if (data) {
+        setCharacters(data);
+      }
+      setLoading(false);
+    };
+    
+    loadCharacters();
   }, [user]);
+
+  if (loading) {
+    return (
+      <div className="h-full w-full bg-gradient-to-br from-purple-900 via-pink-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-white">加载中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full bg-gradient-to-br from-purple-900 via-pink-900 to-indigo-900 flex flex-col">
@@ -103,71 +117,69 @@ const CharacterSelectPage: React.FC<{ onSelect: (id: string) => void }> = ({ onS
 const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, ttsConfig } = useAPIConfig();
+  const { apiConfig } = useAPIConfig();
 
   const [character, setCharacter] = useState<Character | null>(null);
-  const [sprites, setSprites] = useState<Sprite[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
-  const [currentSpriteUrl, setCurrentSpriteUrl] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spriteInputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 加载角色和立绘
+  // 加载角色
   useEffect(() => {
     if (!characterId || !user) return;
 
     const loadCharacter = async () => {
-      const { data } = await supabase
-        .from('characters')
-        .select('*')
-        .eq('id', characterId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (data) {
-        setCharacter(data);
-        setCurrentSpriteUrl(data.sprite_url);
-
-        // 加载表情立绘
-        const { data: spritesData } = await supabase
-          .from('character_sprites')
-          .select('emotion, sprite_url')
-          .eq('character_id', characterId)
-          .eq('user_id', user.id);
-
-        if (spritesData) {
-          setSprites(spritesData);
-        }
-
-        // 加载自定义背景
-        const { data: customData } = await supabase
-          .from('customization')
-          .select('app_icons')
+      try {
+        const { data, error } = await supabase
+          .from('characters')
+          .select('id, name, avatar_url, persona, sprite_url, voice_id')
+          .eq('id', characterId)
           .eq('user_id', user.id)
           .single();
 
-        if (customData?.app_icons) {
-          const icons = customData.app_icons as Record<string, string>;
-          const storedBg = icons[`vn_bg_${characterId}`];
-          if (storedBg) setBackgroundUrl(storedBg);
+        if (error) {
+          console.error('Load character error:', error);
+          toast.error('角色加载失败');
+          navigate('/visual-novel');
+          return;
         }
+
+        if (data) {
+          setCharacter(data);
+
+          // 加载自定义背景
+          const { data: customData } = await supabase
+            .from('customization')
+            .select('app_icons')
+            .eq('user_id', user.id)
+            .single();
+
+          if (customData?.app_icons) {
+            const icons = customData.app_icons as Record<string, string>;
+            const storedBg = icons[`vn_bg_${characterId}`];
+            if (storedBg) setBackgroundUrl(storedBg);
+          }
+        }
+      } catch (err) {
+        console.error('Load error:', err);
+      } finally {
+        setPageLoading(false);
       }
     };
 
     loadCharacter();
-  }, [characterId, user]);
+  }, [characterId, user, navigate]);
 
   // 加载消息历史
   useEffect(() => {
@@ -182,14 +194,14 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
         .order('created_at', { ascending: true })
         .limit(50);
 
-      if (data) {
+      if (data && data.length > 0) {
         setMessages(data.map(msg => ({
           id: msg.id,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
           created_at: msg.created_at
         })));
-        setCurrentMessageIndex(data.length > 0 ? data.length - 1 : 0);
+        setCurrentMessageIndex(data.length - 1);
       }
     };
 
@@ -201,6 +213,7 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
     const currentMessage = messages[currentMessageIndex];
     if (!currentMessage || currentMessage.role === 'user') {
       setTypedText(currentMessage?.content || '');
+      setIsTyping(false);
       return;
     }
 
@@ -222,36 +235,6 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
 
     return () => clearInterval(timer);
   }, [currentMessageIndex, messages]);
-
-  // TTS 播放
-  const playTTS = async (text: string) => {
-    if (isMuted || !ttsConfig?.apiKey || !character?.voice_id) return;
-
-    setIsPlaying(true);
-    try {
-      const response = await supabase.functions.invoke('tts', {
-        body: {
-          text,
-          voiceId: character.voice_id,
-          ttsConfig
-        }
-      });
-
-      if (response.data?.audioContent) {
-        const audioUrl = `data:audio/mpeg;base64,${response.data.audioContent}`;
-        if (audioRef.current) {
-          audioRef.current.pause();
-        }
-        audioRef.current = new Audio(audioUrl);
-        audioRef.current.onended = () => setIsPlaying(false);
-        audioRef.current.play();
-      }
-    } catch (error) {
-      console.error('TTS error:', error);
-    } finally {
-      setIsPlaying(false);
-    }
-  };
 
   // 发送消息
   const sendMessage = async () => {
@@ -305,47 +288,11 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
           role: 'assistant',
           content: response.data.response
         });
-
-        // 自动播放语音
-        if (!isMuted && character.voice_id) {
-          playTTS(response.data.response);
-        }
-
-        // 根据内容切换表情
-        updateSpriteByEmotion(response.data.response);
       }
     } catch (error) {
       toast.error('发送失败');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // 根据内容分析切换立绘表情
-  const updateSpriteByEmotion = (text: string) => {
-    if (sprites.length === 0) return;
-
-    const emotionKeywords: Record<string, string[]> = {
-      happy: ['开心', '高兴', '哈哈', '嘻嘻', '太好了', '喜欢', '爱', '❤', '😊', '😄'],
-      sad: ['难过', '伤心', '哭', '😢', '呜呜', '不开心'],
-      angry: ['生气', '讨厌', '烦', '😠', '哼'],
-      shy: ['害羞', '不好意思', '脸红', '😳', '嘤'],
-      surprised: ['惊讶', '天啊', '什么', '！？', '😮', '哇']
-    };
-
-    let detectedEmotion = 'normal';
-    for (const [emotion, keywords] of Object.entries(emotionKeywords)) {
-      if (keywords.some(kw => text.includes(kw))) {
-        detectedEmotion = emotion;
-        break;
-      }
-    }
-
-    const matchedSprite = sprites.find(s => s.emotion === detectedEmotion);
-    if (matchedSprite) {
-      setCurrentSpriteUrl(matchedSprite.sprite_url);
-    } else if (character?.sprite_url) {
-      setCurrentSpriteUrl(character.sprite_url);
     }
   };
 
@@ -397,7 +344,7 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
       await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
       const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
       
-      setCurrentSpriteUrl(publicUrl);
+      setCharacter(prev => prev ? { ...prev, sprite_url: publicUrl } : null);
       
       await supabase
         .from('characters')
@@ -424,14 +371,25 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
     }
   };
 
-  const currentMessage = messages[currentMessageIndex];
-
-  // 点击播放当前消息语音
-  const handlePlayVoice = () => {
-    if (currentMessage && currentMessage.role === 'assistant') {
-      playTTS(currentMessage.content);
+  const skipTyping = () => {
+    if (isTyping) {
+      const currentMessage = messages[currentMessageIndex];
+      if (currentMessage) {
+        setTypedText(currentMessage.content);
+        setIsTyping(false);
+      }
     }
   };
+
+  const currentMessage = messages[currentMessageIndex];
+
+  if (pageLoading) {
+    return (
+      <div className="h-full w-full bg-black flex items-center justify-center">
+        <div className="text-white">加载中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full relative overflow-hidden bg-black">
@@ -449,19 +407,19 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
 
       {/* 角色立绘 */}
       <AnimatePresence mode="wait">
-        {currentSpriteUrl && (
+        {character?.sprite_url && (
           <motion.div
-            key={currentSpriteUrl}
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10"
+            key="sprite"
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10"
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
             transition={{ duration: 0.4 }}
           >
             <img 
-              src={currentSpriteUrl} 
-              alt={character?.name || '角色'} 
-              className="max-h-[55vh] object-contain drop-shadow-2xl"
+              src={character.sprite_url} 
+              alt={character.name} 
+              className="max-h-[50vh] object-contain drop-shadow-2xl"
             />
           </motion.div>
         )}
@@ -499,103 +457,88 @@ const VisualNovelChatPage: React.FC<{ characterId: string }> = ({ characterId })
           >
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-3 text-white/90 hover:text-white py-2"
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
             >
-              <Image className="w-5 h-5" />
-              <span className="text-sm">更换背景</span>
+              <Image className="w-4 h-4" />
+              <span>更换背景</span>
             </button>
             <button
               onClick={() => spriteInputRef.current?.click()}
-              className="w-full flex items-center gap-3 text-white/90 hover:text-white py-2"
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
             >
-              <User className="w-5 h-5" />
-              <span className="text-sm">更换立绘</span>
+              <User className="w-4 h-4" />
+              <span>更换立绘</span>
             </button>
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className="w-full flex items-center gap-3 text-white/90 hover:text-white py-2"
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
             >
-              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              <span className="text-sm">{isMuted ? '开启语音' : '关闭语音'}</span>
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <span>{isMuted ? '取消静音' : '静音'}</span>
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* 隐藏的文件输入 */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        className="hidden"
         onChange={handleBgUpload}
+        className="hidden"
       />
       <input
         ref={spriteInputRef}
         type="file"
         accept="image/*"
-        className="hidden"
         onChange={handleSpriteUpload}
+        className="hidden"
       />
 
-      {/* 底部对话框 */}
+      {/* 底部对话框区域 */}
       <div className="absolute bottom-0 left-0 right-0 z-20">
-        <div className="mx-3 mb-2 bg-black/70 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-          {/* 消息导航 */}
-          {messages.length > 0 && (
-            <div className="flex items-center justify-between mb-2">
-              <button
-                onClick={prevMessage}
-                disabled={currentMessageIndex === 0}
-                className="p-1 text-white/60 hover:text-white disabled:opacity-30"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-white/50">
-                  {currentMessageIndex + 1} / {messages.length}
-                </span>
-                {currentMessage?.role === 'assistant' && character?.voice_id && !isMuted && (
-                  <button
-                    onClick={handlePlayVoice}
-                    disabled={isPlaying}
-                    className="p-1 text-white/60 hover:text-white disabled:opacity-50"
-                  >
-                    {isPlaying ? (
-                      <Volume2 className="w-4 h-4 animate-pulse" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={nextMessage}
-                disabled={currentMessageIndex === messages.length - 1}
-                className="p-1 text-white/60 hover:text-white disabled:opacity-30"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          )}
-
-          {/* 消息内容 */}
-          <div className="min-h-[60px]">
-            {currentMessage ? (
-              <div>
-                <span className={`text-xs font-medium ${currentMessage.role === 'user' ? 'text-blue-400' : 'text-pink-400'}`}>
-                  {currentMessage.role === 'user' ? '你' : character?.name}
-                </span>
-                <p className="text-white text-sm mt-1 leading-relaxed">
-                  {currentMessage.role === 'user' ? currentMessage.content : typedText}
-                  {isTyping && <span className="animate-pulse">▌</span>}
-                </p>
-              </div>
-            ) : (
-              <p className="text-white/50 text-sm text-center">
-                {isLoading ? '正在输入...' : '开始对话吧~'}
-              </p>
-            )}
+        {/* 消息导航 */}
+        {messages.length > 0 && (
+          <div className="flex items-center justify-between px-4 mb-2">
+            <button
+              onClick={prevMessage}
+              disabled={currentMessageIndex === 0}
+              className="w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white disabled:opacity-30"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="text-white/60 text-xs">
+              {currentMessageIndex + 1} / {messages.length}
+            </span>
+            <button
+              onClick={nextMessage}
+              disabled={currentMessageIndex === messages.length - 1}
+              className="w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white disabled:opacity-30"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
           </div>
+        )}
+
+        {/* 对话框 */}
+        <div 
+          className="mx-3 mb-3 bg-black/70 backdrop-blur-md rounded-2xl p-4 border border-white/10 min-h-[100px]"
+          onClick={skipTyping}
+        >
+          {currentMessage ? (
+            <div>
+              <div className="text-pink-400 text-sm font-medium mb-2">
+                {currentMessage.role === 'assistant' ? character?.name : '我'}
+              </div>
+              <p className="text-white text-base leading-relaxed">
+                {currentMessage.role === 'assistant' ? typedText : currentMessage.content}
+                {isTyping && <span className="animate-pulse">▌</span>}
+              </p>
+            </div>
+          ) : (
+            <p className="text-white/50 text-center">开始对话吧...</p>
+          )}
         </div>
 
         {/* 输入框 */}
