@@ -9,9 +9,16 @@ export interface APIConfig {
   model?: string;
 }
 
+export interface TTSConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
 export const useAPIConfig = () => {
   const { user } = useAuth();
   const [apiConfig, setApiConfig] = useState<APIConfig>({});
+  const [ttsConfig, setTTSConfig] = useState<TTSConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAPIConfig = useCallback(async () => {
@@ -40,6 +47,21 @@ export const useAPIConfig = () => {
         const baseUrl = data.find(k => k.provider === 'custom_base_url');
         const model = data.find(k => k.provider === 'custom_model');
 
+        // TTS 配置
+        const ttsKey = data.find(k => k.provider === 'tts');
+        const ttsBaseUrl = data.find(k => k.provider === 'tts_base_url');
+        const ttsModel = data.find(k => k.provider === 'tts_model');
+
+        if (ttsKey) {
+          setTTSConfig({
+            apiKey: ttsKey.api_key,
+            baseUrl: ttsBaseUrl?.api_key,
+            model: ttsModel?.api_key,
+          });
+        } else {
+          setTTSConfig(null);
+        }
+
         if (customKey) {
           setApiConfig({
             provider: 'custom',
@@ -62,6 +84,7 @@ export const useAPIConfig = () => {
         }
       } else {
         setApiConfig({});
+        setTTSConfig(null);
       }
     } catch (error) {
       console.error('Error fetching API config:', error);
@@ -77,5 +100,5 @@ export const useAPIConfig = () => {
 
   const isConfigured = Boolean(apiConfig.apiKey && apiConfig.provider);
 
-  return { apiConfig, loading, isConfigured, refetch: fetchAPIConfig };
+  return { apiConfig, ttsConfig, loading, isConfigured, refetch: fetchAPIConfig };
 };
