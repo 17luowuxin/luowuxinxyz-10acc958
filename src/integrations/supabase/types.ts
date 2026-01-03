@@ -133,6 +133,44 @@ export type Database = {
           },
         ]
       }
+      character_sprites: {
+        Row: {
+          character_id: string
+          created_at: string
+          emotion: string
+          id: string
+          sprite_url: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          emotion?: string
+          id?: string
+          sprite_url: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          emotion?: string
+          id?: string
+          sprite_url?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_sprites_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       characters: {
         Row: {
           avatar_url: string | null
@@ -146,6 +184,7 @@ export type Database = {
           persona: string | null
           reply_mode: string | null
           ringtone_url: string | null
+          sprite_url: string | null
           sticker_enabled: boolean | null
           transfer_enabled: boolean | null
           updated_at: string
@@ -165,6 +204,7 @@ export type Database = {
           persona?: string | null
           reply_mode?: string | null
           ringtone_url?: string | null
+          sprite_url?: string | null
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
@@ -184,6 +224,7 @@ export type Database = {
           persona?: string | null
           reply_mode?: string | null
           ringtone_url?: string | null
+          sprite_url?: string | null
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
