@@ -33,6 +33,7 @@ import TermsPage from "./pages/TermsPage";
 import FinancePage from "./pages/FinancePage";
 import GiftShopPage from "./pages/GiftShopPage";
 import VisualNovelPage from "./pages/VisualNovelPage";
+import VisualNovelSpritesPage from "./pages/VisualNovelSpritesPage";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
@@ -90,8 +91,8 @@ const App = () => (
                 <Route path="/finance" element={<WithPhoneFrame><FinancePage /></WithPhoneFrame>} />
                 <Route path="/gift-shop" element={<WithPhoneFrame><GiftShopPage /></WithPhoneFrame>} />
                 <Route path="/visual-novel" element={<WithPhoneFrame><VisualNovelPage /></WithPhoneFrame>} />
+                <Route path="/visual-novel/sprites" element={<WithPhoneFrame><VisualNovelSpritesPage /></WithPhoneFrame>} />
                 <Route path="/visual-novel/:characterId" element={<WithPhoneFrame><VisualNovelPage /></WithPhoneFrame>} />
-                <Route path="/admin" element={<AdminPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
