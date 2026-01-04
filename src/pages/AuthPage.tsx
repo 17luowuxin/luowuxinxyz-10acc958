@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ const AuthPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // 发送密码重置邮件
   const handleResetPassword = async () => {
@@ -76,7 +77,8 @@ const AuthPage: React.FC = () => {
           }
         } else {
           toast.success('登录成功!');
-          navigate('/');
+          const redirectTo = (location.state as { from?: string } | null)?.from || '/';
+          navigate(redirectTo, { replace: true });
         }
       } else if (mode === 'signup') {
         if (password.length < 6) {
@@ -93,7 +95,8 @@ const AuthPage: React.FC = () => {
           }
         } else {
           toast.success('注册成功!');
-          navigate('/');
+          const redirectTo = (location.state as { from?: string } | null)?.from || '/';
+          navigate(redirectTo, { replace: true });
         }
       }
     } catch (error: any) {
