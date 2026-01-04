@@ -106,7 +106,7 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
   }
 
   return (
-    <div className="h-full w-full bg-background flex flex-col overflow-hidden">
+    <div className="min-h-screen w-full bg-background flex flex-col overflow-hidden">
       {/* 顶部返回 */}
       <div className="flex items-center p-4">
         <button
@@ -131,7 +131,16 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
 
         {/* 参与角色 */}
         <div className="mb-6">
-          <h3 className="text-foreground font-medium mb-3">参与角色</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-foreground font-medium">参与角色</h3>
+            <button
+              type="button"
+              onClick={() => navigate('/visual-novel/sprites')}
+              className="text-sm text-primary"
+            >
+              管理立绘
+            </button>
+          </div>
           <div className="bg-muted rounded-2xl p-4">
             {settings.characters.length > 0 ? (
               <div className="flex gap-3 flex-wrap mb-3">
@@ -581,14 +590,14 @@ const VisualNovelChatPage: React.FC<{
 
   if (pageLoading) {
     return (
-      <div className="h-full w-full bg-black flex items-center justify-center">
+      <div className="min-h-screen w-full bg-black flex items-center justify-center">
         <div className="text-white">加载中...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full w-full relative overflow-hidden bg-black">
+    <div className="min-h-screen w-full relative overflow-hidden bg-black">
       {/* 背景 */}
       <div 
         className="absolute inset-0 bg-cover bg-center transition-all duration-500"
@@ -664,6 +673,13 @@ const VisualNovelChatPage: React.FC<{
             >
               <User className="w-4 h-4" />
               <span>更换立绘</span>
+            </button>
+            <button
+              onClick={() => navigate('/visual-novel/sprites')}
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
+            >
+              <Edit className="w-4 h-4" />
+              <span>立绘管理</span>
             </button>
             <button
               onClick={() => setIsMuted(!isMuted)}
