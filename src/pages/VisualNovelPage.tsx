@@ -36,13 +36,24 @@ interface StorySettings {
   willEnd: boolean;
 }
 
-// 故事设置页面
-const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId: string) => void }> = ({ onStart }) => {
+// 用户立绘类型
+interface UserSprite {
+  url: string | null;
+}
+
+// 故事设置页面 - 全新独特设计
+const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId: string, userSpriteUrl?: string) => void }> = ({ onStart }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [allCharacters, setAllCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
+  const [activeTab, setActiveTab] = useState<'story' | 'sprites'>('story');
+  const [userSprite, setUserSprite] = useState<UserSprite>({ url: null });
+  const [uploadingUser, setUploadingUser] = useState(false);
+  const [uploadingChar, setUploadingChar] = useState(false);
+  
+  const userSpriteRef = useRef<HTMLInputElement>(null);
+  const charSpriteRef = useRef<HTMLInputElement>(null);
   
   const [settings, setSettings] = useState<StorySettings>({
     name: '',
@@ -56,35 +67,134 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
   useEffect(() => {
     if (!user) return;
     
-    const loadCharacters = async () => {
-      const { data, error } = await supabase
+    const loadData = async () => {
+      // 加载角色
+      const { data } = await supabase
         .from('characters')
         .select('id, name, avatar_url, persona, sprite_url, voice_id')
         .eq('user_id', user.id);
       
       if (data) setAllCharacters(data);
+      
+      // 加载用户立绘
+      const { data: customData } = await supabase
+        .from('customization')
+        .select('app_icons')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (customData?.app_icons) {
+        const icons = customData.app_icons as Record<string, string>;
+        if (icons['user_sprite']) {
+          setUserSprite({ url: icons['user_sprite'] });
+        }
+      }
+      
       setLoading(false);
     };
     
-    loadCharacters();
+    loadData();
   }, [user]);
 
-  const addCharacter = (char: Character) => {
-    if (!settings.characters.find(c => c.id === char.id)) {
+  const selectCharacter = (char: Character) => {
+    const exists = settings.characters.find(c => c.id === char.id);
+    if (exists) {
       setSettings(prev => ({
         ...prev,
-        characters: [...prev.characters, char]
+        characters: prev.characters.filter(c => c.id !== char.id),
+        openingCharacter: prev.openingCharacter === char.id ? null : prev.openingCharacter
+      }));
+    } else {
+      setSettings(prev => ({
+        ...prev,
+        characters: [...prev.characters, char],
+        openingCharacter: prev.openingCharacter || char.id
       }));
     }
-    setShowCharacterPicker(false);
   };
 
-  const removeCharacter = (charId: string) => {
-    setSettings(prev => ({
-      ...prev,
-      characters: prev.characters.filter(c => c.id !== charId),
-      openingCharacter: prev.openingCharacter === charId ? null : prev.openingCharacter
-    }));
+  // 上传用户立绘
+  const handleUserSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploadingUser(true);
+    toast.loading('上传中...');
+
+    try {
+      const fileName = `${user.id}/user-sprite/main-${Date.now()}.png`;
+      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      
+      const spriteUrl = `${publicUrl}?t=${Date.now()}`;
+      setUserSprite({ url: spriteUrl });
+      
+      // 保存到customization
+      const { data: existing } = await supabase
+        .from('customization')
+        .select('app_icons')
+        .eq('user_id', user.id)
+        .single();
+
+      const icons = (existing?.app_icons as Record<string, string>) || {};
+      icons['user_sprite'] = spriteUrl;
+
+      await supabase.from('customization').upsert({
+        user_id: user.id,
+        app_icons: icons
+      }, { onConflict: 'user_id' });
+
+      toast.dismiss();
+      toast.success('立绘上传成功');
+    } catch (error) {
+      toast.dismiss();
+      toast.error('上传失败');
+    } finally {
+      setUploadingUser(false);
+      if (userSpriteRef.current) userSpriteRef.current.value = '';
+    }
+  };
+
+  // 上传角色立绘
+  const handleCharSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>, charId: string) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploadingChar(true);
+    toast.loading('上传中...');
+
+    try {
+      const fileName = `${user.id}/sprites/${charId}/main-${Date.now()}.png`;
+      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      
+      const spriteUrl = `${publicUrl}?t=${Date.now()}`;
+      
+      await supabase
+        .from('characters')
+        .update({ sprite_url: spriteUrl })
+        .eq('id', charId);
+
+      // 更新本地状态
+      setAllCharacters(prev => prev.map(c => 
+        c.id === charId ? { ...c, sprite_url: spriteUrl } : c
+      ));
+      setSettings(prev => ({
+        ...prev,
+        characters: prev.characters.map(c => 
+          c.id === charId ? { ...c, sprite_url: spriteUrl } : c
+        )
+      }));
+
+      toast.dismiss();
+      toast.success('角色立绘上传成功');
+    } catch (error) {
+      toast.dismiss();
+      toast.error('上传失败');
+    } finally {
+      setUploadingChar(false);
+      if (charSpriteRef.current) charSpriteRef.current.value = '';
+    }
   };
 
   const handleStart = () => {
@@ -92,217 +202,306 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
       toast.error('请至少选择一个角色');
       return;
     }
-    // 默认使用第一个角色
     const mainChar = settings.characters[0];
-    onStart(settings, mainChar.id);
+    onStart(settings, mainChar.id, userSprite.url || undefined);
   };
 
   if (loading) {
     return (
-      <div className="h-full w-full bg-background flex items-center justify-center">
-        <div className="text-foreground/60">加载中...</div>
+      <div className="min-h-screen w-full bg-gradient-to-b from-background to-muted/30 flex items-center justify-center">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-foreground/60"
+        >
+          加载中...
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col overflow-hidden">
-      {/* 顶部返回 */}
-      <div className="flex items-center p-4">
+    <div className="min-h-screen w-full bg-gradient-to-b from-background via-background to-muted/20 flex flex-col">
+      {/* 顶部栏 */}
+      <header className="flex items-center justify-between p-4 border-b border-border/50">
         <button
           onClick={() => navigate('/games')}
-          className="w-10 h-10 rounded-full bg-muted flex items-center justify-center"
+          className="w-10 h-10 rounded-xl bg-muted/80 flex items-center justify-center hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-      </div>
+        <h1 className="text-lg font-semibold">创建新故事</h1>
+        <div className="w-10" />
+      </header>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-8">
-        {/* 故事名称 */}
-        <div className="mb-6">
-          <input
-            type="text"
-            value={settings.name}
-            onChange={(e) => setSettings(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="请填写故事名称"
-            className="w-full px-4 py-4 bg-muted rounded-2xl text-lg placeholder:text-muted-foreground/60 focus:outline-none"
-          />
-        </div>
-
-        {/* 参与角色 */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-foreground font-medium">参与角色</h3>
-            <button
-              type="button"
-              onClick={() => navigate('/visual-novel/sprites')}
-              className="text-sm text-primary"
-            >
-              管理立绘
-            </button>
-          </div>
-          <div className="bg-muted rounded-2xl p-4">
-            {settings.characters.length > 0 ? (
-              <div className="flex gap-3 flex-wrap mb-3">
-                {settings.characters.map((char) => (
-                  <div key={char.id} className="relative">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-primary/30">
-                      {char.avatar_url ? (
-                        <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-                          <User className="w-6 h-6 text-foreground/40" />
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => removeCharacter(char.id)}
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center text-xs"
-                    >
-                      ×
-                    </button>
-                    <p className="text-xs text-center mt-1 truncate w-16">{char.name}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            
-            <button
-              onClick={() => setShowCharacterPicker(true)}
-              className="w-full py-4 text-primary flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>选择参与角色</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 全局背景 */}
-        <div className="mb-6">
-          <h3 className="text-foreground font-medium mb-3">全局背景（选填）</h3>
-          <div className="bg-muted rounded-2xl p-4">
-            <textarea
-              value={settings.background}
-              onChange={(e) => setSettings(prev => ({ ...prev, background: e.target.value }))}
-              placeholder="描述你想构建的世界观，如人物关系、主题背景、玩法规则等"
-              rows={5}
-              className="w-full bg-transparent resize-none placeholder:text-muted-foreground/60 focus:outline-none text-foreground"
-            />
-          </div>
-        </div>
-
-        {/* 故事开场 */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-foreground font-medium">故事开场</h3>
-            <div className="flex items-center gap-2">
-              <Music className="w-4 h-4 text-muted-foreground" />
-              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </div>
-          <div className="bg-muted rounded-2xl p-4 flex items-start gap-2">
-            <button
-              onClick={() => setShowCharacterPicker(true)}
-              className="shrink-0 px-3 py-1 bg-primary/10 text-primary rounded-full text-sm flex items-center gap-1"
-            >
-              {settings.openingCharacter 
-                ? settings.characters.find(c => c.id === settings.openingCharacter)?.name || '请选择'
-                : '请选择'}
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            <span className="text-muted-foreground">:</span>
-            <input
-              type="text"
-              value={settings.opening}
-              onChange={(e) => setSettings(prev => ({ ...prev, opening: e.target.value }))}
-              placeholder="请输入故事开场的内容"
-              className="flex-1 bg-transparent placeholder:text-muted-foreground/60 focus:outline-none text-foreground"
-            />
-          </div>
-        </div>
-
-        {/* 故事是否会结束 */}
-        <div className="flex items-center justify-between py-4 border-t border-border">
-          <span className="text-foreground">故事是否会结束</span>
-          <button
-            onClick={() => setSettings(prev => ({ ...prev, willEnd: !prev.willEnd }))}
-            className="flex items-center gap-1 text-muted-foreground"
-          >
-            <span>{settings.willEnd ? '会结束' : '不会结束'}</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* 底部按钮 */}
-      <div className="p-4 flex gap-3">
+      {/* Tab切换 */}
+      <div className="flex gap-2 p-4">
         <button
-          onClick={handleStart}
-          className="flex-1 h-12 bg-primary text-primary-foreground rounded-full font-medium"
+          onClick={() => setActiveTab('story')}
+          className={`flex-1 py-3 rounded-xl font-medium transition-all ${
+            activeTab === 'story' 
+              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' 
+              : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+          }`}
         >
-          开始故事
+          故事设定
+        </button>
+        <button
+          onClick={() => setActiveTab('sprites')}
+          className={`flex-1 py-3 rounded-xl font-medium transition-all ${
+            activeTab === 'sprites' 
+              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' 
+              : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          立绘管理
         </button>
       </div>
 
-      {/* 角色选择弹窗 */}
-      <AnimatePresence>
-        {showCharacterPicker && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center"
-            onClick={() => setShowCharacterPicker(false)}
-          >
+      <div className="flex-1 overflow-y-auto px-4 pb-24">
+        <AnimatePresence mode="wait">
+          {activeTab === 'story' ? (
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="w-full max-w-lg bg-background rounded-t-3xl p-6 max-h-[70vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
+              key="story"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="space-y-5"
             >
-              <h3 className="text-lg font-medium mb-4">选择角色</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {allCharacters.map((char) => (
-                  <button
-                    key={char.id}
-                    onClick={() => addCharacter(char)}
-                    className={`p-3 rounded-2xl border-2 transition-colors ${
-                      settings.characters.find(c => c.id === char.id)
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border bg-muted'
-                    }`}
-                  >
-                    <div className="w-16 h-16 mx-auto rounded-xl overflow-hidden mb-2">
-                      {char.avatar_url ? (
-                        <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-                          <User className="w-6 h-6 text-foreground/40" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-sm text-center truncate">{char.name}</p>
-                  </button>
-                ))}
+              {/* 故事标题 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground/80">故事标题</label>
+                <input
+                  type="text"
+                  value={settings.name}
+                  onChange={(e) => setSettings(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="为你的故事起个名字..."
+                  className="w-full px-4 py-3.5 bg-card border border-border/60 rounded-xl text-base placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
+                />
               </div>
-              
-              {allCharacters.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>暂无角色</p>
-                  <button
-                    onClick={() => navigate('/friends')}
-                    className="mt-3 text-primary"
-                  >
-                    去创建角色
-                  </button>
+
+              {/* 选择角色 */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground/80">参与角色</label>
+                  <span className="text-xs text-muted-foreground">
+                    已选 {settings.characters.length} 个
+                  </span>
                 </div>
-              )}
+                
+                {allCharacters.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {allCharacters.map((char) => {
+                      const isSelected = settings.characters.find(c => c.id === char.id);
+                      return (
+                        <motion.button
+                          key={char.id}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => selectCharacter(char)}
+                          className={`relative p-2 rounded-xl border-2 transition-all ${
+                            isSelected
+                              ? 'border-primary bg-primary/10 shadow-md shadow-primary/10'
+                              : 'border-transparent bg-card hover:bg-muted/50'
+                          }`}
+                        >
+                          <div className="w-full aspect-square rounded-lg overflow-hidden mb-1.5">
+                            {char.avatar_url ? (
+                              <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                                <User className="w-6 h-6 text-foreground/30" />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-center truncate">{char.name}</p>
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs"
+                            >
+                              ✓
+                            </motion.div>
+                          )}
+                          {char.voice_id && (
+                            <div className="absolute bottom-8 right-1">
+                              <Volume2 className="w-3 h-3 text-primary" />
+                            </div>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-card border border-dashed border-border rounded-xl p-6 text-center">
+                    <User className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">还没有角色</p>
+                    <button
+                      onClick={() => navigate('/friends')}
+                      className="mt-3 text-sm text-primary font-medium"
+                    >
+                      去创建角色 →
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 世界观设定 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground/80">世界观设定（选填）</label>
+                <textarea
+                  value={settings.background}
+                  onChange={(e) => setSettings(prev => ({ ...prev, background: e.target.value }))}
+                  placeholder="描述故事背景、人物关系、特殊规则等..."
+                  rows={4}
+                  className="w-full px-4 py-3 bg-card border border-border/60 rounded-xl text-sm resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
+                />
+              </div>
+
+              {/* 开场白 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground/80">开场白（选填）</label>
+                <textarea
+                  value={settings.opening}
+                  onChange={(e) => setSettings(prev => ({ ...prev, opening: e.target.value }))}
+                  placeholder="故事开始时角色说的第一句话..."
+                  rows={2}
+                  className="w-full px-4 py-3 bg-card border border-border/60 rounded-xl text-sm resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
+                />
+              </div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ) : (
+            <motion.div
+              key="sprites"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-5"
+            >
+              {/* 用户立绘 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium text-foreground/80">我的立绘</label>
+                </div>
+                <div
+                  onClick={() => userSpriteRef.current?.click()}
+                  className="border-2 border-dashed border-primary/30 rounded-2xl p-4 bg-primary/5 cursor-pointer hover:border-primary/50 transition-colors min-h-[160px] flex items-center justify-center"
+                >
+                  {userSprite.url ? (
+                    <div className="relative">
+                      <img
+                        src={userSprite.url}
+                        alt="我的立绘"
+                        className="max-h-[200px] object-contain rounded-lg"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/30 rounded-lg transition-opacity">
+                        <span className="text-white text-sm">点击更换</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-primary">
+                      <Image className="w-10 h-10 mx-auto mb-2 opacity-60" />
+                      <p className="text-sm">{uploadingUser ? '上传中...' : '点击上传我的立绘'}</p>
+                      <p className="text-xs text-muted-foreground mt-1">建议透明PNG</p>
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={userSpriteRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleUserSpriteUpload}
+                />
+              </div>
+
+              {/* 角色立绘列表 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-primary" />
+                  <label className="text-sm font-medium text-foreground/80">角色立绘</label>
+                </div>
+                
+                {settings.characters.length > 0 ? (
+                  <div className="space-y-3">
+                    {settings.characters.map((char) => (
+                      <div key={char.id} className="bg-card border border-border/60 rounded-xl p-3">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0">
+                            {char.avatar_url ? (
+                              <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                <User className="w-5 h-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{char.name}</p>
+                            {char.voice_id && (
+                              <p className="text-xs text-primary flex items-center gap-1">
+                                <Volume2 className="w-3 h-3" /> 已配置语音
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e) => handleCharSpriteUpload(e as any, char.id);
+                            input.click();
+                          }}
+                          className="border border-dashed border-border rounded-xl p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors flex items-center justify-center min-h-[100px]"
+                        >
+                          {char.sprite_url ? (
+                            <img
+                              src={char.sprite_url}
+                              alt={`${char.name}立绘`}
+                              className="max-h-[120px] object-contain"
+                            />
+                          ) : (
+                            <div className="text-center text-muted-foreground">
+                              <Image className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                              <p className="text-xs">点击上传立绘</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-card border border-dashed border-border rounded-xl p-6 text-center">
+                    <p className="text-sm text-muted-foreground">请先在「故事设定」中选择角色</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* 底部开始按钮 */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={handleStart}
+          disabled={settings.characters.length === 0}
+          className="w-full h-13 py-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground rounded-xl font-semibold shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none transition-all"
+        >
+          开始故事 →
+        </motion.button>
+      </div>
+
+      <input
+        ref={charSpriteRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+      />
     </div>
   );
 };
@@ -311,13 +510,15 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
 const VisualNovelChatPage: React.FC<{ 
   characterId: string;
   storySettings?: StorySettings;
-}> = ({ characterId, storySettings }) => {
+  userSpriteUrl?: string;
+}> = ({ characterId, storySettings, userSpriteUrl }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig } = useAPIConfig();
+  const { apiConfig, ttsConfig } = useAPIConfig();
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [userSprite, setUserSprite] = useState<string | null>(userSpriteUrl || null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
@@ -493,6 +694,25 @@ const VisualNovelChatPage: React.FC<{
           role: 'assistant',
           content: response.data.response
         });
+
+        // 语音播放
+        if (!isMuted && character?.voice_id && ttsConfig?.apiKey) {
+          try {
+            const ttsResponse = await supabase.functions.invoke('tts', {
+              body: {
+                text: response.data.response,
+                voiceId: character.voice_id,
+                ...ttsConfig
+              }
+            });
+            if (ttsResponse.data?.audioUrl) {
+              const audio = new Audio(ttsResponse.data.audioUrl);
+              audio.play().catch(console.error);
+            }
+          } catch (ttsErr) {
+            console.error('TTS error:', ttsErr);
+          }
+        }
       }
     } catch (error) {
       toast.error('发送失败');
@@ -610,21 +830,41 @@ const VisualNovelChatPage: React.FC<{
       
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
 
-      {/* 角色立绘 */}
+      {/* 角色立绘 - 右侧 */}
       <AnimatePresence mode="wait">
-        {character?.sprite_url && (
+        {character?.sprite_url && currentMessage?.role === 'assistant' && (
           <motion.div
-            key="sprite"
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10"
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            transition={{ duration: 0.4 }}
+            key="char-sprite"
+            className="absolute bottom-32 right-4 z-10"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ duration: 0.3 }}
           >
             <img 
               src={character.sprite_url} 
               alt={character.name} 
-              className="max-h-[50vh] object-contain drop-shadow-2xl"
+              className="max-h-[40vh] object-contain drop-shadow-2xl"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 用户立绘 - 左侧 */}
+      <AnimatePresence mode="wait">
+        {userSprite && currentMessage?.role === 'user' && (
+          <motion.div
+            key="user-sprite"
+            className="absolute bottom-32 left-4 z-10"
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.3 }}
+          >
+            <img 
+              src={userSprite} 
+              alt="我" 
+              className="max-h-[40vh] object-contain drop-shadow-2xl"
             />
           </motion.div>
         )}
@@ -783,10 +1023,12 @@ const VisualNovelPage: React.FC = () => {
   const navigate = useNavigate();
   const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
   const [activeCharId, setActiveCharId] = useState<string | null>(characterId || null);
+  const [userSpriteUrl, setUserSpriteUrl] = useState<string | undefined>();
 
-  const handleStartStory = (settings: StorySettings, charId: string) => {
+  const handleStartStory = (settings: StorySettings, charId: string, spriteUrl?: string) => {
     setStorySettings(settings);
     setActiveCharId(charId);
+    setUserSpriteUrl(spriteUrl);
   };
 
   // 如果URL中有characterId，直接进入聊天
@@ -796,7 +1038,7 @@ const VisualNovelPage: React.FC = () => {
 
   // 如果已经设置了故事并选择了角色
   if (activeCharId && storySettings) {
-    return <VisualNovelChatPage characterId={activeCharId} storySettings={storySettings} />;
+    return <VisualNovelChatPage characterId={activeCharId} storySettings={storySettings} userSpriteUrl={userSpriteUrl} />;
   }
 
   // 否则显示故事设置页面
