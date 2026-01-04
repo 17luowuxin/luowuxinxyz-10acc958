@@ -533,7 +533,7 @@ const VisualNovelChatPage: React.FC<{
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spriteInputRef = useRef<HTMLInputElement>(null);
 
-  // 加载角色
+  // 加载角色并初始化开场白（全新聊天，不加载历史）
   useEffect(() => {
     if (!characterId || !user) return;
 
@@ -541,7 +541,7 @@ const VisualNovelChatPage: React.FC<{
       try {
         const { data, error } = await supabase
           .from('characters')
-          .select('id, name, avatar_url, persona, sprite_url, voice_id')
+          .select('id, name, avatar_url, persona, sprite_url, voice_id, opening_line')
           .eq('id', characterId)
           .eq('user_id', user.id)
           .single();
@@ -568,6 +568,19 @@ const VisualNovelChatPage: React.FC<{
             const storedBg = icons[`vn_bg_${characterId}`];
             if (storedBg) setBackgroundUrl(storedBg);
           }
+
+          // 使用故事设置的开场白，如果没有则使用角色的开场白
+          const openingText = storySettings?.opening || (data as any).opening_line;
+          if (openingText) {
+            const openingMessage: Message = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: openingText,
+              created_at: new Date().toISOString()
+            };
+            setMessages([openingMessage]);
+            setCurrentMessageIndex(0);
+          }
         }
       } catch (err) {
         console.error('Load error:', err);
@@ -577,34 +590,7 @@ const VisualNovelChatPage: React.FC<{
     };
 
     loadCharacter();
-  }, [characterId, user, navigate]);
-
-  // 加载消息历史
-  useEffect(() => {
-    if (!characterId || !user) return;
-
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('character_id', characterId)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(50);
-
-      if (data && data.length > 0) {
-        setMessages(data.map(msg => ({
-          id: msg.id,
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-          created_at: msg.created_at
-        })));
-        setCurrentMessageIndex(data.length - 1);
-      }
-    };
-
-    loadMessages();
-  }, [characterId, user]);
+  }, [characterId, user, navigate, storySettings]);
 
   // 打字机效果
   useEffect(() => {
