@@ -7,7 +7,7 @@ import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { 
   ArrowLeft, Settings, ChevronLeft, ChevronRight, Send, Image, 
   Volume2, VolumeX, User, Plus, ChevronDown, Music, MoreVertical,
-  Eye, Edit, Trash2
+  Eye, Edit, Trash2, Save, FolderOpen, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +39,20 @@ interface StorySettings {
 // 用户立绘类型
 interface UserSprite {
   url: string | null;
+}
+
+// 存档类型
+interface VNSave {
+  id: string;
+  name: string;
+  character_id: string;
+  story_settings: StorySettings | null;
+  messages: Message[];
+  background_url: string | null;
+  user_sprite_url: string | null;
+  current_index: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // 故事设置页面 - 全新独特设计
@@ -524,6 +538,10 @@ const VisualNovelChatPage: React.FC<{
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [saves, setSaves] = useState<VNSave[]>([]);
+  const [saveName, setSaveName] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -779,6 +797,86 @@ const VisualNovelChatPage: React.FC<{
     }
   };
 
+  // 加载存档列表
+  const loadSaves = async () => {
+    if (!user || !characterId) return;
+    
+    const { data } = await supabase
+      .from('vn_saves')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('character_id', characterId)
+      .order('updated_at', { ascending: false });
+    
+    if (data) {
+      setSaves(data.map(s => ({
+        ...s,
+        story_settings: s.story_settings as unknown as StorySettings | null,
+        messages: s.messages as unknown as Message[]
+      })));
+    }
+  };
+
+  // 保存存档
+  const saveGame = async () => {
+    if (!user || !characterId || messages.length === 0) {
+      toast.error('没有可保存的内容');
+      return;
+    }
+
+    try {
+      const name = saveName.trim() || `存档 ${new Date().toLocaleString('zh-CN')}`;
+      
+      const saveData = {
+        user_id: user.id,
+        character_id: characterId,
+        name,
+        story_settings: JSON.parse(JSON.stringify(storySettings || {})),
+        messages: JSON.parse(JSON.stringify(messages)),
+        background_url: backgroundUrl,
+        user_sprite_url: userSprite,
+        current_index: currentMessageIndex
+      };
+      
+      const { error } = await supabase.from('vn_saves').insert(saveData);
+
+      if (error) {
+        console.error('Save error:', error);
+        toast.error('存档失败');
+        return;
+      }
+
+      toast.success('存档成功');
+      setSaveName('');
+      setShowSaveModal(false);
+      loadSaves();
+    } catch (error) {
+      console.error('Save error:', error);
+      toast.error('存档失败');
+    }
+  };
+
+  // 读取存档
+  const loadGame = async (save: VNSave) => {
+    setMessages(save.messages);
+    setCurrentMessageIndex(save.current_index);
+    if (save.background_url) setBackgroundUrl(save.background_url);
+    if (save.user_sprite_url) setUserSprite(save.user_sprite_url);
+    setShowLoadModal(false);
+    toast.success('读档成功');
+  };
+
+  // 删除存档
+  const deleteSave = async (saveId: string) => {
+    try {
+      await supabase.from('vn_saves').delete().eq('id', saveId);
+      toast.success('存档已删除');
+      loadSaves();
+    } catch (error) {
+      toast.error('删除失败');
+    }
+  };
+
   const prevMessage = () => {
     if (currentMessageIndex > 0) {
       setCurrentMessageIndex(prev => prev - 1);
@@ -896,6 +994,21 @@ const VisualNovelChatPage: React.FC<{
             className="absolute top-16 right-4 z-40 bg-black/80 backdrop-blur-md rounded-2xl p-4 space-y-3 min-w-[160px]"
           >
             <button
+              onClick={() => { setShowSaveModal(true); setShowSettings(false); }}
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
+            >
+              <Save className="w-4 h-4" />
+              <span>保存存档</span>
+            </button>
+            <button
+              onClick={() => { loadSaves(); setShowLoadModal(true); setShowSettings(false); }}
+              className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span>读取存档</span>
+            </button>
+            <div className="border-t border-white/10 my-2" />
+            <button
               onClick={() => fileInputRef.current?.click()}
               className="w-full flex items-center gap-3 text-white/80 hover:text-white text-sm"
             >
@@ -923,6 +1036,116 @@ const VisualNovelChatPage: React.FC<{
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               <span>{isMuted ? '取消静音' : '静音'}</span>
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 保存存档弹窗 */}
+      <AnimatePresence>
+        {showSaveModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowSaveModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 w-full max-w-sm border border-white/10"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white text-lg font-medium">保存存档</h3>
+                <button onClick={() => setShowSaveModal(false)} className="text-white/60 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="存档名称（可选）"
+                className="w-full h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-pink-500/50 mb-4"
+              />
+              <div className="text-white/60 text-sm mb-4">
+                当前进度：{messages.length} 条对话
+              </div>
+              <button
+                onClick={saveGame}
+                className="w-full h-11 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium"
+              >
+                确认保存
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 读取存档弹窗 */}
+      <AnimatePresence>
+        {showLoadModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowLoadModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 w-full max-w-sm border border-white/10 max-h-[70vh] overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white text-lg font-medium">读取存档</h3>
+                <button onClick={() => setShowLoadModal(false)} className="text-white/60 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3">
+                {saves.length === 0 ? (
+                  <div className="text-white/50 text-center py-8">暂无存档</div>
+                ) : (
+                  saves.map((save) => (
+                    <div
+                      key={save.id}
+                      className="bg-white/5 rounded-xl p-4 border border-white/10"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-white font-medium truncate">{save.name}</h4>
+                          <p className="text-white/50 text-sm mt-1">
+                            {save.messages.length} 条对话
+                          </p>
+                          <p className="text-white/40 text-xs mt-1">
+                            {new Date(save.updated_at).toLocaleString('zh-CN')}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 ml-2">
+                          <button
+                            onClick={() => loadGame(save)}
+                            className="w-8 h-8 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center hover:bg-pink-500/30"
+                          >
+                            <FolderOpen className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteSave(save.id)}
+                            className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
