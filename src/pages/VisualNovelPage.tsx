@@ -671,30 +671,38 @@ const VisualNovelChatPage: React.FC<{
 
       console.log('Sending chat request with config:', { characterId: character.id, userId: user.id, apiConfig });
 
-      const response = await supabase.functions.invoke('chat', {
+      const { data, error } = await supabase.functions.invoke('chat', {
         body: {
-          messages: [...messages, newUserMessage].slice(-10).map(m => ({ role: m.role, content: m.content })),
+          returnJson: true,
+          messages: [...messages, newUserMessage]
+            .slice(-10)
+            .map((m) => ({ role: m.role, content: m.content })),
           characterName: character.name,
           persona: systemPrompt,
           characterId: character.id,
           userId: user.id,
-          ...apiConfig
-        }
+          userApiKey: apiConfig?.apiKey,
+          provider: apiConfig?.provider,
+          baseUrl: apiConfig?.baseUrl,
+          model: apiConfig?.model,
+        },
       });
 
-      console.log('Chat response:', response);
+      console.log('Chat response:', { hasData: !!data, error });
 
-      if (response.error) {
-        console.error('Chat error:', response.error);
-        toast.error('AI 回复失败');
+      if (error) {
+        console.error('Chat error:', error, data);
+        toast.error((data as any)?.error || error.message || 'AI 回复失败');
         return;
       }
 
-      if (response.data?.response) {
+      const replyText = (data as any)?.response || (data as any)?.reply;
+
+      if (replyText) {
         const aiMessage: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: response.data.response,
+          content: replyText,
           created_at: new Date().toISOString()
         };
         
@@ -709,7 +717,7 @@ const VisualNovelChatPage: React.FC<{
           try {
             const ttsResponse = await supabase.functions.invoke('tts', {
               body: {
-                text: response.data.response,
+                text: replyText,
                 voiceId: character.voice_id,
                 ...ttsConfig
               }
@@ -723,8 +731,8 @@ const VisualNovelChatPage: React.FC<{
           }
         }
       } else {
-        console.error('No response in data:', response.data);
-        toast.error('AI 未返回回复');
+        console.error('No response in data:', data);
+        toast.error((data as any)?.error || 'AI 未返回回复');
       }
     } catch (error) {
       console.error('Send message error:', error);

@@ -12,8 +12,49 @@ serve(async (req) => {
   }
 
   try {
-  let { messages, persona, characterName, characterId, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, replyMode: reqReplyMode, onlineMessageCount: reqMessageCount, transferEnabled, historyLimit: reqHistoryLimit, hasImage, imageUrl, hasImageInHistory } = await req.json();
-    
+    const body = await req.json();
+
+    let {
+      messages,
+      message,
+      chatHistory,
+      persona,
+      characterPersona,
+      characterName,
+      characterId,
+      userApiKey,
+      apiKey: legacyApiKey,
+      provider,
+      baseUrl,
+      model: customModel,
+      userProfile,
+      userId,
+      replyMode: reqReplyMode,
+      onlineMessageCount: reqMessageCount,
+      transferEnabled,
+      historyLimit: reqHistoryLimit,
+      hasImage,
+      imageUrl,
+      hasImageInHistory,
+      returnJson,
+    } = body ?? {};
+
+    // Backward-compat: normalize legacy params
+    if (!persona && characterPersona) persona = characterPersona;
+    if (!userApiKey && legacyApiKey) userApiKey = legacyApiKey;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      if (Array.isArray(chatHistory) && chatHistory.length > 0) {
+        messages = chatHistory;
+      } else if (typeof message === "string" && message.trim()) {
+        messages = [{ role: "user", content: message.trim() }];
+      } else {
+        messages = [];
+      }
+    }
+
+    returnJson = Boolean(returnJson);
+
     // 从消息历史中检测图片
     let detectedImageUrl = imageUrl;
     let detectedHasImage = hasImage;
@@ -240,13 +281,19 @@ serve(async (req) => {
         });
       }
     } else {
-      // 没有任何配置，提示用户去设置
-      return new Response(JSON.stringify({ error: "请先在设置中配置API密钥" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-      model = "google/gemini-2.5-flash";
+      // 没有任何配置：使用内置 AI（无需用户配置密钥）
+      apiKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: "内置AI未配置，请稍后再试" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      model = customModel || "google/gemini-2.5-flash";
       headers["Authorization"] = `Bearer ${apiKey}`;
+      console.log("Using Lovable AI gateway (no user config)");
     }
 
     if (!apiKey) {
@@ -913,6 +960,13 @@ ${transferPrompt}
 
       // 返回完整内容（剔除思考/推理文本）
       const safeStreamContent = sanitizeAssistantOutput(fullStreamContent);
+
+      if (returnJson) {
+        return new Response(JSON.stringify({ reply: safeStreamContent, response: safeStreamContent }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: safeStreamContent } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sseData, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
@@ -986,6 +1040,12 @@ ${transferPrompt}
 
     const safeFullContent = sanitizeAssistantOutput(fullContent);
     console.log(`Final content length: ${safeFullContent.length} chars, continued ${continueCount} times`);
+
+    if (returnJson) {
+      return new Response(JSON.stringify({ reply: safeFullContent, response: safeFullContent }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // 包装成SSE格式返回给前端
     const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: safeFullContent } }] })}\n\ndata: [DONE]\n\n`;
