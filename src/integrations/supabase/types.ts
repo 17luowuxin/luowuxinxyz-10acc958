@@ -1038,6 +1038,48 @@ export type Database = {
         }
         Relationships: []
       }
+      vn_saves: {
+        Row: {
+          background_url: string | null
+          character_id: string
+          created_at: string
+          current_index: number | null
+          id: string
+          messages: Json
+          name: string
+          story_settings: Json | null
+          updated_at: string
+          user_id: string
+          user_sprite_url: string | null
+        }
+        Insert: {
+          background_url?: string | null
+          character_id: string
+          created_at?: string
+          current_index?: number | null
+          id?: string
+          messages?: Json
+          name?: string
+          story_settings?: Json | null
+          updated_at?: string
+          user_id: string
+          user_sprite_url?: string | null
+        }
+        Update: {
+          background_url?: string | null
+          character_id?: string
+          created_at?: string
+          current_index?: number | null
+          id?: string
+          messages?: Json
+          name?: string
+          story_settings?: Json | null
+          updated_at?: string
+          user_id?: string
+          user_sprite_url?: string | null
+        }
+        Relationships: []
+      }
       world_books: {
         Row: {
           character_id: string | null
