@@ -634,14 +634,12 @@ const VisualNovelChatPage: React.FC<{
       content: userMessage,
       created_at: new Date().toISOString()
     };
-    setMessages(prev => [...prev, newUserMessage]);
-    setCurrentMessageIndex(messages.length);
-
-    await supabase.from('chat_messages').insert({
-      user_id: user.id,
-      character_id: characterId,
-      role: 'user',
-      content: userMessage
+    
+    // 先更新消息列表
+    setMessages(prev => {
+      const updated = [...prev, newUserMessage];
+      setCurrentMessageIndex(updated.length - 1);
+      return updated;
     });
 
     try {
@@ -653,9 +651,11 @@ const VisualNovelChatPage: React.FC<{
         }
       }
 
+      console.log('Sending chat request with config:', { characterId: character.id, userId: user.id, apiConfig });
+
       const response = await supabase.functions.invoke('chat', {
         body: {
-          messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: userMessage }]),
+          messages: [...messages, newUserMessage].slice(-10).map(m => ({ role: m.role, content: m.content })),
           characterName: character.name,
           persona: systemPrompt,
           characterId: character.id,
@@ -664,6 +664,14 @@ const VisualNovelChatPage: React.FC<{
         }
       });
 
+      console.log('Chat response:', response);
+
+      if (response.error) {
+        console.error('Chat error:', response.error);
+        toast.error('AI 回复失败');
+        return;
+      }
+
       if (response.data?.response) {
         const aiMessage: Message = {
           id: crypto.randomUUID(),
@@ -671,14 +679,11 @@ const VisualNovelChatPage: React.FC<{
           content: response.data.response,
           created_at: new Date().toISOString()
         };
-        setMessages(prev => [...prev, aiMessage]);
-        setCurrentMessageIndex(messages.length + 1);
-
-        await supabase.from('chat_messages').insert({
-          user_id: user.id,
-          character_id: characterId,
-          role: 'assistant',
-          content: response.data.response
+        
+        setMessages(prev => {
+          const updated = [...prev, aiMessage];
+          setCurrentMessageIndex(updated.length - 1);
+          return updated;
         });
 
         // 语音播放
@@ -699,8 +704,12 @@ const VisualNovelChatPage: React.FC<{
             console.error('TTS error:', ttsErr);
           }
         }
+      } else {
+        console.error('No response in data:', response.data);
+        toast.error('AI 未返回回复');
       }
     } catch (error) {
+      console.error('Send message error:', error);
       toast.error('发送失败');
     } finally {
       setIsLoading(false);
