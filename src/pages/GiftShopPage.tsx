@@ -406,34 +406,28 @@ const GiftShopPage: React.FC = () => {
           .eq('id', selectedCharacter.id)
           .single();
 
-        if (charData) {
-          const { data: apiKeyData } = await supabase
-            .from('api_keys')
-            .select('api_key, provider')
-            .eq('user_id', user.id)
-            .limit(1)
-            .maybeSingle();
-
-          const response = await supabase.functions.invoke('chat', {
-            body: {
-              message: userMessage,
-              characterName: charData.name,
-              characterPersona: charData.persona || '',
-              chatHistory: [],
-              apiKey: apiKeyData?.api_key,
-              provider: apiKeyData?.provider,
-            },
-          });
-
-          if (response.data?.reply) {
-            await supabase.from('chat_messages').insert({
-              user_id: user.id,
-              character_id: selectedCharacter.id,
-              role: 'assistant',
-              content: response.data.reply,
+          if (charData) {
+            const response = await supabase.functions.invoke('chat', {
+              body: {
+                returnJson: true,
+                messages: [{ role: 'user', content: userMessage }],
+                characterName: charData.name,
+                persona: charData.persona || '',
+                characterId: selectedCharacter.id,
+                userId: user.id,
+              },
             });
+
+            const replyText = (response.data as any)?.response || (response.data as any)?.reply;
+            if (replyText) {
+              await supabase.from('chat_messages').insert({
+                user_id: user.id,
+                character_id: selectedCharacter.id,
+                role: 'assistant',
+                content: replyText,
+              });
+            }
           }
-        }
       } catch (chatError) {
         console.log('Auto reply skipped:', chatError);
       }
