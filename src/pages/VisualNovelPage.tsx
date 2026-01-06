@@ -528,7 +528,11 @@ const VisualNovelChatPage: React.FC<{
 }> = ({ characterId, storySettings, userSpriteUrl }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { apiConfig, ttsConfig } = useAPIConfig();
+  const { apiConfig, ttsConfig, vnConfig } = useAPIConfig();
+  // 优先使用 VN 专用配置，没有则回退到通用配置
+  const effectiveApiConfig = vnConfig?.apiKey
+    ? { provider: 'custom', apiKey: vnConfig.apiKey, baseUrl: vnConfig.baseUrl, model: vnConfig.model }
+    : apiConfig;
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -669,7 +673,7 @@ const VisualNovelChatPage: React.FC<{
         }
       }
 
-      console.log('Sending chat request with config:', { characterId: character.id, userId: user.id, apiConfig });
+      console.log('Sending chat request with config:', { characterId: character.id, userId: user.id, effectiveApiConfig });
 
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
@@ -681,10 +685,10 @@ const VisualNovelChatPage: React.FC<{
           persona: systemPrompt,
           characterId: character.id,
           userId: user.id,
-          userApiKey: apiConfig?.apiKey,
-          provider: apiConfig?.provider,
-          baseUrl: apiConfig?.baseUrl,
-          model: apiConfig?.model,
+          userApiKey: effectiveApiConfig?.apiKey,
+          provider: effectiveApiConfig?.provider,
+          baseUrl: effectiveApiConfig?.baseUrl,
+          model: effectiveApiConfig?.model,
         },
       });
 
