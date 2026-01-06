@@ -121,6 +121,7 @@ const App = () => (
                     </WithPhoneFrame>
                   }
                 />
+                <Route path="/admin" element={<AdminPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
