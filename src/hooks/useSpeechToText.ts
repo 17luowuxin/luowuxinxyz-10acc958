@@ -173,6 +173,13 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       }
       // Don't show error for aborted (happens on restart)
       if (errorType === "aborted" && shouldRestartRef.current) {
+        restartRecognition();
+        return;
+      }
+      // Handle network errors gracefully in persistent mode
+      if (errorType === "network" && shouldRestartRef.current) {
+        console.log('[SpeechToText] Network error, will retry...');
+        setTimeout(() => restartRecognition(), 1000);
         return;
       }
       const message = mapSpeechError(errorType);
