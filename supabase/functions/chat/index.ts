@@ -427,14 +427,25 @@ ${transferPrompt}
         'gemini', 'gemini-pro', 'gemini-1.5', 'gemini-2', 
         // Claude 视觉模型
         'claude-3', 'claude-3.5', 'claude-4',
-        // 其他常见视觉模型
-        'qwen-vl', 'qwen2-vl', 'glm-4v', 'yi-vision'
+        // 国产多模态模型
+        'qwen-vl', 'qwen2-vl', 'qwen-2-vl', 'qwen2.5-vl', 'qwen-vl-plus', 'qwen-vl-max',
+        'glm-4v', 'glm4v', 'cogvlm', 'cogview',
+        'yi-vision', 'yi-vl',
+        'deepseek-vl', 'deepseek-vision',
+        'internvl', 'intern-vl',
+        'minicpm-v', 'minicpm-vl',
+        'step-1v', 'step1v',
+        // 通用关键字
+        'vision', 'vl', 'multimodal'
       ];
       
       const modelLower = model.toLowerCase();
       const supportsVision = visionSupportedModels.some(vm => modelLower.includes(vm.toLowerCase()));
       
       console.log("Model:", model, "Supports vision:", supportsVision);
+      
+      // 图片识别超时设置 - 15秒，避免阻塞太久
+      const visionTimeout = 15000;
       
       try {
         if (supportsVision && apiKey) {
@@ -457,71 +468,47 @@ ${transferPrompt}
             }
           ];
           
-          const visionResponse = await fetch(apiUrl, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              model,
-              messages: visionMessages,
-              max_tokens: 50,
-            }),
-          });
+          const visionController = new AbortController();
+          const visionTimeoutId = setTimeout(() => visionController.abort(), visionTimeout);
           
-          if (visionResponse.ok) {
-            const visionData = await visionResponse.json();
-            imageDescription = visionData.choices?.[0]?.message?.content || '';
-            console.log("Image description from user API:", imageDescription.slice(0, 100));
-          } else {
-            const errorText = await visionResponse.text();
-            console.error("User API vision error:", visionResponse.status, errorText);
-            // 如果用户API失败，回退到Lovable AI
-            console.log("Falling back to Lovable AI for vision...");
-          }
-        }
-        
-        // 如果用户API不支持视觉或失败，使用Lovable AI
-        if (!imageDescription) {
-          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-          if (LOVABLE_API_KEY) {
-            console.log("Using Lovable AI for vision...");
-            const visionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          try {
+            const visionResponse = await fetch(apiUrl, {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
+              headers,
               body: JSON.stringify({
-                model: "google/gemini-2.5-flash-lite",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      {
-                        type: "text",
-                        text: "用3-5个字描述这张图片的核心主题。只说关键词，如：自拍、风景、猫咪、美食等。"
-                      },
-                      {
-                        type: "image_url",
-                        image_url: { url: detectedImageUrl }
-                      }
-                    ]
-                  }
-                ],
+                model,
+                messages: visionMessages,
                 max_tokens: 50,
               }),
+              signal: visionController.signal,
             });
+            
+            clearTimeout(visionTimeoutId);
             
             if (visionResponse.ok) {
               const visionData = await visionResponse.json();
               imageDescription = visionData.choices?.[0]?.message?.content || '';
-              console.log("Image description from Lovable AI:", imageDescription.slice(0, 100));
+              console.log("Image description from user API:", imageDescription.slice(0, 100));
             } else {
-              console.error("Lovable AI vision error:", visionResponse.status);
+              const errorText = await visionResponse.text();
+              console.error("User API vision error:", visionResponse.status, errorText);
+              // 用户API失败，跳过图片描述（不使用Lovable AI fallback以加快速度）
+              console.log("Vision failed, will describe as '图片'");
+              imageDescription = '图片';
             }
+          } catch (fetchErr) {
+            clearTimeout(visionTimeoutId);
+            console.error("Vision fetch error:", fetchErr);
+            imageDescription = '图片';
           }
+        } else {
+          // 用户模型不支持视觉，直接标记为"图片"，不走Lovable AI
+          console.log("Model doesn't support vision, using generic label");
+          imageDescription = '图片';
         }
       } catch (visionError) {
         console.error("Vision processing error:", visionError);
+        imageDescription = '图片';
       }
     }
 
@@ -568,7 +555,8 @@ ${transferPrompt}
     // 智能消息截断和重试函数
     const sendRequestWithRetry = async (msgs: any[], streamMode: boolean): Promise<{ response: Response; usedStream: boolean; messagesUsed: any[] }> => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      // 增加超时到90秒，用户API可能较慢
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
 
       const body: Record<string, unknown> = isAnthropic ? {
         model,
