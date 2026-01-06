@@ -15,10 +15,17 @@ export interface TTSConfig {
   model?: string;
 }
 
+export interface VNConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
 export const useAPIConfig = () => {
   const { user } = useAuth();
   const [apiConfig, setApiConfig] = useState<APIConfig>({});
   const [ttsConfig, setTTSConfig] = useState<TTSConfig | null>(null);
+  const [vnConfig, setVNConfig] = useState<VNConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAPIConfig = useCallback(async () => {
@@ -48,18 +55,33 @@ export const useAPIConfig = () => {
         const model = data.find(k => k.provider === 'custom_model');
 
         // TTS 配置
-        const ttsKey = data.find(k => k.provider === 'tts');
+        const ttsKey = data.find(k => k.provider === 'tts_api_key');
         const ttsBaseUrl = data.find(k => k.provider === 'tts_base_url');
         const ttsModel = data.find(k => k.provider === 'tts_model');
 
-        if (ttsKey) {
+        if (ttsKey || ttsBaseUrl) {
           setTTSConfig({
-            apiKey: ttsKey.api_key,
+            apiKey: ttsKey?.api_key,
             baseUrl: ttsBaseUrl?.api_key,
             model: ttsModel?.api_key,
           });
         } else {
           setTTSConfig(null);
+        }
+
+        // VN (视觉小说) 专用配置
+        const vnKey = data.find(k => k.provider === 'vn_api_key');
+        const vnBaseUrl = data.find(k => k.provider === 'vn_base_url');
+        const vnModel = data.find(k => k.provider === 'vn_model');
+
+        if (vnKey) {
+          setVNConfig({
+            apiKey: vnKey.api_key,
+            baseUrl: vnBaseUrl?.api_key,
+            model: vnModel?.api_key,
+          });
+        } else {
+          setVNConfig(null);
         }
 
         if (customKey) {
@@ -85,6 +107,7 @@ export const useAPIConfig = () => {
       } else {
         setApiConfig({});
         setTTSConfig(null);
+        setVNConfig(null);
       }
     } catch (error) {
       console.error('Error fetching API config:', error);
@@ -100,5 +123,5 @@ export const useAPIConfig = () => {
 
   const isConfigured = Boolean(apiConfig.apiKey && apiConfig.provider);
 
-  return { apiConfig, ttsConfig, loading, isConfigured, refetch: fetchAPIConfig };
+  return { apiConfig, ttsConfig, vnConfig, loading, isConfigured, refetch: fetchAPIConfig };
 };

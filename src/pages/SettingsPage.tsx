@@ -151,6 +151,14 @@ const SettingsPage: React.FC = () => {
   const [ttsConfigured, setTtsConfigured] = useState(false);
   const [testingTts, setTestingTts] = useState(false);
 
+  // VN (视觉小说) 专用 API state
+  const [vnApiKey, setVnApiKey] = useState('');
+  const [vnBaseUrl, setVnBaseUrl] = useState('');
+  const [vnModel, setVnModel] = useState('');
+  const [showVnKey, setShowVnKey] = useState(false);
+  const [vnConfigured, setVnConfigured] = useState(false);
+  const [testingVn, setTestingVn] = useState(false);
+
   useEffect(() => {
     if (user) fetchApiKeys();
   }, [user]);
@@ -291,6 +299,18 @@ const SettingsPage: React.FC = () => {
       }
       if (ttsApiKeySetting) setTtsApiKey(ttsApiKeySetting.api_key);
       if (ttsModelSetting) setTtsModel(ttsModelSetting.api_key);
+      
+      // VN (视觉小说) 专用 API 配置
+      const vnApiKeySetting = data.find(k => k.provider === 'vn_api_key');
+      const vnBaseUrlSetting = data.find(k => k.provider === 'vn_base_url');
+      const vnModelSetting = data.find(k => k.provider === 'vn_model');
+      
+      if (vnApiKeySetting) {
+        setVnApiKey(vnApiKeySetting.api_key);
+        setVnConfigured(true);
+      }
+      if (vnBaseUrlSetting) setVnBaseUrl(vnBaseUrlSetting.api_key);
+      if (vnModelSetting) setVnModel(vnModelSetting.api_key);
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -734,6 +754,64 @@ const SettingsPage: React.FC = () => {
       toast.error('连接测试失败');
     } finally {
       setTestingTts(false);
+    }
+  };
+
+  // ----- VN (视觉小说) 专用 API 测试 & 保存 -----
+  const saveVnSettings = async () => {
+    if (!user || !vnApiKey.trim() || !vnBaseUrl.trim()) {
+      toast.error('请输入 API 密钥和 Base URL');
+      return;
+    }
+
+    const keysToUpsert = [
+      { provider: 'vn_api_key', value: vnApiKey },
+      { provider: 'vn_base_url', value: vnBaseUrl },
+      { provider: 'vn_model', value: vnModel || '' },
+    ];
+
+    for (const item of keysToUpsert) {
+      const { data: existing } = await supabase
+        .from('api_keys')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('provider', item.provider)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('api_keys').update({ api_key: item.value }).eq('id', existing.id);
+      } else {
+        await supabase.from('api_keys').insert({ user_id: user.id, provider: item.provider, api_key: item.value });
+      }
+    }
+
+    setVnConfigured(true);
+    toast.success('视觉小说 API 配置已保存');
+  };
+
+  const testVnConnection = async () => {
+    if (!vnApiKey || !vnBaseUrl) {
+      toast.error('请先输入 API 密钥和 Base URL');
+      return;
+    }
+
+    setTestingVn(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-api-connection', {
+        body: { apiKey: vnApiKey, baseUrl: vnBaseUrl, model: vnModel || undefined },
+      });
+
+      if (error) {
+        toast.error(`测试失败: ${error.message}`);
+      } else if (data?.success) {
+        toast.success('视觉小说 API 连接成功！');
+      } else {
+        toast.error(data?.error || '连接失败');
+      }
+    } catch (e) {
+      toast.error('测试失败');
+    } finally {
+      setTestingVn(false);
     }
   };
 
@@ -1843,6 +1921,104 @@ const SettingsPage: React.FC = () => {
             >
               保存TTS配置
             </Button>
+          </div>
+        </div>
+
+        {/* VN (视觉小说) 专用 API 配置 */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-indigo-100/50">
+          {/* Card Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                <span className="text-lg">📖</span>
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-800">视觉小说专用 API</h2>
+                <p className="text-xs text-gray-500">
+                  可为视觉小说模式单独配置 API，留空则使用通用对话 API
+                </p>
+              </div>
+            </div>
+            {vnConfigured && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full font-medium">
+                <Check className="w-3.5 h-3.5" /> 已配置
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {/* Base URL */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-indigo-600 mb-2">
+                <Globe className="w-4 h-4" />
+                Base URL
+              </label>
+              <Input
+                placeholder="https://api.deepseek.com/v1"
+                value={vnBaseUrl}
+                onChange={(e) => setVnBaseUrl(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="text-sm font-medium text-indigo-600 mb-2 block">
+                API Key
+              </label>
+              <div className="relative">
+                <Input
+                  type={showVnKey ? 'text' : 'password'}
+                  placeholder="sk-..."
+                  value={vnApiKey}
+                  onChange={(e) => setVnApiKey(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowVnKey(!showVnKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showVnKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Model */}
+            <div>
+              <label className="text-sm font-medium text-indigo-600 mb-2 block">
+                模型名称（可选）
+              </label>
+              <Input
+                placeholder="deepseek-chat"
+                value={vnModel}
+                onChange={(e) => setVnModel(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={testVnConnection}
+                disabled={testingVn || !vnApiKey || !vnBaseUrl}
+                className="flex-1 py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {testingVn ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <TestTube className="w-4 h-4 text-indigo-500" />
+                )}
+                测试连接
+              </button>
+              <Button
+                onClick={saveVnSettings}
+                disabled={!vnApiKey || !vnBaseUrl}
+                className="flex-1 py-6 rounded-2xl bg-gradient-to-r from-indigo-400 to-purple-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+              >
+                保存配置
+              </Button>
+            </div>
           </div>
         </div>
 
