@@ -2727,6 +2727,14 @@ const ChatPage: React.FC = () => {
     setCallStartTime(Date.now());
     setInterimTranscript('');
 
+    // 关键：在“接听”这个用户手势里先触发麦克风权限授权
+    // 避免后续在 TTS onEnd 等非手势回调里启动识别时，被浏览器拦截导致“偶发识别不了”
+    try {
+      await speechToText.prime();
+    } catch {
+      // ignore
+    }
+
     // 再尝试解锁音频自动播放（不允许阻塞太久）
     try {
       await Promise.race([
@@ -2736,14 +2744,14 @@ const ChatPage: React.FC = () => {
     } catch {
       // ignore
     }
-    
+
     // 角色的开场白 + TTS播放
     const greeting = showCallDialog === 'voice'
       ? `喂？${profile?.nickname || ''}？怎么啦，想我了吗～`
       : `哇，视频来了！让我看看你～ 你今天怎么样呀？`;
-    
+
     setCallMessages([{ role: 'assistant', content: greeting }]);
-    
+
     // 播放开场白TTS（使用队列）
     if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
       try {
@@ -2833,7 +2841,7 @@ const ChatPage: React.FC = () => {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
-    if (speechToText.isListening) {
+    if (speechToText.isListening || speechToText.isPersistentEnabled) {
       speechToText.stop();
     }
     
