@@ -443,6 +443,9 @@ const ChatPage: React.FC = () => {
       
       console.log('Retrying last message for AI response...');
       
+      const chatController = new AbortController();
+      const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -450,7 +453,8 @@ const ChatPage: React.FC = () => {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
-      });
+        signal: chatController.signal,
+      }).finally(() => window.clearTimeout(chatTimeout));
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
@@ -1582,6 +1586,9 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
       
+      const chatController = new AbortController();
+      const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -1589,7 +1596,8 @@ const ChatPage: React.FC = () => {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
-      });
+        signal: chatController.signal,
+      }).finally(() => window.clearTimeout(chatTimeout));
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
@@ -1797,6 +1805,9 @@ const ChatPage: React.FC = () => {
       });
       
       // Use fetch directly for streaming
+      const chatController = new AbortController();
+      const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -1804,7 +1815,8 @@ const ChatPage: React.FC = () => {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
-      });
+        signal: chatController.signal,
+      }).finally(() => window.clearTimeout(chatTimeout));
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
