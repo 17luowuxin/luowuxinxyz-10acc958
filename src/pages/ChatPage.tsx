@@ -1945,7 +1945,8 @@ const ChatPage: React.FC = () => {
         // 如果分割后只有1条或0条，说明API没有正确使用|||分隔，当作普通回复处理
         if (multiMessages.length <= 1) {
           console.log('Online mode: API did not use ||| separator, treating as single message');
-          multiMessages = [assistantContent.replace(/\|{2,}/g, ' ').trim()];
+          // 清理所有残留的竖线字符（包括单个|、连续||等）
+          multiMessages = [assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()];
         }
         
         // 限制最多条数
@@ -1953,8 +1954,8 @@ const ChatPage: React.FC = () => {
           multiMessages = multiMessages.slice(0, fixedCount);
         }
       } else {
-        // 小说模式：不分割
-        multiMessages = [assistantContent.replace(/\|\|\|/g, ' ').trim()];
+        // 小说模式：不分割，清理所有残留的竖线字符
+        multiMessages = [assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()];
       }
       
       // 最多5条
@@ -2160,8 +2161,8 @@ const ChatPage: React.FC = () => {
         return; // 提前返回，不走下面的逻辑
       }
       
-      // 小说模式或线上模式下只拆出1条：清理可能残留的 ||| 分隔符
-      let finalContent = assistantContent.replace(/\|\|\|/g, ' ').trim();
+      // 小说模式或线上模式下只拆出1条：清理所有残留的竖线字符
+      let finalContent = assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
       
       // 处理转账指令
       const cleanContent = await handleAITransfer(finalContent);
