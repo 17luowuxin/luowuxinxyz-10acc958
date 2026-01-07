@@ -1734,6 +1734,10 @@ const ChatPage: React.FC = () => {
     const userMessage = { role: 'user', content: messageContent };
     const tempId = Date.now();
     const isWaitingForAI = loading; // 记录当前是否正在等待AI回复
+    
+    // 先保存引用消息的引用，避免清除后丢失
+    const currentQuotedMessage = quotedMessage;
+    
     // 先清空输入，允许用户继续输入
     setInput('');
     setQuotedMessage(null);
@@ -1751,7 +1755,7 @@ const ChatPage: React.FC = () => {
         character_id: characterId, 
         role: 'user', 
         content: messageContent,
-        quoted_message_id: quotedMessage?.id || null
+        quoted_message_id: currentQuotedMessage?.id || null
       })
       .select()
       .single();
@@ -1765,7 +1769,7 @@ const ChatPage: React.FC = () => {
     }
     
     // 消息保存成功后再更新UI
-    setMessages(prev => [...prev, { ...userMessage, id: savedMsg?.id || tempId, quotedMessage }]);
+    setMessages(prev => [...prev, { ...userMessage, id: savedMsg?.id || tempId, quotedMessage: currentQuotedMessage }]);
 
     try {
       // 保留历史消息中的图片URL，过滤掉表情包消息
