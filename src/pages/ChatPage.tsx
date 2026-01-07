@@ -2744,23 +2744,18 @@ const ChatPage: React.FC = () => {
     setCallStartTime(Date.now());
     setInterimTranscript('');
 
-    // 关键：在“接听”这个用户手势里先触发麦克风权限授权
-    // 避免后续在 TTS onEnd 等非手势回调里启动识别时，被浏览器拦截导致“偶发识别不了”
-    try {
-      await speechToText.prime();
-    } catch {
-      // ignore
-    }
+    // 在同一次“接听”用户手势里：
+    // 1) 触发音频解锁（否则后续 TTS 可能被浏览器当作非手势播放而静音/拦截）
+    // 2) 触发麦克风权限（否则后续在 onEnd 等非手势回调里启动识别可能被拦截）
+    const unlockPromise = Promise.race([
+      audioQueue.unlock(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
+    ]).catch(() => false);
 
-    // 再尝试解锁音频自动播放（不允许阻塞太久）
-    try {
-      await Promise.race([
-        audioQueue.unlock(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
-      ]);
-    } catch {
-      // ignore
-    }
+    const primePromise = speechToText.prime().catch(() => false);
+
+    // 等待两者完成（不关心结果，失败也继续走通话流程）
+    await Promise.allSettled([unlockPromise, primePromise]);
 
     // 角色的开场白 + TTS播放
     const greeting = showCallDialog === 'voice'
