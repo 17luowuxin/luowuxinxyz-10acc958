@@ -91,15 +91,30 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     }
   }, []);
 
+  /**
+   * 在“用户手势”里提前触发麦克风权限弹窗（重要：很多浏览器会拦截非手势回调中的权限请求）
+   */
+  const prime = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 这里只是为了触发权限授权，立刻释放，避免占用麦克风导致识别服务拿不到音频
+      stream.getTracks().forEach((t) => t.stop());
+      return true;
+    } catch {
+      onErrorRef.current?.("无法获取麦克风权限");
+      return false;
+    }
+  }, []);
+
   const restartRecognition = useCallback(() => {
     if (!shouldRestartRef.current || !recognitionRef.current) return;
-    
+
     const now = Date.now();
     const timeSinceLastRestart = now - lastRestartTimeRef.current;
-    
+
     // Prevent rapid restarts - wait at least 300ms between restarts
     const delay = Math.max(300, 500 - timeSinceLastRestart);
-    
+
     setTimeout(() => {
       if (shouldRestartRef.current && recognitionRef.current) {
         try {
@@ -134,7 +149,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       setIsListening(true);
       restartCountRef.current = 0; // Reset restart count on successful start
     };
-    
+
     rec.onend = () => {
       console.log('[SpeechToText] Recognition ended, shouldRestart:', shouldRestartRef.current);
       setIsListening(false);
@@ -164,7 +179,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     rec.onerror = (e: any) => {
       const errorType = String(e?.error || "unknown");
       console.log('[SpeechToText] Error:', errorType, 'shouldRestart:', shouldRestartRef.current);
-      
+
       // Don't show error for no-speech in persistent mode, just restart
       if (errorType === "no-speech" && shouldRestartRef.current) {
         console.log('[SpeechToText] No speech detected, restarting...');
@@ -182,6 +197,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
         setTimeout(() => restartRecognition(), 1000);
         return;
       }
+
       const message = mapSpeechError(errorType);
       onErrorRef.current?.(message);
       cleanupPermissionStream();
@@ -225,17 +241,11 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       return;
     }
 
-    // 提前触发麦克风权限弹窗
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      permissionStreamRef.current = stream;
-    } catch {
-      onErrorRef.current?.("无法获取麦克风权限");
-      return;
-    }
+    const ok = await prime();
+    if (!ok) return;
 
-    shouldRestartRef.current = persistent || true;
-    setIsPersistentEnabled(true);
+    shouldRestartRef.current = Boolean(persistent);
+    setIsPersistentEnabled(Boolean(persistent));
 
     try {
       rec.start();
@@ -245,7 +255,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       shouldRestartRef.current = false;
       setIsPersistentEnabled(false);
     }
-  }, [cleanupPermissionStream, ensureRecognition, persistent]);
+  }, [cleanupPermissionStream, ensureRecognition, persistent, prime]);
 
   const stop = useCallback(() => {
     console.log('[SpeechToText] Stopping recognition');
@@ -275,13 +285,14 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     };
   }, [stop]);
 
-  return { 
-    isSupported, 
-    isListening, 
-    isPersistentEnabled, // New: whether persistent mode is active
-    hasAudioActivity, // New: whether audio is being detected
-    start, 
-    stop, 
-    toggle 
+  return {
+    isSupported,
+    isListening,
+    isPersistentEnabled,
+    hasAudioActivity,
+    prime,
+    start,
+    stop,
+    toggle,
   };
 }
