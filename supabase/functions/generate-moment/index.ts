@@ -23,6 +23,11 @@ interface SpaceImageConfig {
   model: string;
 }
 
+interface UnsplashConfig {
+  enabled: boolean;
+  accessKey: string;
+}
+
 async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
   if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
   
@@ -74,6 +79,69 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   if (!enabled || !apiKey || !apiUrl) return null;
   
   return { enabled, apiKey, apiUrl, model };
+}
+
+// 获取 Unsplash 配置
+async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
+  if (!userId) return null;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+  
+  if (!apiSettings) return null;
+  
+  const enabled = apiSettings.find(s => s.provider === 'unsplash_enabled')?.api_key === 'true';
+  const accessKey = apiSettings.find(s => s.provider === 'unsplash_access_key')?.api_key || '';
+  
+  if (!enabled || !accessKey) return null;
+  
+  return { enabled, accessKey };
+}
+
+// 使用 Unsplash 搜索图片
+async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): Promise<string | null> {
+  try {
+    // 依次尝试每个关键词
+    for (const keyword of keywords) {
+      console.log('Searching Unsplash with keyword:', keyword);
+      
+      const response = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keyword)}&per_page=10&orientation=squarish`,
+        {
+          headers: {
+            'Authorization': `Client-ID ${config.accessKey}`,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        console.error('Unsplash API error:', response.status);
+        continue;
+      }
+      
+      const data = await response.json();
+      
+      if (data.results && data.results.length > 0) {
+        // 随机选择一张图片增加多样性
+        const randomIndex = Math.floor(Math.random() * Math.min(data.results.length, 5));
+        const photo = data.results[randomIndex];
+        console.log('Found Unsplash image for keyword:', keyword);
+        return photo.urls?.regular || photo.urls?.small || null;
+      }
+    }
+    
+    console.log('No Unsplash images found for any keywords');
+    return null;
+  } catch (error) {
+    console.error('Unsplash search error:', error);
+    return null;
+  }
 }
 
 // 生成图片
@@ -572,6 +640,7 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     // 如果是发动态类型，尝试生成配图
     let imageUrl: string | undefined;
     if (type === "moment") {
+      // 优先检查空间图片生成API
       const spaceImageConfig = await getSpaceImageConfig(userId);
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
@@ -585,6 +654,48 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
           imageUrl = generatedImageUrl;
         } else {
           console.log("Image generation failed or returned null");
+        }
+      }
+      
+      // 如果没有生成图片，尝试使用 Unsplash
+      if (!imageUrl) {
+        const unsplashConfig = await getUnsplashConfig(userId);
+        if (unsplashConfig) {
+          console.log("Unsplash enabled, extracting keywords from content...");
+          
+          // 使用AI提取关键词
+          const keywordPrompt = `请从以下动态内容中提取2-4个适合搜索图片的英文关键词，用逗号分隔。
+要求：
+- 关键词要具体、可视化，适合搜索摄影图片
+- 优先提取场景、物体、情感相关的词
+- 只输出关键词，不要其他内容
+
+动态内容：${content}`;
+          
+          try {
+            const keywordsResponse = await getAICompletion(
+              [{ role: "user", content: keywordPrompt }],
+              config
+            );
+            
+            // 解析关键词
+            const keywords = keywordsResponse
+              .split(/[,，、\s]+/)
+              .map(k => k.trim())
+              .filter(k => k.length > 0 && k.length < 30);
+            
+            console.log("Extracted keywords:", keywords);
+            
+            if (keywords.length > 0) {
+              const unsplashImageUrl = await searchUnsplashImage(keywords, unsplashConfig);
+              if (unsplashImageUrl) {
+                console.log("Unsplash image found successfully");
+                imageUrl = unsplashImageUrl;
+              }
+            }
+          } catch (keywordError) {
+            console.error("Keyword extraction error:", keywordError);
+          }
         }
       }
     }
