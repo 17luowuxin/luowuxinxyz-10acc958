@@ -819,7 +819,13 @@ const SettingsPage: React.FC = () => {
 
     setTestingSpaceImage(true);
     try {
-      const response = await fetch(spaceImageApiUrl, {
+      // 自动补全API路径
+      let apiUrl = spaceImageApiUrl.replace(/\/+$/, '');
+      if (!apiUrl.includes('/images/generations')) {
+        apiUrl = `${apiUrl}/images/generations`;
+      }
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${spaceImageApiKey}`,
