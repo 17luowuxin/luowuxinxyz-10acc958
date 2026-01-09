@@ -419,12 +419,16 @@ ${transferPrompt}
       console.log("Processing image with vision model...", detectedImageUrl?.slice(0, 80));
       
       // 检查用户的API是否支持视觉功能
+      // Gemini 所有版本都支持视觉，只要模型名包含 gemini 就认为支持
+      const modelLowerCheck = model.toLowerCase();
+      
+      // 简化判断：Gemini系列全部支持视觉
+      const isGemini = modelLowerCheck.includes('gemini');
+      
       const visionSupportedModels = [
         // OpenAI 视觉模型
         'gpt-4o', 'gpt-4o-mini', 'gpt-4-vision', 'gpt-4-turbo', 'gpt-4.1',
         'gpt-5', 'gpt-5-mini', 'gpt-5-nano',
-        // Gemini 视觉模型
-        'gemini', 'gemini-pro', 'gemini-1.5', 'gemini-2', 
         // Claude 视觉模型
         'claude-3', 'claude-3.5', 'claude-4',
         // 国产多模态模型
@@ -440,9 +444,9 @@ ${transferPrompt}
       ];
       
       const modelLower = model.toLowerCase();
-      const supportsVision = visionSupportedModels.some(vm => modelLower.includes(vm.toLowerCase()));
+      const supportsVision = isGemini || visionSupportedModels.some(vm => modelLower.includes(vm.toLowerCase()));
       
-      console.log("Model:", model, "Supports vision:", supportsVision);
+      console.log("Model:", model, "Is Gemini:", isGemini, "Supports vision:", supportsVision);
       
       // 图片识别超时设置 - 15秒，避免阻塞太久
       const visionTimeout = 15000;
@@ -451,6 +455,30 @@ ${transferPrompt}
         if (supportsVision && apiKey) {
           // 使用用户配置的API识别图片
           console.log("Using user's API for vision:", apiUrl);
+          
+          // Gemini 等模型可能无法直接访问外部URL，需要转为base64
+          let imageToUse = detectedImageUrl;
+          if (isGemini && detectedImageUrl && !detectedImageUrl.startsWith('data:')) {
+            try {
+              console.log("Converting image to base64 for Gemini...");
+              const imgResp = await fetch(detectedImageUrl);
+              if (imgResp.ok) {
+                const contentType = imgResp.headers.get('content-type') || 'image/jpeg';
+                const arrayBuffer = await imgResp.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                // 检查大小，避免过大图片
+                if (uint8Array.byteLength < 4_000_000) {
+                  const base64 = btoa(String.fromCharCode(...uint8Array));
+                  imageToUse = `data:${contentType};base64,${base64}`;
+                  console.log("Image converted to base64, size:", uint8Array.byteLength);
+                } else {
+                  console.log("Image too large for base64 conversion:", uint8Array.byteLength);
+                }
+              }
+            } catch (convErr) {
+              console.error("Failed to convert image to base64:", convErr);
+            }
+          }
           
           const visionMessages = [
             {
@@ -462,7 +490,7 @@ ${transferPrompt}
                 },
                 {
                   type: "image_url",
-                  image_url: { url: detectedImageUrl }
+                  image_url: { url: imageToUse }
                 }
               ]
             }
