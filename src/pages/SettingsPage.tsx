@@ -168,6 +168,13 @@ const SettingsPage: React.FC = () => {
   const [spaceImageConfigured, setSpaceImageConfigured] = useState(false);
   const [testingSpaceImage, setTestingSpaceImage] = useState(false);
 
+  // Unsplash 免费配图 state
+  const [unsplashEnabled, setUnsplashEnabled] = useState(false);
+  const [unsplashAccessKey, setUnsplashAccessKey] = useState('');
+  const [showUnsplashKey, setShowUnsplashKey] = useState(false);
+  const [unsplashConfigured, setUnsplashConfigured] = useState(false);
+  const [testingUnsplash, setTestingUnsplash] = useState(false);
+
   useEffect(() => {
     if (user) fetchApiKeys();
   }, [user]);
@@ -334,6 +341,16 @@ const SettingsPage: React.FC = () => {
       }
       if (spaceImageApiUrlSetting) setSpaceImageApiUrl(spaceImageApiUrlSetting.api_key);
       if (spaceImageModelSetting) setSpaceImageModel(spaceImageModelSetting.api_key);
+      
+      // Unsplash 免费配图配置
+      const unsplashEnabledSetting = data.find(k => k.provider === 'unsplash_enabled');
+      const unsplashAccessKeySetting = data.find(k => k.provider === 'unsplash_access_key');
+      
+      if (unsplashEnabledSetting) setUnsplashEnabled(unsplashEnabledSetting.api_key === 'true');
+      if (unsplashAccessKeySetting) {
+        setUnsplashAccessKey(unsplashAccessKeySetting.api_key);
+        setUnsplashConfigured(true);
+      }
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -853,6 +870,64 @@ const SettingsPage: React.FC = () => {
       toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setTestingSpaceImage(false);
+    }
+  };
+
+  // ----- Unsplash 免费配图 测试 & 保存 -----
+  const saveUnsplashSettings = async () => {
+    if (!user || !unsplashAccessKey.trim()) {
+      toast.error('请输入 Unsplash Access Key');
+      return;
+    }
+
+    const providersToReplace = ['unsplash_enabled', 'unsplash_access_key'];
+    
+    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    
+    const rows = [
+      { user_id: user.id, provider: 'unsplash_enabled', api_key: unsplashEnabled ? 'true' : 'false' },
+      { user_id: user.id, provider: 'unsplash_access_key', api_key: unsplashAccessKey.trim() },
+    ];
+    
+    const { error } = await supabase.from('api_keys').insert(rows);
+    if (error) {
+      toast.error('保存失败: ' + error.message);
+      return;
+    }
+    
+    setUnsplashConfigured(true);
+    toast.success('Unsplash 配置已保存');
+  };
+
+  const testUnsplashApi = async () => {
+    if (!unsplashAccessKey) {
+      toast.error('请先填写 Access Key');
+      return;
+    }
+
+    setTestingUnsplash(true);
+    try {
+      const response = await fetch(`https://api.unsplash.com/search/photos?query=cat&per_page=1`, {
+        headers: {
+          'Authorization': `Client-ID ${unsplashAccessKey}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          toast.success('Unsplash 连接成功！');
+        } else {
+          toast.success('API响应正常');
+        }
+      } else {
+        const errText = await response.text();
+        toast.error(`API错误: ${response.status} - ${errText.slice(0, 100)}`);
+      }
+    } catch (error) {
+      toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setTestingUnsplash(false);
     }
   };
 
@@ -2148,6 +2223,106 @@ const SettingsPage: React.FC = () => {
               className="w-full py-6 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
             >
               保存空间图片API配置
+            </Button>
+          </div>
+        </div>
+
+        {/* Unsplash 免费配图配置 */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-sky-100/50">
+          {/* Card Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-100 to-blue-100 flex items-center justify-center">
+                <Camera className="w-5 h-5 text-sky-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-800">Unsplash 免费配图</h2>
+                <p className="text-xs text-gray-500">
+                  使用免费摄影图库自动配图，无需付费
+                </p>
+              </div>
+            </div>
+            {unsplashConfigured && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full font-medium">
+                <Check className="w-3.5 h-3.5" /> 已配置
+              </span>
+            )}
+          </div>
+
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-sky-50/80 to-blue-50/80 rounded-2xl mb-4">
+            <div>
+              <p className="font-medium text-gray-800">启用 Unsplash 配图</p>
+              <p className="text-xs text-gray-500">开启后将自动根据动态内容搜索真实摄影图片</p>
+            </div>
+            <button
+              onClick={async () => {
+                const newVal = !unsplashEnabled;
+                setUnsplashEnabled(newVal);
+                if (user) {
+                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'unsplash_enabled');
+                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'unsplash_enabled', api_key: newVal ? 'true' : 'false' });
+                }
+              }}
+              className={`w-14 h-8 rounded-full transition-all ${
+                unsplashEnabled ? 'bg-sky-400' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                unsplashEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          <div className={`space-y-4 ${!unsplashEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* Access Key */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-sky-600 mb-2">
+                <Key className="w-4 h-4" />
+                Access Key
+              </label>
+              <div className="relative">
+                <Input
+                  type={showUnsplashKey ? 'text' : 'password'}
+                  placeholder="你的 Unsplash Access Key"
+                  value={unsplashAccessKey}
+                  onChange={(e) => setUnsplashAccessKey(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowUnsplashKey(!showUnsplashKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showUnsplashKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                前往 <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" className="text-sky-500 underline">unsplash.com/developers</a> 免费注册获取
+              </p>
+            </div>
+
+            {/* Test Button */}
+            <button
+              onClick={testUnsplashApi}
+              disabled={testingUnsplash || !unsplashAccessKey}
+              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {testingUnsplash ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4 text-sky-500" />
+              )}
+              测试连接
+            </button>
+
+            {/* Save Button */}
+            <Button
+              onClick={saveUnsplashSettings}
+              disabled={!unsplashAccessKey}
+              className="w-full py-6 rounded-2xl bg-gradient-to-r from-sky-400 to-blue-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              保存 Unsplash 配置
             </Button>
           </div>
         </div>
