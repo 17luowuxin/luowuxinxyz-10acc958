@@ -16,6 +16,13 @@ interface AIConfig {
   defaultModel?: string;
 }
 
+interface SpaceImageConfig {
+  enabled: boolean;
+  apiKey: string;
+  apiUrl: string;
+  model: string;
+}
+
 async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
   if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
   
@@ -42,6 +49,79 @@ async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boo
     }
   }
   return { useDefault, defaultModel };
+}
+
+// 获取空间图片生成API配置
+async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | null> {
+  if (!userId) return null;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+  
+  if (!apiSettings) return null;
+  
+  const enabled = apiSettings.find(s => s.provider === 'space_image_enabled')?.api_key === 'true';
+  const apiKey = apiSettings.find(s => s.provider === 'space_image_api_key')?.api_key || '';
+  const apiUrl = apiSettings.find(s => s.provider === 'space_image_api_url')?.api_key || '';
+  const model = apiSettings.find(s => s.provider === 'space_image_model')?.api_key || '';
+  
+  if (!enabled || !apiKey || !apiUrl) return null;
+  
+  return { enabled, apiKey, apiUrl, model };
+}
+
+// 生成图片
+async function generateImage(prompt: string, config: SpaceImageConfig): Promise<string | null> {
+  try {
+    console.log('Generating image with prompt:', prompt.slice(0, 100));
+    
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model || 'gemini-3.0-pro-image-preview-lite',
+        size: '1024*1024',
+        prompt: prompt,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Image generation API error:', response.status, errText.slice(0, 300));
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('Image API response keys:', Object.keys(data));
+    
+    // 尝试多种格式提取图片URL
+    if (data.data?.[0]?.url) {
+      return data.data[0].url;
+    } else if (data.data?.[0]?.b64_json) {
+      return `data:image/png;base64,${data.data[0].b64_json}`;
+    } else if (data.url) {
+      return data.url;
+    } else if (data.image) {
+      return data.image;
+    } else if (data.output?.url) {
+      return data.output.url;
+    }
+    
+    console.log('No image URL found in response:', JSON.stringify(data).slice(0, 500));
+    return null;
+  } catch (error) {
+    console.error('Image generation error:', error);
+    return null;
+  }
 }
 
 async function getAICompletion(
@@ -482,7 +562,27 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       config
     );
 
-    return new Response(JSON.stringify({ content }), {
+    // 如果是发动态类型，尝试生成配图
+    let imageUrl: string | undefined;
+    if (type === "moment") {
+      const spaceImageConfig = await getSpaceImageConfig(userId);
+      if (spaceImageConfig) {
+        console.log("Space image generation enabled, generating image...");
+        
+        // 基于角色和动态内容生成图片提示词
+        const imagePrompt = `${character.persona || character.name}, ${content}, anime style, high quality, beautiful`;
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig);
+        
+        if (generatedImageUrl) {
+          console.log("Image generated successfully");
+          imageUrl = generatedImageUrl;
+        } else {
+          console.log("Image generation failed or returned null");
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ content, imageUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2, Shield } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -159,6 +159,15 @@ const SettingsPage: React.FC = () => {
   const [vnConfigured, setVnConfigured] = useState(false);
   const [testingVn, setTestingVn] = useState(false);
 
+  // 空间图片生成API state
+  const [spaceImageEnabled, setSpaceImageEnabled] = useState(false);
+  const [spaceImageApiKey, setSpaceImageApiKey] = useState('');
+  const [spaceImageApiUrl, setSpaceImageApiUrl] = useState('');
+  const [spaceImageModel, setSpaceImageModel] = useState('');
+  const [showSpaceImageKey, setShowSpaceImageKey] = useState(false);
+  const [spaceImageConfigured, setSpaceImageConfigured] = useState(false);
+  const [testingSpaceImage, setTestingSpaceImage] = useState(false);
+
   useEffect(() => {
     if (user) fetchApiKeys();
   }, [user]);
@@ -311,6 +320,20 @@ const SettingsPage: React.FC = () => {
       }
       if (vnBaseUrlSetting) setVnBaseUrl(vnBaseUrlSetting.api_key);
       if (vnModelSetting) setVnModel(vnModelSetting.api_key);
+      
+      // 空间图片生成API配置
+      const spaceImageEnabledSetting = data.find(k => k.provider === 'space_image_enabled');
+      const spaceImageApiKeySetting = data.find(k => k.provider === 'space_image_api_key');
+      const spaceImageApiUrlSetting = data.find(k => k.provider === 'space_image_api_url');
+      const spaceImageModelSetting = data.find(k => k.provider === 'space_image_model');
+      
+      if (spaceImageEnabledSetting) setSpaceImageEnabled(spaceImageEnabledSetting.api_key === 'true');
+      if (spaceImageApiKeySetting) {
+        setSpaceImageApiKey(spaceImageApiKeySetting.api_key);
+        setSpaceImageConfigured(true);
+      }
+      if (spaceImageApiUrlSetting) setSpaceImageApiUrl(spaceImageApiUrlSetting.api_key);
+      if (spaceImageModelSetting) setSpaceImageModel(spaceImageModelSetting.api_key);
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -754,6 +777,76 @@ const SettingsPage: React.FC = () => {
       toast.error('连接测试失败');
     } finally {
       setTestingTts(false);
+    }
+  };
+
+  // 空间图片生成API函数
+  const saveSpaceImageSettings = async () => {
+    if (!user || !spaceImageApiKey.trim() || !spaceImageApiUrl.trim()) {
+      toast.error('请填写空间图片API配置');
+      return;
+    }
+
+    const providersToReplace = ['space_image_enabled', 'space_image_api_key', 'space_image_api_url', 'space_image_model'];
+    
+    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    
+    const rows = [
+      { user_id: user.id, provider: 'space_image_enabled', api_key: spaceImageEnabled ? 'true' : 'false' },
+      { user_id: user.id, provider: 'space_image_api_key', api_key: spaceImageApiKey.trim() },
+      { user_id: user.id, provider: 'space_image_api_url', api_key: spaceImageApiUrl.trim() },
+    ];
+    
+    if (spaceImageModel.trim()) {
+      rows.push({ user_id: user.id, provider: 'space_image_model', api_key: spaceImageModel.trim() });
+    }
+    
+    const { error } = await supabase.from('api_keys').insert(rows);
+    if (error) {
+      toast.error('保存失败: ' + error.message);
+      return;
+    }
+    
+    setSpaceImageConfigured(true);
+    toast.success('空间图片API配置已保存');
+  };
+
+  const testSpaceImageApi = async () => {
+    if (!spaceImageApiKey || !spaceImageApiUrl) {
+      toast.error('请先填写配置');
+      return;
+    }
+
+    setTestingSpaceImage(true);
+    try {
+      const response = await fetch(spaceImageApiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${spaceImageApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: spaceImageModel || 'gemini-3.0-pro-image-preview-lite',
+          size: '512*512',
+          prompt: '一只可爱的猫咪',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.data?.[0]?.url || data.data?.[0]?.b64_json) {
+          toast.success('空间图片API连接成功！');
+        } else {
+          toast.success('API响应正常，但未返回图片');
+        }
+      } else {
+        const errText = await response.text();
+        toast.error(`API错误: ${response.status} - ${errText.slice(0, 100)}`);
+      }
+    } catch (error) {
+      toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setTestingSpaceImage(false);
     }
   };
 
@@ -1920,6 +2013,135 @@ const SettingsPage: React.FC = () => {
               className="w-full py-6 rounded-2xl bg-gradient-to-r from-blue-400 to-cyan-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
             >
               保存TTS配置
+            </Button>
+          </div>
+        </div>
+
+        {/* 空间图片生成API配置 */}
+        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-emerald-100/50">
+          {/* Card Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center">
+                <Camera className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-800">空间图片生成 API</h2>
+                <p className="text-xs text-gray-500">
+                  配置后角色发动态时可自动生成配图
+                </p>
+              </div>
+            </div>
+            {spaceImageConfigured && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full font-medium">
+                <Check className="w-3.5 h-3.5" /> 已配置
+              </span>
+            )}
+          </div>
+
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 rounded-2xl mb-4">
+            <div>
+              <p className="font-medium text-gray-800">启用图片生成</p>
+              <p className="text-xs text-gray-500">开启后角色发动态时自动生成配图</p>
+            </div>
+            <button
+              onClick={async () => {
+                const newVal = !spaceImageEnabled;
+                setSpaceImageEnabled(newVal);
+                if (user) {
+                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'space_image_enabled');
+                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'space_image_enabled', api_key: newVal ? 'true' : 'false' });
+                }
+              }}
+              className={`w-14 h-8 rounded-full transition-all ${
+                spaceImageEnabled ? 'bg-emerald-400' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                spaceImageEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          <div className={`space-y-4 ${!spaceImageEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* API URL */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-emerald-600 mb-2">
+                <Globe className="w-4 h-4" />
+                图片API URL
+              </label>
+              <Input
+                placeholder="例如: https://your-api.com/v1/images/generations"
+                value={spaceImageApiUrl}
+                onChange={(e) => setSpaceImageApiUrl(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                支持OpenAI格式的图片生成API，如Gemini图片生成、DALL-E等
+              </p>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="text-sm font-medium text-emerald-600 mb-2 block">
+                API Key
+              </label>
+              <div className="relative">
+                <Input
+                  type={showSpaceImageKey ? 'text' : 'password'}
+                  placeholder="你的图片API密钥"
+                  value={spaceImageApiKey}
+                  onChange={(e) => setSpaceImageApiKey(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSpaceImageKey(!showSpaceImageKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showSpaceImageKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Model */}
+            <div>
+              <label className="text-sm font-medium text-emerald-600 mb-2 block">
+                模型名称 (可选)
+              </label>
+              <Input
+                placeholder="例如: gemini-3.0-pro-image-preview-lite"
+                value={spaceImageModel}
+                onChange={(e) => setSpaceImageModel(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                留空使用API默认模型
+              </p>
+            </div>
+
+            {/* Test Button */}
+            <button
+              onClick={testSpaceImageApi}
+              disabled={testingSpaceImage || !spaceImageApiKey || !spaceImageApiUrl}
+              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {testingSpaceImage ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4 text-emerald-500" />
+              )}
+              测试连接
+            </button>
+
+            {/* Save Button */}
+            <Button
+              onClick={saveSpaceImageSettings}
+              disabled={!spaceImageApiUrl || !spaceImageApiKey}
+              className="w-full py-6 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              保存空间图片API配置
             </Button>
           </div>
         </div>

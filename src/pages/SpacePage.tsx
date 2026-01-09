@@ -397,13 +397,15 @@ const SpacePage: React.FC = () => {
 
         if (error) throw error;
 
+        // 如果生成了配图，一并保存
         await supabase.from('moments').insert({
           user_id: user?.id,
           character_id: char.id,
-          content: data.content
+          content: data.content,
+          image_url: data.imageUrl || null
         });
 
-        toast.success(`${char.name} 发布了新动态!`);
+        toast.success(`${char.name} 发布了新动态!${data.imageUrl ? ' (含配图)' : ''}`);
       }
       fetchMoments();
     } catch (err) {
