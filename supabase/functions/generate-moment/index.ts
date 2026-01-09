@@ -81,7 +81,14 @@ async function generateImage(prompt: string, config: SpaceImageConfig): Promise<
   try {
     console.log('Generating image with prompt:', prompt.slice(0, 100));
     
-    const response = await fetch(config.apiUrl, {
+    // 自动补全API路径
+    let apiUrl = config.apiUrl.replace(/\/+$/, '');
+    if (!apiUrl.includes('/images/generations')) {
+      apiUrl = `${apiUrl}/images/generations`;
+    }
+    console.log('Using image API URL:', apiUrl);
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${config.apiKey}`,
