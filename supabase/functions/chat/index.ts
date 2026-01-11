@@ -453,6 +453,10 @@ ${transferPrompt}
       // 图片识别超时设置 - 15秒，避免阻塞太久
       const visionTimeout = 15000;
       
+      // 清理模型名称 - 移除中括号标签如 [满血A]gemini-2.5-pro -> gemini-2.5-pro
+      const cleanModelName = model.replace(/^\[.*?\]/g, '').trim();
+      console.log("Clean model name for vision:", cleanModelName);
+      
       try {
         if (supportsVision && apiKey) {
           // 使用用户配置的API识别图片
@@ -506,7 +510,7 @@ ${transferPrompt}
               method: "POST",
               headers,
               body: JSON.stringify({
-                model,
+                model: cleanModelName, // 使用清理后的模型名称
                 messages: visionMessages,
                 max_tokens: 50,
               }),
