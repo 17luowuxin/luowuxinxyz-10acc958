@@ -174,6 +174,7 @@ const SettingsPage: React.FC = () => {
   const [showUnsplashKey, setShowUnsplashKey] = useState(false);
   const [unsplashConfigured, setUnsplashConfigured] = useState(false);
   const [testingUnsplash, setTestingUnsplash] = useState(false);
+  const [unsplashCategory, setUnsplashCategory] = useState('auto');
 
   useEffect(() => {
     if (user) fetchApiKeys();
@@ -345,12 +346,14 @@ const SettingsPage: React.FC = () => {
       // Unsplash 免费配图配置
       const unsplashEnabledSetting = data.find(k => k.provider === 'unsplash_enabled');
       const unsplashAccessKeySetting = data.find(k => k.provider === 'unsplash_access_key');
+      const unsplashCategorySetting = data.find(k => k.provider === 'unsplash_category');
       
       if (unsplashEnabledSetting) setUnsplashEnabled(unsplashEnabledSetting.api_key === 'true');
       if (unsplashAccessKeySetting) {
         setUnsplashAccessKey(unsplashAccessKeySetting.api_key);
         setUnsplashConfigured(true);
       }
+      if (unsplashCategorySetting) setUnsplashCategory(unsplashCategorySetting.api_key);
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -880,13 +883,14 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    const providersToReplace = ['unsplash_enabled', 'unsplash_access_key'];
+    const providersToReplace = ['unsplash_enabled', 'unsplash_access_key', 'unsplash_category'];
     
     await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
     
     const rows = [
       { user_id: user.id, provider: 'unsplash_enabled', api_key: unsplashEnabled ? 'true' : 'false' },
       { user_id: user.id, provider: 'unsplash_access_key', api_key: unsplashAccessKey.trim() },
+      { user_id: user.id, provider: 'unsplash_category', api_key: unsplashCategory },
     ];
     
     const { error } = await supabase.from('api_keys').insert(rows);
@@ -2299,6 +2303,38 @@ const SettingsPage: React.FC = () => {
               </div>
               <p className="text-xs text-gray-400 mt-1.5">
                 前往 <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" className="text-sky-500 underline">unsplash.com/developers</a> 免费注册获取
+              </p>
+            </div>
+
+            {/* Category Selection */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-sky-600 mb-2">
+                <ImageIcon className="w-4 h-4" />
+                图片风格偏好
+              </label>
+              <select
+                value={unsplashCategory}
+                onChange={(e) => setUnsplashCategory(e.target.value)}
+                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-300"
+                style={{ 
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '20px'
+                }}
+              >
+                <option value="auto">🎯 自动匹配 (根据内容智能选择)</option>
+                <option value="nature">🌿 自然风景 (山川、森林、海洋)</option>
+                <option value="city">🏙️ 城市街景 (建筑、街道、夜景)</option>
+                <option value="people">👥 人物生活 (日常、肖像)</option>
+                <option value="food">🍜 美食料理 (餐点、饮品)</option>
+                <option value="animals">🐾 动物萌宠 (猫狗、野生动物)</option>
+                <option value="art">🎨 艺术设计 (插画、抽象)</option>
+                <option value="travel">✈️ 旅行度假 (景点、风土人情)</option>
+                <option value="minimal">⚪ 极简风格 (简约、留白)</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1.5">
+                选择后将优先搜索该类别的图片，"自动匹配"会根据动态内容智能选择
               </p>
             </div>
 

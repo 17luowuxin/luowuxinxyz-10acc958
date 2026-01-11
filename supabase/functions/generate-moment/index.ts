@@ -26,6 +26,7 @@ interface SpaceImageConfig {
 interface UnsplashConfig {
   enabled: boolean;
   accessKey: string;
+  category: string; // 'auto' | 'nature' | 'city' | 'people' | 'food' | 'animals' | 'art' | 'travel' | 'minimal'
 }
 
 async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
@@ -98,21 +99,44 @@ async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null>
   
   const enabled = apiSettings.find(s => s.provider === 'unsplash_enabled')?.api_key === 'true';
   const accessKey = apiSettings.find(s => s.provider === 'unsplash_access_key')?.api_key || '';
+  const category = apiSettings.find(s => s.provider === 'unsplash_category')?.api_key || 'auto';
   
   if (!enabled || !accessKey) return null;
   
-  return { enabled, accessKey };
+  return { enabled, accessKey, category };
+}
+
+// 根据分类获取搜索修饰词
+function getCategoryModifier(category: string): string {
+  const categoryMap: Record<string, string> = {
+    nature: 'nature landscape scenery',
+    city: 'city urban architecture street',
+    people: 'people portrait lifestyle',
+    food: 'food cuisine delicious',
+    animals: 'animals pets wildlife',
+    art: 'art design illustration abstract',
+    travel: 'travel destination vacation',
+    minimal: 'minimal simple clean aesthetic',
+  };
+  return categoryMap[category] || '';
 }
 
 // 使用 Unsplash 搜索图片
 async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): Promise<string | null> {
   try {
+    const categoryModifier = getCategoryModifier(config.category);
+    
     // 依次尝试每个关键词
     for (const keyword of keywords) {
-      console.log('Searching Unsplash with keyword:', keyword);
+      // 如果不是自动模式，将分类修饰词加入搜索
+      const searchQuery = config.category !== 'auto' && categoryModifier 
+        ? `${keyword} ${categoryModifier}` 
+        : keyword;
+      
+      console.log('Searching Unsplash with query:', searchQuery, 'category:', config.category);
       
       const response = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keyword)}&per_page=10&orientation=squarish`,
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&per_page=10&orientation=squarish`,
         {
           headers: {
             'Authorization': `Client-ID ${config.accessKey}`,
@@ -131,7 +155,7 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
         // 随机选择一张图片增加多样性
         const randomIndex = Math.floor(Math.random() * Math.min(data.results.length, 5));
         const photo = data.results[randomIndex];
-        console.log('Found Unsplash image for keyword:', keyword);
+        console.log('Found Unsplash image for keyword:', keyword, 'category:', config.category);
         return photo.urls?.regular || photo.urls?.small || null;
       }
     }
