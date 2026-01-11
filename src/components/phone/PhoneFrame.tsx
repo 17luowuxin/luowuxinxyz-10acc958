@@ -83,7 +83,16 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div 
+      className="min-h-screen relative overflow-hidden"
+      style={{
+        // 适配 PWA 安全区域
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
+    >
       {/* 视频背景 - 优先显示，添加硬件加速 */}
       {videoBg && !videoError && (
         <video
@@ -129,6 +138,9 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="w-full min-h-screen overflow-hidden relative"
+        style={{
+          minHeight: 'calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
+        }}
       >
         <div className="h-full min-h-screen overflow-hidden">
           {children}
