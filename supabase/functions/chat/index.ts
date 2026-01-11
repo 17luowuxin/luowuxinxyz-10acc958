@@ -419,11 +419,13 @@ ${transferPrompt}
       console.log("Processing image with vision model...", detectedImageUrl?.slice(0, 80));
       
       // 检查用户的API是否支持视觉功能
-      // Gemini 所有版本都支持视觉，只要模型名包含 gemini 就认为支持
-      const modelLowerCheck = model.toLowerCase();
+      // Gemini 所有版本都支持视觉，模型名可能有多种格式：gemini-2.5-pro, gemini2.5pro, gemini 2.5 pro 等
+      const modelLowerCheck = model.toLowerCase().replace(/[\s\-_.]/g, '');
       
-      // 简化判断：Gemini系列全部支持视觉
-      const isGemini = modelLowerCheck.includes('gemini');
+      // 简化判断：Gemini系列全部支持视觉（包括各种拼写方式）
+      const isGemini = modelLowerCheck.includes('gemini') || 
+                       /^gemini\d/.test(modelLowerCheck) ||
+                       model.toLowerCase().includes('gemini');
       
       const visionSupportedModels = [
         // OpenAI 视觉模型
@@ -446,7 +448,7 @@ ${transferPrompt}
       const modelLower = model.toLowerCase();
       const supportsVision = isGemini || visionSupportedModels.some(vm => modelLower.includes(vm.toLowerCase()));
       
-      console.log("Model:", model, "Is Gemini:", isGemini, "Supports vision:", supportsVision);
+      console.log("Model:", model, "Is Gemini:", isGemini, "Supports vision:", supportsVision, "Normalized:", modelLowerCheck);
       
       // 图片识别超时设置 - 15秒，避免阻塞太久
       const visionTimeout = 15000;

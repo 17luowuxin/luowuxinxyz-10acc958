@@ -1927,22 +1927,31 @@ const ChatPage: React.FC = () => {
       let multiMessages: string[] = [];
       
       if (replyMode === 'online') {
-        // 清理常见的格式问题
+        // 清理常见的格式问题 - 更健壮地处理各种格式
         let cleanedContent = assistantContent
-          // 移除开头和结尾的 |||
-          .replace(/^\|{2,}\s*/g, '')
-          .replace(/\s*\|{2,}$/g, '')
+          // 先移除开头和结尾的单个或多个竖线（包括空格）
+          .replace(/^[\s|]+/g, '')
+          .replace(/[\s|]+$/g, '')
+          // 处理 "| 消息 ||| 消息 |" 这种带边框的格式
+          .replace(/\|\s*\|\|\|\s*\|/g, '|||')
           // 统一分隔符格式（有些API可能用 || 或 ||| 或 ||||）
           .replace(/\|{2,}/g, '|||')
           // 移除可能的换行符混杂
           .replace(/\n\s*\|\|\|\s*\n?/g, '|||')
-          .replace(/\|\|\|\s*\n/g, '|||');
+          .replace(/\|\|\|\s*\n/g, '|||')
+          // 移除前后的单个竖线（可能是格式边框）
+          .replace(/^\|\s*/g, '')
+          .replace(/\s*\|$/g, '');
         
         // 按 ||| 分割
         multiMessages = cleanedContent
           .split('|||')
           .map(s => s.trim())
-          .filter(s => s.length > 0 && s !== '|||');
+          // 过滤掉空消息和只有竖线的消息
+          .filter(s => s.length > 0 && s !== '|||' && !/^\|+$/.test(s))
+          // 清理每条消息中残留的单个竖线边框
+          .map(s => s.replace(/^\|\s*/, '').replace(/\s*\|$/, '').trim())
+          .filter(s => s.length > 0);
         
         const fixedCount = onlineMessageCount === '1-2' ? 2 : 5;
         
@@ -1958,7 +1967,7 @@ const ChatPage: React.FC = () => {
           multiMessages = multiMessages.slice(0, fixedCount);
         }
       } else {
-        // 小说模式：不分割，清理所有残留的竖线字符
+        // 小说模式：不分割，清理所有残留的竖线字符（包括单个|和多个||）
         multiMessages = [assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()];
       }
       
