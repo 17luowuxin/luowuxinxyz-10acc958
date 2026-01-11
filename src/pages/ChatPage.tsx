@@ -3253,8 +3253,14 @@ const ChatPage: React.FC = () => {
         }}
       />
 
-      {/* Fixed Header - 完全固定在顶部 */}
-      <header className="h-12 flex-shrink-0 flex items-center px-3 border-b bg-background/95 backdrop-blur-md z-20">
+      {/* Fixed Header - 完全固定在顶部，适配PWA安全区域 */}
+      <header 
+        className="flex-shrink-0 flex items-center px-3 border-b bg-background/95 backdrop-blur-md z-20"
+        style={{
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+          minHeight: 'calc(48px + env(safe-area-inset-top, 0px))',
+        }}
+      >
         <Button variant="ghost" size="icon" onClick={() => navigate('/friends')} className="flex-shrink-0 w-8 h-8">
           <ChevronLeft className="w-5 h-5" />
         </Button>
