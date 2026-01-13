@@ -450,10 +450,8 @@ ${transferPrompt}
       
       console.log("Model:", model, "Is Gemini:", isGemini, "Supports vision:", supportsVision, "Normalized:", modelLowerCheck);
       
-      // 图片识别超时设置 - 25秒：第三方聚合API有时首包较慢
-      const visionTimeout = 25000;
-      // 内置识图回退超时（更短，避免整体阻塞）
-      const builtInVisionTimeout = 12000;
+      // 图片识别超时设置 - 30秒：第三方聚合API有时首包较慢
+      const visionTimeout = 30000;
       
       // 清理模型名称 - 移除中括号标签如 [满血A]gemini-2.5-pro -> gemini-2.5-pro
       // 注意：部分三方聚合API会用“[xxx]”前缀做渠道路由，因此这里采用“原始模型名优先，失败再回退清理后模型名”的策略。
@@ -508,7 +506,6 @@ ${transferPrompt}
             }
           ];
 
-          let shouldFallbackToBuiltIn = false;
           let lastErrorText = '';
 
           for (let i = 0; i < visionModelCandidates.length; i++) {
@@ -547,8 +544,6 @@ ${transferPrompt}
               );
 
               const isRoutingError = /model_not_found|无可用渠道|distributor/i.test(lastErrorText);
-              if (isRoutingError) shouldFallbackToBuiltIn = true;
-
               const canRetry = i < visionModelCandidates.length - 1 && isRoutingError;
               if (canRetry) {
                 console.log("Retrying vision with alternate model name...");
@@ -559,55 +554,13 @@ ${transferPrompt}
             } catch (fetchErr) {
               clearTimeout(visionTimeoutId);
               console.error("Vision fetch error:", fetchErr);
-
-              if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-                shouldFallbackToBuiltIn = true;
-              }
-
               // 网络/超时错误不做多次重试，直接退出循环
               break;
             }
           }
 
           // 如果用户API识图失败（路由/超时等），回退到内置多模态识图，保证“能识别”
-          if (!imageDescription && shouldFallbackToBuiltIn) {
-            try {
-              const builtInKey = Deno.env.get("LOVABLE_API_KEY");
-              if (builtInKey) {
-                console.log("Falling back to built-in vision...");
-
-                const builtInController = new AbortController();
-                const builtInTimeoutId = setTimeout(() => builtInController.abort(), builtInVisionTimeout);
-
-                const builtInResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${builtInKey}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "google/gemini-3-flash-preview",
-                    messages: visionMessages,
-                    max_tokens: 50,
-                  }),
-                  signal: builtInController.signal,
-                });
-
-                clearTimeout(builtInTimeoutId);
-
-                if (builtInResp.ok) {
-                  const builtInData = await builtInResp.json();
-                  imageDescription = (builtInData.choices?.[0]?.message?.content || '').trim();
-                  console.log("Image description from built-in vision:", imageDescription.slice(0, 100));
-                } else {
-                  const errText = await builtInResp.text();
-                  console.error("Built-in vision error:", builtInResp.status, errText);
-                }
-              }
-            } catch (fallbackErr) {
-              console.error("Built-in vision fallback failed:", fallbackErr);
-            }
-          }
+          // Fallback removed - user API only
 
           if (!imageDescription) {
             console.log("Vision failed, will describe as '图片'");
