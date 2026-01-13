@@ -454,14 +454,18 @@ ${transferPrompt}
       const visionTimeout = 15000;
       
       // 清理模型名称 - 移除中括号标签如 [满血A]gemini-2.5-pro -> gemini-2.5-pro
+      // 注意：部分三方聚合API会用“[xxx]”前缀做渠道路由，因此这里采用“原始模型名优先，失败再回退清理后模型名”的策略。
       const cleanModelName = model.replace(/^\[.*?\]/g, '').trim();
-      console.log("Clean model name for vision:", cleanModelName);
-      
+      const visionModelCandidates = Array.from(
+        new Set([model, cleanModelName].map((m) => (m ?? '').trim()).filter(Boolean))
+      );
+      console.log("Vision model candidates:", visionModelCandidates);
+
       try {
         if (supportsVision && apiKey) {
           // 使用用户配置的API识别图片
           console.log("Using user's API for vision:", apiUrl);
-          
+
           // Gemini 等模型可能无法直接访问外部URL，需要转为base64
           let imageToUse = detectedImageUrl;
           if (isGemini && detectedImageUrl && !detectedImageUrl.startsWith('data:')) {
@@ -485,7 +489,7 @@ ${transferPrompt}
               console.error("Failed to convert image to base64:", convErr);
             }
           }
-          
+
           const visionMessages = [
             {
               role: "user",
@@ -501,38 +505,63 @@ ${transferPrompt}
               ]
             }
           ];
-          
-          const visionController = new AbortController();
-          const visionTimeoutId = setTimeout(() => visionController.abort(), visionTimeout);
-          
-          try {
-            const visionResponse = await fetch(apiUrl, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                model: cleanModelName, // 使用清理后的模型名称
-                messages: visionMessages,
-                max_tokens: 50,
-              }),
-              signal: visionController.signal,
-            });
-            
-            clearTimeout(visionTimeoutId);
-            
-            if (visionResponse.ok) {
-              const visionData = await visionResponse.json();
-              imageDescription = visionData.choices?.[0]?.message?.content || '';
-              console.log("Image description from user API:", imageDescription.slice(0, 100));
-            } else {
-              const errorText = await visionResponse.text();
-              console.error("User API vision error:", visionResponse.status, errorText);
-              // 用户API失败，跳过图片描述（不使用Lovable AI fallback以加快速度）
-              console.log("Vision failed, will describe as '图片'");
-              imageDescription = '图片';
+
+          let lastErrorText = '';
+          for (let i = 0; i < visionModelCandidates.length; i++) {
+            const modelToTry = visionModelCandidates[i];
+
+            const visionController = new AbortController();
+            const visionTimeoutId = setTimeout(() => visionController.abort(), visionTimeout);
+
+            try {
+              const visionResponse = await fetch(apiUrl, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  model: modelToTry,
+                  messages: visionMessages,
+                  max_tokens: 50,
+                }),
+                signal: visionController.signal,
+              });
+
+              clearTimeout(visionTimeoutId);
+
+              if (visionResponse.ok) {
+                const visionData = await visionResponse.json();
+                imageDescription = visionData.choices?.[0]?.message?.content || '';
+                console.log("Image description from user API:", imageDescription.slice(0, 100));
+                break;
+              }
+
+              lastErrorText = await visionResponse.text();
+              console.error(
+                "User API vision error:",
+                visionResponse.status,
+                `model=${modelToTry}`,
+                lastErrorText
+              );
+
+              const canRetry =
+                i < visionModelCandidates.length - 1 &&
+                /model_not_found|无可用渠道|distributor/i.test(lastErrorText);
+
+              if (canRetry) {
+                console.log("Retrying vision with alternate model name...");
+                continue;
+              }
+
+              break;
+            } catch (fetchErr) {
+              clearTimeout(visionTimeoutId);
+              console.error("Vision fetch error:", fetchErr);
+              // 网络/超时错误不做多次重试，直接退出循环
+              break;
             }
-          } catch (fetchErr) {
-            clearTimeout(visionTimeoutId);
-            console.error("Vision fetch error:", fetchErr);
+          }
+
+          if (!imageDescription) {
+            console.log("Vision failed, will describe as '图片'");
             imageDescription = '图片';
           }
         } else {
