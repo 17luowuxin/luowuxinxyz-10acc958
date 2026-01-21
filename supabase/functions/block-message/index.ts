@@ -17,10 +17,9 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, userId, characterId, apiUrl, apiKey, model } = await req.json();
+    const { action, userId, characterId, apiUrl, apiKey, model, batchCount = 1 } = await req.json();
 
     if (action === 'generate_block_message') {
-      const { batchCount = 1 } = await req.json().catch(() => ({})); // 支持批量生成
       
       // 获取角色信息
       const { data: character } = await supabase
