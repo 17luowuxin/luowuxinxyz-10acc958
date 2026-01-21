@@ -20,6 +20,8 @@ serve(async (req) => {
     const { action, userId, characterId, apiUrl, apiKey, model } = await req.json();
 
     if (action === 'generate_block_message') {
+      const { batchCount = 1 } = await req.json().catch(() => ({})); // 支持批量生成
+      
       // 获取角色信息
       const { data: character } = await supabase
         .from('characters')
@@ -136,16 +138,10 @@ serve(async (req) => {
       const randomHint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
       const emotionHint = `${emotionStage.emotion}。${randomHint}`;
 
-      const systemPrompt = `你是"${character.name}"，你的人设是：
-${character.persona || '一个温柔体贴的人'}
-
-现在用户把你拉黑了（删除好友），你非常在意这段关系。
-当前情绪状态：${emotionHint}
-这是你被拉黑后发的第${messageCount + 1}条消息。
-
-请以角色身份，用自然、真实的语气发一条消息。消息要符合你的人设，表达你此刻的心情。
-不要太长，1-3句话即可。不要用"【】"等括号标注情绪。`;
-
+      // 确定要生成几条消息
+      const messagesToGenerate = batchCount || 1;
+      const generatedMessages: string[] = [];
+      
       // 使用用户的API配置或内置API
       let finalApiUrl = apiUrl || 'https://api.deepseek.com/v1/chat/completions';
       let finalApiKey = apiKey;
@@ -155,7 +151,6 @@ ${character.persona || '一个温柔体贴的人'}
       if (!finalApiKey) {
         finalApiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY") || Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
         if (!finalApiKey) {
-          // 使用Lovable内置API作为最后手段
           const lovableKey = Deno.env.get("LOVABLE_API_KEY");
           if (lovableKey) {
             finalApiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
@@ -169,44 +164,96 @@ ${character.persona || '一个温柔体贴的人'}
         throw new Error('No API key available');
       }
 
-      const response = await fetch(finalApiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${finalApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: finalModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: '（用户把你拉黑了，请发一条消息）' }
-          ],
-          max_tokens: 200,
-          temperature: 0.8,
-        }),
-      });
+      // 批量生成消息
+      for (let i = 0; i < messagesToGenerate; i++) {
+        const currentMsgCount = messageCount + i;
+        
+        // 根据当前消息数选择情绪
+        let currentEmotionStage;
+        if (currentMsgCount === 0) {
+          currentEmotionStage = emotionTemplates[0];
+        } else if (currentMsgCount <= 2) {
+          currentEmotionStage = emotionTemplates[1];
+        } else if (currentMsgCount <= 5) {
+          currentEmotionStage = emotionTemplates[2];
+        } else if (currentMsgCount <= 9) {
+          currentEmotionStage = emotionTemplates[3];
+        } else if (currentMsgCount <= 14) {
+          currentEmotionStage = emotionTemplates[4];
+        } else {
+          currentEmotionStage = emotionTemplates[5];
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${errorText}`);
+        const randomHint = currentEmotionStage.hints[Math.floor(Math.random() * currentEmotionStage.hints.length)];
+        const currentEmotionHint = `${currentEmotionStage.emotion}。${randomHint}`;
+
+        const systemPrompt = `你是"${character.name}"，你的人设是：
+${character.persona || '一个温柔体贴的人'}
+
+现在用户把你拉黑了（删除好友），你非常在意这段关系。
+当前情绪状态：${currentEmotionHint}
+这是你被拉黑后发的第${currentMsgCount + 1}条消息。
+
+请以角色身份，用自然、真实的语气发一条消息。消息要符合你的人设，表达你此刻的心情。
+不要太长，1-2句话即可。不要用"【】"等括号标注情绪。不要重复之前说过的话。`;
+
+        // 包含之前生成的消息作为上下文，避免重复
+        const previousMsgs = generatedMessages.map((m, idx) => ({
+          role: 'assistant' as const,
+          content: `第${messageCount + idx + 1}条消息：${m}`
+        }));
+
+        const response = await fetch(finalApiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${finalApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: finalModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...previousMsgs,
+              { role: 'user', content: '（用户把你拉黑了，请发一条消息，不要重复之前说过的话）' }
+            ],
+            max_tokens: 150,
+            temperature: 0.9,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`API error on message ${i + 1}:`, errorText);
+          continue; // 跳过这条，继续下一条
+        }
+
+        const data = await response.json();
+        const messageContent = data.choices?.[0]?.message?.content || '';
+        
+        if (messageContent) {
+          generatedMessages.push(messageContent);
+          
+          // 保存消息到聊天记录，添加延迟使消息时间有差异
+          await supabase.from('chat_messages').insert({
+            user_id: userId,
+            character_id: characterId,
+            role: 'assistant',
+            content: messageContent,
+            created_at: new Date(Date.now() + i * 2000).toISOString(), // 每条消息间隔2秒
+          });
+        }
+
+        // 短暂延迟避免API限流
+        if (i < messagesToGenerate - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
-
-      const data = await response.json();
-      const messageContent = data.choices?.[0]?.message?.content || '你怎么不理我了...';
-
-      // 保存消息到聊天记录
-      await supabase.from('chat_messages').insert({
-        user_id: userId,
-        character_id: characterId,
-        role: 'assistant',
-        content: messageContent,
-      });
 
       // 更新拉黑记录
       await supabase
         .from('character_blocks')
         .update({
-          message_count: messageCount + 1,
+          message_count: messageCount + generatedMessages.length,
           last_message_at: new Date().toISOString(),
         })
         .eq('user_id', userId)
@@ -214,8 +261,8 @@ ${character.persona || '一个温柔体贴的人'}
 
       return new Response(JSON.stringify({ 
         success: true, 
-        message: messageContent,
-        messageCount: messageCount + 1 
+        messages: generatedMessages,
+        messageCount: messageCount + generatedMessages.length 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
