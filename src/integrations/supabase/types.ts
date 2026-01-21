@@ -871,6 +871,48 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_messages: {
+        Row: {
+          character_id: string
+          created_at: string
+          error_message: string | null
+          expires_at: string
+          id: string
+          request_context: Json
+          retry_count: number
+          status: string
+          updated_at: string
+          user_id: string
+          user_message: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string
+          id?: string
+          request_context?: Json
+          retry_count?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          user_message: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string
+          id?: string
+          request_context?: Json
+          retry_count?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          user_message?: string
+        }
+        Relationships: []
+      }
       photos: {
         Row: {
           album_id: string | null
@@ -963,6 +1005,36 @@ export type Database = {
           id?: string
           nickname?: string | null
           persona?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
           updated_at?: string
           user_id?: string
         }
