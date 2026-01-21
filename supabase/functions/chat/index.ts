@@ -188,6 +188,7 @@ serve(async (req) => {
         const baseUrlSetting = apiSettings.find(s => s.provider === 'custom_base_url');
         const modelSetting = apiSettings.find(s => s.provider === 'custom_model');
         const historyLimitSetting = apiSettings.find(s => s.provider === 'history_limit');
+        const timeSyncSetting = apiSettings.find(s => s.provider === 'time_sync_enabled');
         
         if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
           useDefaultApi = true;
@@ -201,6 +202,11 @@ serve(async (req) => {
         }
         if (modelSetting) {
           savedModel = modelSetting.api_key;
+        }
+        
+        // 时间同步设置
+        if (timeSyncSetting && timeSyncSetting.api_key === 'true') {
+          (globalThis as any).__timeSyncEnabled = true;
         }
         
         // 应用历史消息限制 - 使用请求中的 historyLimit（角色级别）或从设置中读取（兼容旧版本）
@@ -341,7 +347,60 @@ serve(async (req) => {
     const userPersonaInfo = userProfile?.persona || '';
     // 优先使用请求中的replyMode，其次是从数据库加载的
     const replyMode = reqReplyMode || (globalThis as any).__replyMode || 'novel';
-    console.log('Reply mode:', replyMode);
+    const timeSyncEnabled = (globalThis as any).__timeSyncEnabled || false;
+    console.log('Reply mode:', replyMode, 'Time sync:', timeSyncEnabled);
+
+    // 生成时间上下文
+    let timeContextPrompt = '';
+    if (timeSyncEnabled) {
+      const now = new Date();
+      const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+      const weekday = weekdays[now.getDay()];
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      
+      // 判断时段
+      let timeOfDay = '';
+      if (hour >= 5 && hour < 9) timeOfDay = '早晨';
+      else if (hour >= 9 && hour < 12) timeOfDay = '上午';
+      else if (hour >= 12 && hour < 14) timeOfDay = '中午';
+      else if (hour >= 14 && hour < 17) timeOfDay = '下午';
+      else if (hour >= 17 && hour < 19) timeOfDay = '傍晚';
+      else if (hour >= 19 && hour < 22) timeOfDay = '晚上';
+      else if (hour >= 22 || hour < 1) timeOfDay = '深夜';
+      else timeOfDay = '凌晨';
+      
+      // 判断节日（简化版）
+      let holiday = '';
+      if (month === 1 && day === 1) holiday = '今天是元旦节！';
+      else if (month === 2 && day === 14) holiday = '今天是情人节💕';
+      else if (month === 3 && day === 8) holiday = '今天是妇女节';
+      else if (month === 4 && day === 1) holiday = '今天是愚人节';
+      else if (month === 5 && day === 1) holiday = '今天是劳动节';
+      else if (month === 5 && day === 4) holiday = '今天是青年节';
+      else if (month === 6 && day === 1) holiday = '今天是儿童节';
+      else if (month === 7 && day === 1) holiday = '今天是建党节';
+      else if (month === 8 && day === 1) holiday = '今天是建军节';
+      else if (month === 9 && day === 10) holiday = '今天是教师节';
+      else if (month === 10 && day === 1) holiday = '今天是国庆节🎉';
+      else if (month === 12 && day === 24) holiday = '今天是平安夜🎄';
+      else if (month === 12 && day === 25) holiday = '今天是圣诞节🎄';
+      else if (month === 12 && day === 31) holiday = '今天是跨年夜🎊';
+      
+      // 判断周末
+      const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+      const weekendNote = isWeekend ? '今天是周末' : '';
+      
+      timeContextPrompt = `
+【当前时间信息】
+现在是${now.getFullYear()}年${month}月${day}日 ${weekday} ${hour}:${minute.toString().padStart(2, '0')}
+时段：${timeOfDay}
+${weekendNote}
+${holiday}
+请根据这个时间自然地调整你的问候和对话内容。比如早上可以说早安，晚上可以说晚安，节日可以送祝福等。`;
+    }
 
     let replyModePrompt = '';
     if (replyMode === 'online') {
@@ -457,6 +516,7 @@ ${worldBooksContent}
 ${presetsContent}
 ${memoryContent}
 ${recentBlockContext}
+${timeContextPrompt}
 
 【关于你的聊天对象】
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
