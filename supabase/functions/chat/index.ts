@@ -707,8 +707,8 @@ ${transferPrompt}
       }
     };
 
-    // 检查响应是否有效（非空内容）
-    const isValidResponse = async (resp: Response): Promise<{ valid: boolean; content?: string; isStream?: boolean }> => {
+    // 检查响应是否有效（非空内容）以及是否触发内容审核
+    const isValidResponse = async (resp: Response): Promise<{ valid: boolean; content?: string; isStream?: boolean; contentFiltered?: boolean; filterReason?: string }> => {
       const contentType = resp.headers.get('content-type') || '';
       
       // SSE流式响应，需要先检查是否有效
@@ -722,11 +722,40 @@ ${transferPrompt}
       
       try {
         const json = JSON.parse(text);
+        
+        // 检查是否被内容审核拦截
+        // 常见的内容过滤标识
+        const contentFilterIndicators = [
+          json.error?.code === 'content_filter',
+          json.error?.type === 'content_policy_violation',
+          json.error?.message?.includes('content policy'),
+          json.error?.message?.includes('内容违规'),
+          json.error?.message?.includes('敏感内容'),
+          json.error?.message?.includes('sensitive'),
+          json.error?.message?.includes('harmful'),
+          json.error?.message?.includes('inappropriate'),
+          json.choices?.[0]?.finish_reason === 'content_filter',
+          json.choices?.[0]?.content_filter_results?.hate?.filtered === true,
+          json.choices?.[0]?.content_filter_results?.sexual?.filtered === true,
+          json.choices?.[0]?.content_filter_results?.violence?.filtered === true,
+          json.prompt_filter_results?.[0]?.content_filter_results?.sexual?.filtered === true,
+          // 一些中转API的特殊标记
+          json.flagged === true,
+          json.blocked === true,
+        ];
+        
+        if (contentFilterIndicators.some(Boolean)) {
+          console.log("Content filter triggered:", JSON.stringify(json).slice(0, 300));
+          const reason = json.error?.message || json.message || '内容被API安全策略过滤';
+          return { valid: false, contentFiltered: true, filterReason: reason };
+        }
+        
         // 检查 choices 是否为空
         if (json.choices && Array.isArray(json.choices) && json.choices.length === 0) {
-          console.log("API returned empty choices array");
-          return { valid: false };
+          console.log("API returned empty choices array - possibly content filtered");
+          return { valid: false, contentFiltered: true };
         }
+        
         // 检查是否有实际内容
         const content = json.choices?.[0]?.message?.content 
           || json.choices?.[0]?.delta?.content
@@ -778,7 +807,19 @@ ${transferPrompt}
           break;
         }
         
-        // 无效响应，减少消息数量重试
+        // 如果是内容过滤问题，直接返回明确错误，不再重试
+        if (validity.contentFiltered) {
+          console.log("Content filter detected, not retrying");
+          const filterMsg = validity.filterReason || '内容被API安全策略拦截';
+          return new Response(JSON.stringify({ 
+            error: `角色人设或消息内容触发了API内容审核：${filterMsg}。建议：1.检查人设卡是否有敏感内容 2.更换支持NSFW的API 3.修改人设描述方式`
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
+        // 无效响应（非内容过滤），减少消息数量重试
         retryCount++;
         if (retryCount > maxRetries) {
           console.log("Max retries reached with empty responses");
@@ -1115,7 +1156,25 @@ ${transferPrompt}
 
     if (!fullContent) {
       console.error("Could not extract content from response:", responseText.slice(0, 500));
-      return new Response(JSON.stringify({ error: "无法解析AI响应，请检查API配置是否正确" }), {
+      
+      // 尝试检测是否是内容审核问题
+      let errorMsg = "无法解析AI响应，请检查API配置是否正确";
+      try {
+        const errorJson = JSON.parse(responseText);
+        if (errorJson.error?.message?.includes('content') || 
+            errorJson.error?.message?.includes('policy') ||
+            errorJson.error?.message?.includes('sensitive') ||
+            errorJson.error?.message?.includes('inappropriate') ||
+            errorJson.error?.message?.includes('敏感') ||
+            errorJson.error?.message?.includes('违规') ||
+            errorJson.choices?.[0]?.finish_reason === 'content_filter') {
+          errorMsg = "内容被API安全策略拦截，可能是角色人设包含敏感词。建议：1.检查人设卡是否有违规内容 2.更换支持NSFW的API";
+        }
+      } catch {
+        // 忽略解析错误
+      }
+      
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
