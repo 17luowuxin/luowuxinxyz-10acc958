@@ -19,6 +19,7 @@ import VoiceWaveform from '@/components/chat/VoiceWaveform';
 import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 import { BlockCharacterDialog } from '@/components/chat/BlockCharacterDialog';
 import { useCharacterBlock } from '@/hooks/useCharacterBlock';
+import { NovelModeText } from '@/utils/novelModeParser';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -2146,7 +2147,7 @@ const ChatPage: React.FC = () => {
             }
           }
           
-          // 线上模式表情包
+          // 线上模式表情包（此代码块内replyMode已确定为'online'）
           if (stickerEnabled) {
             const combinedContent = multiMessages.join(' ');
             const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
@@ -2268,8 +2269,8 @@ const ChatPage: React.FC = () => {
           }
         }
         
-        // 表情包发送逻辑
-        if (stickerEnabled) {
+        // 表情包发送逻辑（小说模式不发送表情包）
+        if (stickerEnabled && replyMode !== 'novel') {
           const recentMsgs = messages.slice(-5).map(m => ({ role: m.role, content: m.content }));
 
           const stickerToSend =
@@ -3770,7 +3771,19 @@ const ChatPage: React.FC = () => {
 
                           <span className="relative z-10" style={{ display: 'inline' }}>
                             {/* 移除消息内容中的引用标记 */}
-                            {displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
+                            {msg.role === 'assistant' && replyMode === 'novel' ? (
+                              <NovelModeText
+                                content={displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
+                                baseColor={friendFontColor}
+                                dialogueColor="#e91e63"
+                                narrationColor={friendFontColor}
+                                actionColor="#9c27b0"
+                                thoughtColor="#607d8b"
+                                fontSize={bubbleSize}
+                              />
+                            ) : (
+                              displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')
+                            )}
                           </span>
                         </div>
                       )}
