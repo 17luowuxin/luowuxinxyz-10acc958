@@ -3775,10 +3775,10 @@ const ChatPage: React.FC = () => {
                               <NovelModeText
                                 content={displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
                                 baseColor={friendFontColor}
-                                dialogueColor="#e91e63"
-                                narrationColor="#666666"
-                                actionColor="#9c27b0"
-                                thoughtColor="#607d8b"
+                                dialogueColor={(customization as any)?.novel_dialogue_color || '#e91e63'}
+                                narrationColor={(customization as any)?.novel_narration_color || '#666666'}
+                                actionColor={(customization as any)?.novel_action_color || '#9c27b0'}
+                                thoughtColor={(customization as any)?.novel_thought_color || '#607d8b'}
                                 fontSize={bubbleSize}
                               />
                             ) : (
