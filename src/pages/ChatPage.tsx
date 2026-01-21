@@ -228,6 +228,43 @@ const ChatPage: React.FC = () => {
   // 推送通知触发器
   const { setCurrentChat, triggerPush, isPageVisible } = usePushTrigger();
 
+  // 防止异步任务在离开聊天页面后仍把消息标记为“已读”
+  const chatMountedRef = useRef(false);
+  const activeChatIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    chatMountedRef.current = true;
+    return () => {
+      chatMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    activeChatIdRef.current = characterId;
+  }, [characterId]);
+
+  const markCurrentChatRead = useCallback(async () => {
+    if (!user || !characterId) return;
+    if (!chatMountedRef.current) return;
+    // 如果路由已经切到别的聊天，跳过（避免上一个聊天的异步继续更新已读）
+    if (activeChatIdRef.current !== characterId) return;
+    // 页面不可见时不自动标记已读（避免后台刷新把未读清掉）
+    if (!isPageVisible.current) return;
+
+    await supabase
+      .from('chat_read_status')
+      .upsert(
+        {
+          user_id: user.id,
+          character_id: characterId,
+          last_read_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'user_id,character_id',
+        }
+      );
+  }, [user, characterId, isPageVisible]);
+
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
 
@@ -428,18 +465,8 @@ const ChatPage: React.FC = () => {
     allItems.sort((a, b) => a.timestamp - b.timestamp);
     setMessages(allItems);
     
-    // 更新已读状态 - 进入聊天页面就标记为已读
-    if (user && characterId) {
-      await supabase
-        .from('chat_read_status')
-        .upsert({
-          user_id: user.id,
-          character_id: characterId,
-          last_read_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,character_id'
-        });
-    }
+    // 仅在“仍在当前聊天且页面可见”时标记已读
+    await markCurrentChatRead();
     
     // 检查最后一条消息是否是用户消息（说明AI还没回复）
     if (chatData && chatData.length > 0) {
@@ -2113,18 +2140,8 @@ const ChatPage: React.FC = () => {
         setTimeout(async () => {
           setLoading(false);
           
-          // 更新已读状态（因为用户在聊天页面，收到的消息都算已读）
-          if (user && characterId) {
-            await supabase
-              .from('chat_read_status')
-              .upsert({
-                user_id: user.id,
-                character_id: characterId,
-                last_read_at: new Date().toISOString()
-              }, {
-                onConflict: 'user_id,character_id'
-              });
-          }
+            // 更新已读状态（仅在仍在当前聊天且页面可见）
+            await markCurrentChatRead();
           
           // 线上模式画图：在消息全部显示完后执行
           if (novelaiConfig?.apiKey) {
@@ -2356,18 +2373,8 @@ const ChatPage: React.FC = () => {
         }
       }
       
-      // 更新已读状态
-      if (user && characterId) {
-        await supabase
-          .from('chat_read_status')
-          .upsert({
-            user_id: user.id,
-            character_id: characterId,
-            last_read_at: new Date().toISOString()
-          }, {
-            onConflict: 'user_id,character_id'
-          });
-      }
+      // 更新已读状态（仅在仍在当前聊天且页面可见）
+      await markCurrentChatRead();
       
       // 检查是否需要生成图片
       if (novelaiConfig?.apiKey && cleanContent.trim()) {
