@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,6 +17,8 @@ import { useSpeechToText } from '@/hooks/useSpeechToText';
 import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 import VoiceWaveform from '@/components/chat/VoiceWaveform';
 import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
+import { BlockCharacterDialog } from '@/components/chat/BlockCharacterDialog';
+import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -204,6 +206,10 @@ const ChatPage: React.FC = () => {
   // 视频通话相关
   const [callVideoUrl, setCallVideoUrl] = useState<string | null>(null); // 用户上传的6秒视频
   const [callVideoPlaying, setCallVideoPlaying] = useState(false);
+  // 拉黑相关状态
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const { isBlocked, setBlocked, refetch: refetchBlockStatus } = useCharacterBlock(characterId || null);
+  
   const callVideoRef = useRef<HTMLVideoElement>(null);
   const callVideoInputRef = useRef<HTMLInputElement>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
@@ -3452,6 +3458,31 @@ const ChatPage: React.FC = () => {
             
             <div className="h-px bg-border my-1" />
             
+            {/* 拉黑/取消拉黑按钮 */}
+            <button
+              onClick={() => {
+                setShowMenu(false);
+                setShowBlockDialog(true);
+              }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+                isBlocked 
+                  ? 'text-green-600 hover:bg-green-50' 
+                  : 'text-destructive hover:bg-muted'
+              }`}
+            >
+              {isBlocked ? (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  重新添加好友
+                </>
+              ) : (
+                <>
+                  <Ban className="w-4 h-4" />
+                  删除好友
+                </>
+              )}
+            </button>
+            
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted rounded-md transition-colors">
@@ -3902,7 +3933,24 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Fixed Input Bar */}
+      {/* Fixed Input Bar - 拉黑状态时显示不同UI */}
+      {isBlocked ? (
+        <footer className="h-14 flex-shrink-0 px-4 py-2 border-t bg-muted/50 flex items-center justify-center z-20">
+          <div className="flex items-center gap-3">
+            <Ban className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">已将对方移出好友列表</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBlockDialog(true)}
+              className="h-7 text-xs"
+            >
+              <UserPlus className="w-3 h-3 mr-1" />
+              重新添加
+            </Button>
+          </div>
+        </footer>
+      ) : (
       <footer className="h-14 flex-shrink-0 px-2 py-2 border-t bg-background/95 backdrop-blur-md flex items-center gap-2 z-20">
         {/* 隐藏的图片input */}
         <input
@@ -4069,6 +4117,23 @@ const ChatPage: React.FC = () => {
           <Send className="w-4 h-4" />
         </Button>
       </footer>
+      )}
+
+      {/* 拉黑弹窗 */}
+      <BlockCharacterDialog
+        open={showBlockDialog}
+        onOpenChange={setShowBlockDialog}
+        characterId={characterId || ''}
+        characterName={character?.name || ''}
+        isBlocked={isBlocked}
+        onBlockStatusChange={(blocked) => {
+          setBlocked(blocked);
+          // 刷新消息以显示角色的回复
+          setTimeout(() => {
+            fetchMessagesWithTransfers();
+          }, 1000);
+        }}
+      />
 
       {/* 表情包管理弹窗 */}
       {showStickerUpload && (
