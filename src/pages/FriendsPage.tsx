@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { detectSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
+import SensitiveWordWarning from '@/components/SensitiveWordWarning';
 
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -34,6 +36,11 @@ const FriendsPage: React.FC = () => {
   const [uploadingRingtone, setUploadingRingtone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ringtoneInputRef = useRef<HTMLInputElement>(null);
+  
+  // 敏感词检测相关状态
+  const [sensitiveWarningOpen, setSensitiveWarningOpen] = useState(false);
+  const [sensitiveResult, setSensitiveResult] = useState<DetectionResult | null>(null);
+  const [pendingAction, setPendingAction] = useState<'create' | 'update' | null>(null);
 
   useEffect(() => {
     if (user) fetchCharacters();
@@ -186,7 +193,44 @@ const FriendsPage: React.FC = () => {
     }
   };
 
-  const createCharacter = async () => {
+  // 检查敏感词并处理保存
+  const checkAndSave = (action: 'create' | 'update') => {
+    const result = detectSensitiveWords(persona);
+    
+    if (result.found) {
+      setSensitiveResult(result);
+      setPendingAction(action);
+      setSensitiveWarningOpen(true);
+    } else {
+      // 没有敏感词，直接保存
+      if (action === 'create') {
+        doCreateCharacter();
+      } else {
+        doUpdateCharacter();
+      }
+    }
+  };
+  
+  // 确认保存（用户选择继续）
+  const handleConfirmSave = () => {
+    setSensitiveWarningOpen(false);
+    if (pendingAction === 'create') {
+      doCreateCharacter();
+    } else if (pendingAction === 'update') {
+      doUpdateCharacter();
+    }
+    setPendingAction(null);
+    setSensitiveResult(null);
+  };
+  
+  // 取消保存
+  const handleCancelSave = () => {
+    setSensitiveWarningOpen(false);
+    setPendingAction(null);
+    setSensitiveResult(null);
+  };
+
+  const doCreateCharacter = async () => {
     if (!name.trim()) { 
       toast.error('请输入角色名'); 
       return; 
@@ -216,8 +260,17 @@ const FriendsPage: React.FC = () => {
     setOpen(false);
     fetchCharacters();
   };
+  
+  // 对外暴露的创建函数（会先检查敏感词）
+  const createCharacter = () => {
+    if (!name.trim()) { 
+      toast.error('请输入角色名'); 
+      return; 
+    }
+    checkAndSave('create');
+  };
 
-  const updateCharacter = async () => {
+  const doUpdateCharacter = async () => {
     if (!editingChar) return;
     
     let finalAvatarUrl = avatarUrl;
@@ -246,6 +299,12 @@ const FriendsPage: React.FC = () => {
     setEditingChar(null);
     setOpen(false);
     fetchCharacters();
+  };
+  
+  // 对外暴露的更新函数（会先检查敏感词）
+  const updateCharacter = () => {
+    if (!editingChar) return;
+    checkAndSave('update');
   };
 
   const deleteCharacter = async (id: string) => {
@@ -800,6 +859,17 @@ const FriendsPage: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {/* 敏感词警告对话框 */}
+      {sensitiveResult && (
+        <SensitiveWordWarning
+          open={sensitiveWarningOpen}
+          onOpenChange={setSensitiveWarningOpen}
+          result={sensitiveResult}
+          onConfirm={handleConfirmSave}
+          onCancel={handleCancelSave}
+        />
+      )}
     </div>
   );
 };
