@@ -194,8 +194,12 @@ ${character.persona || '一个温柔体贴的人'}
 当前情绪状态：${currentEmotionHint}
 这是你被拉黑后发的第${currentMsgCount + 1}条消息。
 
-请以角色身份，用自然、真实的语气发一条消息。消息要符合你的人设，表达你此刻的心情。
-不要太长，1-2句话即可。不要用"【】"等括号标注情绪。不要重复之前说过的话。`;
+【重要规则】：
+1. 只发送一条简短消息，1-2句话
+2. 不要用任何分隔符如"|||"或"|"
+3. 不要在一条消息里写多个句子用分隔符隔开
+4. 不要用【】等括号标注情绪
+5. 直接输出角色要说的话，不要有任何多余格式`;
 
         // 包含之前生成的消息作为上下文，避免重复
         const previousMsgs = generatedMessages.map((m, idx) => ({
@@ -214,7 +218,7 @@ ${character.persona || '一个温柔体贴的人'}
             messages: [
               { role: 'system', content: systemPrompt },
               ...previousMsgs,
-              { role: 'user', content: '（用户把你拉黑了，请发一条消息，不要重复之前说过的话）' }
+              { role: 'user', content: '请发一条简短消息表达你的心情。只说一句话，不要用|||分隔多句话。' }
             ],
             max_tokens: 150,
             temperature: 0.9,
@@ -228,9 +232,24 @@ ${character.persona || '一个温柔体贴的人'}
         }
 
         const data = await response.json();
-        const messageContent = data.choices?.[0]?.message?.content || '';
+        let messageContent = data.choices?.[0]?.message?.content || '';
         
+        // 清理消息：移除可能的分隔符，只保留第一段
         if (messageContent) {
+          // 如果包含|||分隔符，只取第一部分
+          if (messageContent.includes('|||')) {
+            messageContent = messageContent.split('|||')[0].trim();
+          }
+          // 如果包含|分隔符（但不是||），可能也是分隔符
+          if (messageContent.includes('|') && !messageContent.includes('||')) {
+            const parts = messageContent.split('|');
+            if (parts.length > 2) {
+              messageContent = parts[0].trim();
+            }
+          }
+          // 移除可能的引号包裹
+          messageContent = messageContent.replace(/^["「『]|["」』]$/g, '').trim();
+          
           generatedMessages.push(messageContent);
           
           // 保存消息到聊天记录，添加延迟使消息时间有差异
