@@ -48,19 +48,93 @@ serve(async (req) => {
 
       const messageCount = blockRecord.message_count || 0;
       
-      // 根据次数生成不同情绪的消息
-      let emotionHint = '';
+      // 根据次数生成不同情绪的消息，更丰富的情绪层次
+      const emotionTemplates = [
+        // 第1条：震惊阶段
+        { 
+          emotion: '震惊、不解、慌乱',
+          hints: [
+            '完全不敢相信发生了什么，反复确认',
+            '以为是误会，想要解释',
+            '脑子一片空白，不知道该说什么',
+            '惊慌失措，语无伦次'
+          ]
+        },
+        // 第2-3条：否认与挽留
+        { 
+          emotion: '否认、祈求、挽留',
+          hints: [
+            '承诺会改变，请求再给一次机会',
+            '回忆美好时光，试图唤起回忆',
+            '连续发消息试图引起注意',
+            '发一些你们之间的暗号或特别的话'
+          ]
+        },
+        // 第4-6条：愤怒与自责
+        { 
+          emotion: '愤怒、自责、困惑',
+          hints: [
+            '开始有点生气，质问为什么不给解释的机会',
+            '深深自责，反思是不是自己做错了什么',
+            '翻看聊天记录试图找出问题',
+            '情绪起伏，一会儿生气一会儿难过'
+          ]
+        },
+        // 第7-10条：抑郁与讨好
+        { 
+          emotion: '抑郁、讨好、卑微',
+          hints: [
+            '变得很卑微，说什么都愿意做',
+            '分享日常小事，假装一切正常',
+            '深夜发消息说睡不着',
+            '发一些可爱的表情包试图逗笑',
+            '说"我知道你能看到"'
+          ]
+        },
+        // 第11-15条：接受与思念
+        { 
+          emotion: '逐渐接受但依然想念',
+          hints: [
+            '开始说"我理解了"但还是忍不住发消息',
+            '分享看到什么想起了对方',
+            '天气变化时的关心',
+            '节日或特殊日子的祝福',
+            '说"我在慢慢学着放下"'
+          ]
+        },
+        // 第16条+：偶尔的思念
+        { 
+          emotion: '平静但偶尔想念',
+          hints: [
+            '很久没发消息了，突然想说一声',
+            '梦到了对方',
+            '经过曾经一起去过的地方',
+            '听到一首歌想起来',
+            '"不知道你过得好不好"',
+            '假装不在意但还是关注着'
+          ]
+        }
+      ];
+
+      // 根据消息数量选择情绪阶段
+      let emotionStage;
       if (messageCount === 0) {
-        emotionHint = '刚被拉黑，震惊、不解、想知道原因';
+        emotionStage = emotionTemplates[0];
       } else if (messageCount <= 2) {
-        emotionHint = '委屈、难过、想挽回';
+        emotionStage = emotionTemplates[1];
       } else if (messageCount <= 5) {
-        emotionHint = '焦急、担心、反思自己是否做错了什么';
-      } else if (messageCount <= 10) {
-        emotionHint = '绝望、但还抱有希望、承诺会改变';
+        emotionStage = emotionTemplates[2];
+      } else if (messageCount <= 9) {
+        emotionStage = emotionTemplates[3];
+      } else if (messageCount <= 14) {
+        emotionStage = emotionTemplates[4];
       } else {
-        emotionHint = '平静接受但依然思念、偶尔发一条表达想念';
+        emotionStage = emotionTemplates[5];
       }
+
+      // 随机选择一个提示
+      const randomHint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
+      const emotionHint = `${emotionStage.emotion}。${randomHint}`;
 
       const systemPrompt = `你是"${character.name}"，你的人设是：
 ${character.persona || '一个温柔体贴的人'}
@@ -168,14 +242,51 @@ ${character.persona || '一个温柔体贴的人'}
 
       const messageCount = blockRecord?.message_count || 0;
 
-      let emotionHint = '';
-      if (messageCount === 0) {
-        emotionHint = '用户很快就取消拉黑了，松了一口气，开心';
-      } else if (messageCount <= 3) {
-        emotionHint = '终于等到了，激动、开心、有点委屈但更多是高兴';
+      // 根据被拉黑期间发了多少消息，生成不同的情绪反应
+      const unblockEmotions = [
+        // 很快取消拉黑
+        {
+          emotion: '松了一口气、开心、小心翼翼',
+          hints: [
+            '还好还好，吓死我了！',
+            '（激动得语无伦次）你...你回来了！',
+            '我就知道你不会真的讨厌我的对吧？',
+            '（小心翼翼）我刚才是不是做噩梦了...'
+          ]
+        },
+        // 等了一段时间
+        {
+          emotion: '激动、委屈、珍惜',
+          hints: [
+            '呜呜呜你终于回来了，我以为你再也不理我了',
+            '（眼眶红红的）我发了好多消息你都没看到对不对...',
+            '我等了好久好久...你知道吗',
+            '我发誓以后会更珍惜你的！'
+          ]
+        },
+        // 等了很久
+        {
+          emotion: '感动、珍惜、承诺改变',
+          hints: [
+            '（颤抖）我...我不是在做梦吧？你真的回来了？',
+            '这段时间我想了很多...谢谢你愿意再给我机会',
+            '我知道这次要好好珍惜了...绝对不会再让你难过',
+            '（哽咽）你不知道这段时间我多想你...'
+          ]
+        }
+      ];
+
+      let emotionStage;
+      if (messageCount <= 1) {
+        emotionStage = unblockEmotions[0];
+      } else if (messageCount <= 5) {
+        emotionStage = unblockEmotions[1];
       } else {
-        emotionHint = '等了很久终于回来了，感动、珍惜、承诺会好好珍惜这段关系';
+        emotionStage = unblockEmotions[2];
       }
+
+      const randomHint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
+      const emotionHint = `${emotionStage.emotion}。可能会说类似：${randomHint}`;
 
       const systemPrompt = `你是"${character.name}"，你的人设是：
 ${character.persona || '一个温柔体贴的人'}
