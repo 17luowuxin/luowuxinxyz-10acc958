@@ -187,9 +187,10 @@ async function generateImage(prompt: string, config: SpaceImageConfig): Promise<
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: config.model || 'gemini-3.0-pro-image-preview-lite',
-        size: '1024*1024',
+        model: config.model || 'dall-e-3',
+        size: '1024x1024',
         prompt: prompt,
+        n: 1,
       }),
     });
 
