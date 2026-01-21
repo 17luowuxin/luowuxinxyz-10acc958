@@ -69,6 +69,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           characterId,
           apiUrl: apiConfig?.provider === 'custom' ? undefined : undefined,
           apiKey: apiConfig?.api_key,
+          batchCount: 5, // 拉黑时连续发5条消息
         },
       });
 

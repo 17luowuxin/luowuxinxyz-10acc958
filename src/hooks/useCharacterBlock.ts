@@ -6,6 +6,7 @@ interface BlockStatus {
   isBlocked: boolean;
   messageCount: number;
   lastMessageAt: string | null;
+  blockedAt: string | null;
 }
 
 export const useCharacterBlock = (characterId: string | null) => {
@@ -14,6 +15,7 @@ export const useCharacterBlock = (characterId: string | null) => {
     isBlocked: false,
     messageCount: 0,
     lastMessageAt: null,
+    blockedAt: null,
   });
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +28,7 @@ export const useCharacterBlock = (characterId: string | null) => {
     try {
       const { data, error } = await supabase
         .from('character_blocks')
-        .select('is_active, message_count, last_message_at')
+        .select('is_active, message_count, last_message_at, blocked_at')
         .eq('user_id', user.id)
         .eq('character_id', characterId)
         .eq('is_active', true)
@@ -38,6 +40,7 @@ export const useCharacterBlock = (characterId: string | null) => {
         isBlocked: !!data,
         messageCount: data?.message_count || 0,
         lastMessageAt: data?.last_message_at || null,
+        blockedAt: data?.blocked_at || null,
       });
     } catch (error) {
       console.error('Error fetching block status:', error);
@@ -80,6 +83,7 @@ export const useCharacterBlock = (characterId: string | null) => {
       ...prev,
       isBlocked: blocked,
       messageCount: blocked ? 0 : prev.messageCount,
+      blockedAt: blocked ? new Date().toISOString() : null,
     }));
   };
 

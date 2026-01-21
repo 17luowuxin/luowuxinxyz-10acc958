@@ -208,7 +208,7 @@ const ChatPage: React.FC = () => {
   const [callVideoPlaying, setCallVideoPlaying] = useState(false);
   // 拉黑相关状态
   const [showBlockDialog, setShowBlockDialog] = useState(false);
-  const { isBlocked, setBlocked, refetch: refetchBlockStatus } = useCharacterBlock(characterId || null);
+  const { isBlocked, blockedAt, setBlocked, refetch: refetchBlockStatus } = useCharacterBlock(characterId || null);
   
   const callVideoRef = useRef<HTMLVideoElement>(null);
   const callVideoInputRef = useRef<HTMLInputElement>(null);
@@ -3793,9 +3793,16 @@ const ChatPage: React.FC = () => {
                   );
                 })()}
                 
-                {/* 已读状态 */}
+                {/* 已读状态 / 发送失败标记 */}
                 {msg.role === 'user' && (
                   <span className="text-[10px] text-muted-foreground/70 mt-0.5">已读</span>
+                )}
+                {/* 拉黑期间AI发送的消息显示红色感叹号 */}
+                {msg.role === 'assistant' && blockedAt && new Date(msg.created_at) >= new Date(blockedAt) && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground/50">发送失败</span>
+                    <span className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">!</span>
+                  </div>
                 )}
               </div>
               
