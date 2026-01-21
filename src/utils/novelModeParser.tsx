@@ -7,29 +7,35 @@ interface ParsedSegment {
 
 /**
  * 解析小说模式的文本，区分不同类型的内容
- * - 旁白/动作：*斜体标记* 或 （括号内容）
- * - 对话：「引号内容」或 "引号内容" 或直接的台词
- * - 心理活动：『双引号』或内心独白
+ * - 旁白：普通叙述文字
+ * - 对话：「」、『』、""、"" 等引号包裹的内容
+ * - 动作：*内容* 包裹的描写
+ * - 心理：（）、() 括号包裹的内心独白
  */
 export function parseNovelModeText(text: string): ParsedSegment[] {
   if (!text) return [];
   
   const segments: ParsedSegment[] = [];
-  let remaining = text;
   
   // 正则表达式匹配不同类型的内容
+  // 注意：顺序很重要，优先匹配更长的模式
   const patterns = [
-    // 动作描写：*内容* 或 _内容_
+    // 动作描写：*内容*（支持多行和嵌套括号）
     { regex: /\*([^*]+)\*/g, type: 'action' as const },
     // 心理活动：（内容）或 (内容)
-    { regex: /[（(]([^）)]+)[）)]/g, type: 'thought' as const },
+    { regex: /（([^）]+)）/g, type: 'thought' as const },
+    { regex: /\(([^)]+)\)/g, type: 'thought' as const },
     // 对话：「内容」
     { regex: /「([^」]+)」/g, type: 'dialogue' as const },
     // 对话：『内容』
     { regex: /『([^』]+)』/g, type: 'dialogue' as const },
-    // 对话："内容" 或 "内容"
+    // 对话：中文双引号 "内容"
     { regex: /"([^"]+)"/g, type: 'dialogue' as const },
+    // 对话：英文双引号 "内容"
     { regex: /"([^"]+)"/g, type: 'dialogue' as const },
+    // 对话：单引号 '内容' 或 '内容'
+    { regex: /'([^']+)'/g, type: 'dialogue' as const },
+    { regex: /'([^']+)'/g, type: 'dialogue' as const },
   ];
   
   // 收集所有匹配
@@ -60,7 +66,7 @@ export function parseNovelModeText(text: string): ParsedSegment[] {
   // 按位置排序
   allMatches.sort((a, b) => a.start - b.start);
   
-  // 去除重叠的匹配
+  // 去除重叠的匹配（保留先匹配到的）
   const filteredMatches: Match[] = [];
   let lastEnd = 0;
   for (const match of allMatches) {
@@ -166,7 +172,7 @@ export const NovelModeText: React.FC<NovelModeTextProps> = ({
       case 'thought':
         return `（${content}）`;
       case 'dialogue':
-        return `「${content}」`;
+        return `"${content}"`;
       default:
         return content;
     }
@@ -177,7 +183,6 @@ export const NovelModeText: React.FC<NovelModeTextProps> = ({
       {segments.map((segment, index) => (
         <span key={index} style={getStyle(segment.type)}>
           {getWrapper(segment.type, segment.content)}
-          {index < segments.length - 1 && segment.type !== 'dialogue' ? ' ' : ''}
         </span>
       ))}
     </span>
