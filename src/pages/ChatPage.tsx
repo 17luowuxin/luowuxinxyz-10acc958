@@ -416,6 +416,19 @@ const ChatPage: React.FC = () => {
     allItems.sort((a, b) => a.timestamp - b.timestamp);
     setMessages(allItems);
     
+    // 更新已读状态 - 进入聊天页面就标记为已读
+    if (user && characterId) {
+      await supabase
+        .from('chat_read_status')
+        .upsert({
+          user_id: user.id,
+          character_id: characterId,
+          last_read_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,character_id'
+        });
+    }
+    
     // 检查最后一条消息是否是用户消息（说明AI还没回复）
     if (chatData && chatData.length > 0) {
       const lastMsg = chatData[chatData.length - 1];
@@ -2073,6 +2086,19 @@ const ChatPage: React.FC = () => {
         setTimeout(async () => {
           setLoading(false);
           
+          // 更新已读状态（因为用户在聊天页面，收到的消息都算已读）
+          if (user && characterId) {
+            await supabase
+              .from('chat_read_status')
+              .upsert({
+                user_id: user.id,
+                character_id: characterId,
+                last_read_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,character_id'
+              });
+          }
+          
           // 线上模式画图：在消息全部显示完后执行
           if (novelaiConfig?.apiKey) {
             const combinedForImage = multiMessages
@@ -2296,6 +2322,19 @@ const ChatPage: React.FC = () => {
             }, 500 + Math.random() * 500);
           }
         }
+      }
+      
+      // 更新已读状态
+      if (user && characterId) {
+        await supabase
+          .from('chat_read_status')
+          .upsert({
+            user_id: user.id,
+            character_id: characterId,
+            last_read_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,character_id'
+          });
       }
       
       // 检查是否需要生成图片

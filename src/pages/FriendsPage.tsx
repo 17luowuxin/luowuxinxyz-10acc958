@@ -15,6 +15,36 @@ import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
 import { parseCharacterCard, convertToAppFormat, extractAvatarFromFile } from '@/utils/characterCardParser';
 
+// 格式化消息时间
+const formatMessageTime = (timeStr: string): string => {
+  const date = new Date(timeStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays < 7) return `${diffDays}天前`;
+  
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+// 截断消息内容
+const truncateMessage = (content: string, maxLength: number = 30): string => {
+  // 移除格式字符
+  const cleaned = content
+    .replace(/\[.*?\]/g, '[图片]')
+    .replace(/\|+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  if (cleaned.length <= maxLength) return cleaned;
+  return cleaned.slice(0, maxLength) + '...';
+};
+
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -59,27 +89,62 @@ const FriendsPage: React.FC = () => {
     
     if (!charData) return;
     
-    // 获取每个角色的最后聊天时间
+    // 获取每个角色的最后聊天消息（包含内容）
     const { data: lastMessages } = await supabase
       .from('chat_messages')
-      .select('character_id, created_at')
+      .select('character_id, created_at, content, role')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
     
-    // 创建角色最后聊天时间映射
-    const lastChatMap: Record<string, string> = {};
+    // 获取已读状态
+    const { data: readStatus } = await supabase
+      .from('chat_read_status')
+      .select('character_id, last_read_at')
+      .eq('user_id', user?.id);
+    
+    // 创建已读时间映射
+    const readTimeMap: Record<string, string> = {};
+    if (readStatus) {
+      for (const status of readStatus) {
+        readTimeMap[status.character_id] = status.last_read_at;
+      }
+    }
+    
+    // 创建角色最后聊天时间和消息映射
+    const lastChatMap: Record<string, { time: string; content: string; role: string }> = {};
+    const unreadCountMap: Record<string, number> = {};
+    
     if (lastMessages) {
       for (const msg of lastMessages) {
+        // 记录最后一条消息
         if (!lastChatMap[msg.character_id]) {
-          lastChatMap[msg.character_id] = msg.created_at;
+          lastChatMap[msg.character_id] = {
+            time: msg.created_at,
+            content: msg.content,
+            role: msg.role
+          };
+        }
+        
+        // 计算未读消息数（只计算assistant的消息）
+        if (msg.role === 'assistant') {
+          const lastReadTime = readTimeMap[msg.character_id];
+          if (!lastReadTime || new Date(msg.created_at) > new Date(lastReadTime)) {
+            unreadCountMap[msg.character_id] = (unreadCountMap[msg.character_id] || 0) + 1;
+          }
         }
       }
     }
     
     // 按最后聊天时间排序，最近聊天的排在前面
-    const sortedChars = charData.sort((a, b) => {
-      const aTime = lastChatMap[a.id] || a.created_at;
-      const bTime = lastChatMap[b.id] || b.created_at;
+    const sortedChars = charData.map(char => ({
+      ...char,
+      lastMessage: lastChatMap[char.id]?.content || char.opening_line,
+      lastMessageRole: lastChatMap[char.id]?.role || 'assistant',
+      lastMessageTime: lastChatMap[char.id]?.time,
+      unreadCount: unreadCountMap[char.id] || 0
+    })).sort((a, b) => {
+      const aTime = a.lastMessageTime || a.created_at;
+      const bTime = b.lastMessageTime || b.created_at;
       return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
     
@@ -961,10 +1026,10 @@ const FriendsPage: React.FC = () => {
               transition={{ delay: i * 0.05 }} 
               className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4"
             >
-              {/* Avatar with pink border like reference */}
+              {/* Avatar with pink border and unread badge */}
               <button 
                 onClick={() => navigate(`/chat/${char.id}`)}
-                className="w-14 h-14 rounded-full border-2 border-pink-200 overflow-hidden flex-shrink-0 bg-gradient-to-br from-pink-100 to-purple-100"
+                className="relative w-14 h-14 rounded-full border-2 border-pink-200 overflow-hidden flex-shrink-0 bg-gradient-to-br from-pink-100 to-purple-100"
               >
                 {char.avatar_url ? (
                   <img src={char.avatar_url} className="w-full h-full object-cover" alt={char.name} />
@@ -973,16 +1038,32 @@ const FriendsPage: React.FC = () => {
                     <User className="w-6 h-6 text-pink-300" />
                   </div>
                 )}
+                {/* Unread badge */}
+                {char.unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 bg-gradient-to-r from-pink-500 to-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg">
+                    {char.unreadCount > 99 ? '99+' : char.unreadCount}
+                  </span>
+                )}
               </button>
               
-              {/* Info */}
+              {/* Info with last message preview */}
               <button 
                 onClick={() => navigate(`/chat/${char.id}`)}
                 className="flex-1 text-left min-w-0"
               >
-                <h3 className="font-semibold text-gray-700">{char.name}</h3>
-                <p className="text-sm text-gray-400 truncate">
-                  {char.opening_line || '点击开始聊天'}
+                <div className="flex items-center justify-between">
+                  <h3 className={`font-semibold ${char.unreadCount > 0 ? 'text-gray-800' : 'text-gray-700'}`}>
+                    {char.name}
+                  </h3>
+                  {char.lastMessageTime && (
+                    <span className="text-xs text-gray-400">
+                      {formatMessageTime(char.lastMessageTime)}
+                    </span>
+                  )}
+                </div>
+                <p className={`text-sm truncate ${char.unreadCount > 0 ? 'text-gray-600 font-medium' : 'text-gray-400'}`}>
+                  {char.lastMessageRole === 'user' ? '我: ' : ''}
+                  {truncateMessage(char.lastMessage || char.opening_line || '点击开始聊天')}
                 </p>
               </button>
               
