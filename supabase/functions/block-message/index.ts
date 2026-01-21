@@ -228,11 +228,11 @@ ${character.persona || '一个温柔体贴的人'}
 这是你被拉黑后发的第${currentMsgCount + 1}条消息。
 
 【重要规则】：
-1. 只发送一条简短消息，1-2句话
-2. 不要用任何分隔符如"|||"或"|"
-3. 不要在一条消息里写多个句子用分隔符隔开
+1. 只发送一条完整的消息，可以是1-3句话
+2. 消息必须是完整的句子，不能被截断
+3. 不要用任何分隔符如"|||"或"|"分隔多条消息
 4. 不要用【】等括号标注情绪
-5. 直接输出角色要说的话，不要有任何多余格式`;
+5. 直接输出角色要说的话，不要有任何前缀或格式标记`;
 
         // 包含之前生成的消息作为上下文，避免重复
         const previousMsgs = generatedMessages.map((m, idx) => ({
@@ -251,9 +251,9 @@ ${character.persona || '一个温柔体贴的人'}
             messages: [
               { role: 'system', content: systemPrompt },
               ...previousMsgs,
-              { role: 'user', content: '请发一条简短消息表达你的心情。只说一句话，不要用|||分隔多句话。' }
+              { role: 'user', content: '请发一条完整的消息表达你的心情。确保句子完整，不要被截断。' }
             ],
-            max_tokens: 150,
+            max_tokens: 300,
             temperature: 0.9,
           }),
         });
