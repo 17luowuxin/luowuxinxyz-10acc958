@@ -406,14 +406,21 @@ const GroupChatPage: React.FC = () => {
       let currentMessages = [...messages, { sender_type: 'user', content: userMessage }];
       let lastCharacterResponse: { characterId: string; characterName: string; content: string } | null = null;
 
+      // 导入消息清理工具
+      const { sanitizeMessageContent } = await import('@/utils/messageParser');
+      
       for (const response of data.responses || []) {
+        // 清理消息内容，移除可能的格式字符
+        const cleanedContent = sanitizeMessageContent(response.content);
+        if (!cleanedContent) continue; // 跳过空内容
+        
         const { data: charMsg } = await supabase
           .from('group_messages')
           .insert({
             group_id: groupId,
             sender_type: 'character',
             character_id: response.characterId,
-            content: response.content
+            content: cleanedContent
           })
           .select('*, characters(name, avatar_url)')
           .single();
@@ -427,10 +434,10 @@ const GroupChatPage: React.FC = () => {
           }]);
           currentMessages.push({
             sender_type: 'character',
-            content: response.content,
+            content: cleanedContent,
             characterName: response.characterName
           });
-          lastCharacterResponse = response;
+          lastCharacterResponse = { ...response, content: cleanedContent };
         }
 
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -482,13 +489,17 @@ const GroupChatPage: React.FC = () => {
             
             if (!c2cError && c2cData?.responses?.length > 0) {
               const c2cResponse = c2cData.responses[0];
+              // 清理内容
+              const cleanedC2cContent = sanitizeMessageContent(c2cResponse.content);
+              if (!cleanedC2cContent) continue; // 跳过空内容
+              
               const { data: c2cMsg } = await supabase
                 .from('group_messages')
                 .insert({
                   group_id: groupId,
                   sender_type: 'character',
                   character_id: c2cResponse.characterId,
-                  content: c2cResponse.content
+                  content: cleanedC2cContent
                 })
                 .select('*, characters(name, avatar_url)')
                 .single();
@@ -503,10 +514,10 @@ const GroupChatPage: React.FC = () => {
                 
                 currentMessages.push({
                   sender_type: 'character',
-                  content: c2cResponse.content,
+                  content: cleanedC2cContent,
                   characterName: c2cResponse.characterName
                 });
-                currentTrigger = c2cResponse;
+                currentTrigger = { ...c2cResponse, content: cleanedC2cContent };
                 
                 // 递减概率决定是否继续
                 const continueChance = effectiveSettings.continueChanceBase - (currentRound * effectiveSettings.continueChanceDecay);

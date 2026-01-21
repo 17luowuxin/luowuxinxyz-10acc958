@@ -1946,52 +1946,31 @@ const ChatPage: React.FC = () => {
       // 清理内容 - 移除前后空白和多余换行
       assistantContent = assistantContent.trim().replace(/^\n+|\n+$/g, '');
       
+      // 使用工具函数进行健壮的消息解析
+      const { parseOnlineMessages, parseNovelMessage, isValidMessageContent, looksLikeTruncated } = await import('@/utils/messageParser');
+      
+      // 检测响应是否被截断
+      if (looksLikeTruncated(assistantContent)) {
+        console.warn('Response appears truncated:', assistantContent.slice(0, 100));
+        // 尝试清理并继续，而不是完全丢弃
+      }
+      
       // 健壮的多消息解析 - 处理不同API返回格式的差异
       let multiMessages: string[] = [];
       
       if (replyMode === 'online') {
-        // 清理常见的格式问题 - 更健壮地处理各种格式
-        let cleanedContent = assistantContent
-          // 先移除开头和结尾的单个或多个竖线（包括空格）
-          .replace(/^[\s|]+/g, '')
-          .replace(/[\s|]+$/g, '')
-          // 处理 "| 消息 ||| 消息 |" 这种带边框的格式
-          .replace(/\|\s*\|\|\|\s*\|/g, '|||')
-          // 统一分隔符格式（有些API可能用 || 或 ||| 或 ||||）
-          .replace(/\|{2,}/g, '|||')
-          // 移除可能的换行符混杂
-          .replace(/\n\s*\|\|\|\s*\n?/g, '|||')
-          .replace(/\|\|\|\s*\n/g, '|||')
-          // 移除前后的单个竖线（可能是格式边框）
-          .replace(/^\|\s*/g, '')
-          .replace(/\s*\|$/g, '');
-        
-        // 按 ||| 分割
-        multiMessages = cleanedContent
-          .split('|||')
-          .map(s => s.trim())
-          // 过滤掉空消息和只有竖线的消息
-          .filter(s => s.length > 0 && s !== '|||' && !/^\|+$/.test(s))
-          // 清理每条消息中残留的单个竖线边框
-          .map(s => s.replace(/^\|\s*/, '').replace(/\s*\|$/, '').trim())
-          .filter(s => s.length > 0);
-        
         const fixedCount = onlineMessageCount === '1-2' ? 2 : 5;
+        multiMessages = parseOnlineMessages(assistantContent, fixedCount);
         
-        // 如果分割后只有1条或0条，说明API没有正确使用|||分隔，当作普通回复处理
-        if (multiMessages.length <= 1) {
-          console.log('Online mode: API did not use ||| separator, treating as single message');
-          // 清理所有残留的竖线字符（包括单个|、连续||等）
-          multiMessages = [assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()];
-        }
-        
-        // 限制最多条数
-        if (multiMessages.length > fixedCount) {
-          multiMessages = multiMessages.slice(0, fixedCount);
+        // 如果解析结果为空或无效，使用清理后的完整内容
+        if (multiMessages.length === 0 || !multiMessages.some(isValidMessageContent)) {
+          console.log('Online mode: Failed to parse messages, using sanitized full content');
+          multiMessages = [parseNovelMessage(assistantContent)].filter(isValidMessageContent);
         }
       } else {
-        // 小说模式：不分割，清理所有残留的竖线字符（包括单个|和多个||）
-        multiMessages = [assistantContent.replace(/\s*\|+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()];
+        // 小说模式：单条消息，深度清理
+        const cleanedMessage = parseNovelMessage(assistantContent);
+        multiMessages = isValidMessageContent(cleanedMessage) ? [cleanedMessage] : [];
       }
       
       // 最多5条
