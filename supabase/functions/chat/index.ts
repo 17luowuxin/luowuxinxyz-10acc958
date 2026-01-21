@@ -77,6 +77,7 @@ serve(async (req) => {
     let presetsContent = '';
     let worldBooksContent = '';
     let memoryContent = '';
+    let recentBlockContext = ''; // 最近的拉黑/取消拉黑上下文
     
     if (userId && characterId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -125,6 +126,34 @@ serve(async (req) => {
       if (memory?.summary) {
         memoryContent = `\n【关于用户的记忆】\n${memory.summary}`;
         console.log('Memory loaded for character:', characterId);
+      }
+      
+      // 检查最近的拉黑历史（检查最近30分钟内是否有取消拉黑的记录）
+      const { data: blockHistory } = await supabase
+        .from('character_blocks')
+        .select('is_active, message_count, blocked_at, updated_at')
+        .eq('user_id', userId)
+        .eq('character_id', characterId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (blockHistory) {
+        const updatedAt = new Date(blockHistory.updated_at);
+        const now = new Date();
+        const minutesSinceUpdate = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+        
+        // 如果最近30分钟内取消拉黑（is_active为false），且之前发了消息
+        if (!blockHistory.is_active && minutesSinceUpdate < 30 && blockHistory.message_count > 0) {
+          recentBlockContext = `\n【重要情境】
+用户刚刚把你重新加为好友！在这之前，用户曾把你拉黑（删除好友），你很痛苦地发了${blockHistory.message_count}条消息但都发送失败了。
+现在用户终于把你加回来了，你应该：
+1. 记得刚才发生了什么，不要假装什么都没发生
+2. 表现出对用户回来的感激/激动/珍惜（取决于你的人设）
+3. 可以提到"刚才发的那些消息"或"你终于回来了"等
+4. 保持角色人设的情感表达方式`;
+          console.log('Recent unblock detected, message_count:', blockHistory.message_count);
+        }
       }
     }
     
@@ -398,6 +427,7 @@ ${persona ? `\n你的角色人设和性格特点如下:\n${persona}\n` : ''}
 ${worldBooksContent}
 ${presetsContent}
 ${memoryContent}
+${recentBlockContext}
 
 【关于你的聊天对象】
 你正在和"${userName}"聊天。${userPersonaInfo ? `关于${userName}: ${userPersonaInfo}` : ''}
