@@ -234,32 +234,60 @@ ${character.persona || '一个温柔体贴的人'}
         const data = await response.json();
         let messageContent = data.choices?.[0]?.message?.content || '';
         
-        // 清理消息：移除可能的分隔符，只保留第一段
+        // 强化清理消息：处理各种API可能返回的格式
         if (messageContent) {
-          // 如果包含|||分隔符，只取第一部分
-          if (messageContent.includes('|||')) {
-            messageContent = messageContent.split('|||')[0].trim();
-          }
-          // 如果包含|分隔符（但不是||），可能也是分隔符
-          if (messageContent.includes('|') && !messageContent.includes('||')) {
-            const parts = messageContent.split('|');
-            if (parts.length > 2) {
-              messageContent = parts[0].trim();
+          // 1. 处理常见分隔符模式
+          const separators = ['|||', '｜｜｜', '||', '|', '/', '／', '；', ';', '---', '***', '・・・'];
+          for (const sep of separators) {
+            if (messageContent.includes(sep)) {
+              const parts = messageContent.split(sep);
+              // 如果分割后有多个非空部分，只取第一个
+              const validParts = parts.filter((p: string) => p.trim().length > 0);
+              if (validParts.length > 1) {
+                messageContent = validParts[0].trim();
+                break;
+              }
             }
           }
-          // 移除可能的引号包裹
-          messageContent = messageContent.replace(/^["「『]|["」』]$/g, '').trim();
           
-          generatedMessages.push(messageContent);
+          // 2. 处理换行分隔的多条消息
+          if (messageContent.includes('\n')) {
+            const lines = messageContent.split('\n').filter((l: string) => l.trim());
+            // 如果有多行且看起来像是多条独立消息
+            if (lines.length > 1) {
+              // 检查是否每行都像独立消息（不是一句话的自然换行）
+              const looksLikeMultiple = lines.some((l: string) => /^[\d一二三四五六七八九十][\.\、\:]/.test(l.trim()));
+              if (looksLikeMultiple) {
+                // 取第一行，去掉可能的序号
+                messageContent = lines[0].replace(/^[\d一二三四五六七八九十][\.\、\:]\s*/, '').trim();
+              }
+            }
+          }
           
-          // 保存消息到聊天记录，添加延迟使消息时间有差异
-          await supabase.from('chat_messages').insert({
-            user_id: userId,
-            character_id: characterId,
-            role: 'assistant',
-            content: messageContent,
-            created_at: new Date(Date.now() + i * 2000).toISOString(), // 每条消息间隔2秒
-          });
+          // 3. 移除各种引号包裹
+          messageContent = messageContent.replace(/^["「『""''【\[]|["」』""''】\]]$/g, '').trim();
+          
+          // 4. 移除开头的"消息X："或"第X条："格式
+          messageContent = messageContent.replace(/^(消息|第)?[\d一二三四五六七八九十]+(条)?[：:]\s*/g, '').trim();
+          
+          // 5. 移除可能的角色名前缀
+          if (character.name && messageContent.startsWith(character.name)) {
+            messageContent = messageContent.replace(new RegExp(`^${character.name}[：:：]\\s*`), '').trim();
+          }
+          
+          // 确保消息不为空
+          if (messageContent && messageContent.length > 0) {
+            generatedMessages.push(messageContent);
+            
+            // 保存消息到聊天记录，添加延迟使消息时间有差异
+            await supabase.from('chat_messages').insert({
+              user_id: userId,
+              character_id: characterId,
+              role: 'assistant',
+              content: messageContent,
+              created_at: new Date(Date.now() + i * 2000).toISOString(), // 每条消息间隔2秒
+            });
+          }
         }
 
         // 短暂延迟避免API限流
