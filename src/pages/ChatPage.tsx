@@ -226,7 +226,12 @@ const ChatPage: React.FC = () => {
   const audioQueue = useAudioPlaybackQueue();
   
   // 推送通知触发器
-  const { setCurrentChat, triggerPush, isPageVisible } = usePushTrigger();
+  const { setCurrentChat, setNavigate, triggerPush, isPageVisible } = usePushTrigger();
+  
+  // 传递 navigate 函数给推送通知 hook
+  useEffect(() => {
+    setNavigate(navigate);
+  }, [setNavigate, navigate]);
 
   // 防止异步任务在离开聊天页面后仍把消息标记为“已读”
   const chatMountedRef = useRef(false);
