@@ -28,6 +28,7 @@ const FriendsPage: React.FC = () => {
   const [regeneratingMemory, setRegeneratingMemory] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(10);
   const [transferEnabled, setTransferEnabled] = useState(true);
+  const [replyMode, setReplyMode] = useState<'online' | 'novel'>('online');
   const [voiceId, setVoiceId] = useState('');
   const [ringtoneUrl, setRingtoneUrl] = useState('');
   const [uploadingRingtone, setUploadingRingtone] = useState(false);
@@ -234,6 +235,7 @@ const FriendsPage: React.FC = () => {
         avatar_url: finalAvatarUrl,
         history_limit: historyLimit,
         transfer_enabled: transferEnabled,
+        reply_mode: replyMode,
         voice_id: voiceId || null,
         ringtone_url: ringtoneUrl || null
       })
@@ -260,6 +262,7 @@ const FriendsPage: React.FC = () => {
     setAvatarFile(null);
     setHistoryLimit(10);
     setTransferEnabled(true);
+    setReplyMode('online');
     setVoiceId('');
     setRingtoneUrl('');
   };
@@ -272,6 +275,7 @@ const FriendsPage: React.FC = () => {
     setAvatarUrl(char.avatar_url || '');
     setHistoryLimit(char.history_limit ?? 10);
     setTransferEnabled(char.transfer_enabled ?? true);
+    setReplyMode(char.reply_mode === 'novel' ? 'novel' : 'online');
     setVoiceId(char.voice_id || '');
     setRingtoneUrl(char.ringtone_url || '');
     setMemorySummary('');
@@ -484,6 +488,60 @@ const FriendsPage: React.FC = () => {
                         </button>
                       ))}
                     </div>
+                  </div>
+                  
+                  {/* Reply Mode */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">💬</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">回复模式</p>
+                        <p className="text-xs text-gray-400">影响角色的互动方式和功能</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setReplyMode('online')}
+                        className={`p-3 rounded-xl text-left transition-all border-2 ${
+                          replyMode === 'online'
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span>💬</span>
+                          <span className={`text-sm font-medium ${replyMode === 'online' ? 'text-blue-600' : 'text-gray-700'}`}>
+                            在线模式
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          模拟真实聊天，支持连续消息、拉黑互动、表情包等
+                        </p>
+                      </button>
+                      <button
+                        onClick={() => setReplyMode('novel')}
+                        className={`p-3 rounded-xl text-left transition-all border-2 ${
+                          replyMode === 'novel'
+                            ? 'border-purple-400 bg-purple-50'
+                            : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span>📖</span>
+                          <span className={`text-sm font-medium ${replyMode === 'novel' ? 'text-purple-600' : 'text-gray-700'}`}>
+                            小说模式
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          适合VN剧场、RP扮演，回复更有故事性
+                        </p>
+                      </button>
+                    </div>
+                    {replyMode === 'novel' && (
+                      <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
+                        ⚠️ 小说模式下拉黑互动功能不生效
+                      </p>
+                    )}
                   </div>
                   
                   {/* Transfer Toggle */}
