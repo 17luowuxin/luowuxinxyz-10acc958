@@ -48,8 +48,9 @@ interface ThemeForm {
 
 const ADMIN_PASSWORD = '13160616007lxs'; // 管理员密码
 
-// 所有APP图标配置
+// 所有APP图标配置 (16个)
 const allAppIcons = [
+  // 桌面应用 (12个)
   { id: 'album', name: '相册', icon: Image, color: 'bg-[#F06292]' },
   { id: 'camera', name: '相机', icon: Camera, color: 'bg-[#42A5F5]' },
   { id: 'profile', name: '我的', icon: User, color: 'bg-[#26A69A]' },
@@ -61,7 +62,8 @@ const allAppIcons = [
   { id: 'stats', name: '统计', icon: BarChart3, color: 'bg-[#66BB6A]' },
   { id: 'workshop', name: '工坊', icon: Hammer, color: 'bg-[#7E57C2]' },
   { id: 'finance', name: '财务', icon: Wallet, color: 'bg-[#FF9800]' },
-  // Dock 图标
+  { id: 'visual-novel', name: '剧场', icon: BookOpen, color: 'bg-gradient-to-br from-pink-500 to-purple-600' },
+  // Dock 图标 (4个)
   { id: 'friends', name: '好友', icon: MessageCircle, color: 'bg-[#42A5F5]' },
   { id: 'group', name: '群聊', icon: Users, color: 'bg-[#26A69A]' },
   { id: 'music', name: '音乐', icon: Music, color: 'bg-[#5C6BC0]' },
