@@ -58,8 +58,9 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
       // 获取用户API配置 - 需要获取完整配置
       const { data: apiSettings } = await supabase
         .from('api_keys')
-        .select('api_key, provider')
-        .eq('user_id', user.id);
+        .select('api_key, provider, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
       // 解析API配置 - 正确的provider名称
       let apiUrl = '';
@@ -77,7 +78,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
         model = customModel?.api_key || '';
       }
 
-      await supabase.functions.invoke('block-message', {
+      const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
         body: {
           action: 'generate_block_message',
           userId: user.id,
@@ -88,6 +89,14 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           batchCount: 5, // 拉黑时连续发5条消息
         },
       });
+
+      if (invokeError) throw invokeError;
+
+      // 后端函数会返回生成的消息列表；为空说明生成失败（通常是API地址/密钥问题）
+      const messages = (data as any)?.messages as unknown;
+      if (Array.isArray(messages) && messages.length === 0) {
+        throw new Error('拉黑消息生成失败：未生成任何消息（请检查API地址/模型/密钥）');
+      }
 
       toast.success(`已将 ${characterName} 移出好友列表`);
       onBlockStatusChange(true);
