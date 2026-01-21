@@ -18,7 +18,7 @@ function base64UrlToUint8Array(base64Url: string): Uint8Array {
   return outputArray;
 }
 
-// Import Web Crypto for ECDSA signing
+// Generate VAPID authorization header
 async function generateVapidAuthHeader(
   endpoint: string,
   vapidPublicKey: string,
@@ -103,10 +103,12 @@ serve(async (req) => {
       );
     }
 
+    console.log(`[send-push] Sending notification to user ${userId} for character ${characterName || characterId}`);
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')!;
-    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')!;
+    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
+    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -117,7 +119,7 @@ serve(async (req) => {
       .eq('user_id', userId);
 
     if (subError) {
-      console.error('Error fetching subscriptions:', subError);
+      console.error('[send-push] Error fetching subscriptions:', subError);
       return new Response(
         JSON.stringify({ error: 'Failed to fetch subscriptions' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -125,12 +127,14 @@ serve(async (req) => {
     }
 
     if (!subscriptions || subscriptions.length === 0) {
-      console.log('No subscriptions found for user:', userId);
+      console.log('[send-push] No subscriptions found for user:', userId);
       return new Response(
         JSON.stringify({ message: 'No subscriptions found' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log(`[send-push] Found ${subscriptions.length} subscription(s)`);
 
     const results = [];
     
@@ -145,41 +149,69 @@ serve(async (req) => {
           tag: `chat-${characterId || 'default'}`
         });
 
-        // For simplicity, we'll use a basic push without encryption
-        // In production, you'd want to use the web-push library or implement full encryption
+        // Build request headers
+        const pushHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'TTL': '86400',
+        };
+
+        // Add VAPID authentication if available
+        if (vapidPublicKey && vapidPrivateKey) {
+          try {
+            const vapidHeaders = await generateVapidAuthHeader(
+              sub.endpoint,
+              vapidPublicKey,
+              vapidPrivateKey,
+              'mailto:noreply@lovable.dev'
+            );
+            pushHeaders['Authorization'] = vapidHeaders.authorization;
+            pushHeaders['Crypto-Key'] = vapidHeaders.cryptoKey;
+          } catch (vapidError) {
+            console.error('[send-push] VAPID header generation failed:', vapidError);
+            // Continue without VAPID - may fail on some push services
+          }
+        }
+
+        console.log(`[send-push] Sending to endpoint: ${sub.endpoint.slice(0, 60)}...`);
+
         const response = await fetch(sub.endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'TTL': '86400',
-          },
+          headers: pushHeaders,
           body: payload
         });
 
+        console.log(`[send-push] Response status: ${response.status}`);
+
         if (response.status === 201 || response.status === 200) {
-          results.push({ endpoint: sub.endpoint, success: true });
+          results.push({ endpoint: sub.endpoint.slice(0, 50), success: true });
         } else if (response.status === 410 || response.status === 404) {
           // Subscription expired, remove it
+          console.log(`[send-push] Subscription expired, removing...`);
           await supabase
             .from('push_subscriptions')
             .delete()
             .eq('id', sub.id);
-          results.push({ endpoint: sub.endpoint, success: false, reason: 'expired' });
+          results.push({ endpoint: sub.endpoint.slice(0, 50), success: false, reason: 'expired' });
         } else {
-          results.push({ endpoint: sub.endpoint, success: false, status: response.status });
+          const errorText = await response.text().catch(() => '');
+          console.error(`[send-push] Push failed with status ${response.status}:`, errorText);
+          results.push({ endpoint: sub.endpoint.slice(0, 50), success: false, status: response.status, error: errorText.slice(0, 100) });
         }
       } catch (pushError) {
-        console.error('Push error for subscription:', sub.id, pushError);
-        results.push({ endpoint: sub.endpoint, success: false, error: String(pushError) });
+        console.error('[send-push] Push error for subscription:', sub.id, pushError);
+        results.push({ endpoint: sub.endpoint.slice(0, 50), success: false, error: String(pushError) });
       }
     }
 
+    const successCount = results.filter(r => r.success).length;
+    console.log(`[send-push] Completed: ${successCount}/${results.length} successful`);
+
     return new Response(
-      JSON.stringify({ sent: results.filter(r => r.success).length, results }),
+      JSON.stringify({ sent: successCount, total: results.length, results }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Send push error:', error);
+    console.error('[send-push] Error:', error);
     return new Response(
       JSON.stringify({ error: String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
