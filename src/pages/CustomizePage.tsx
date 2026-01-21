@@ -126,6 +126,11 @@ const CustomizePage: React.FC = () => {
   const [characterPreview, setCharacterPreview] = useState<any>(null);
   const [globalTextColor, setGlobalTextColor] = useState('#333333');
   const [globalTextSize, setGlobalTextSize] = useState(16);
+  // 小说模式颜色
+  const [novelDialogueColor, setNovelDialogueColor] = useState('#e91e63');
+  const [novelNarrationColor, setNovelNarrationColor] = useState('#666666');
+  const [novelActionColor, setNovelActionColor] = useState('#9c27b0');
+  const [novelThoughtColor, setNovelThoughtColor] = useState('#607d8b');
 
   useEffect(() => {
     if (user) {
@@ -200,6 +205,11 @@ const CustomizePage: React.FC = () => {
       if ((data as any).friend_bubble_frame_url) setFriendBubbleFrame((data as any).friend_bubble_frame_url);
       if ((data as any).global_text_color) setGlobalTextColor((data as any).global_text_color);
       if ((data as any).global_text_size) setGlobalTextSize((data as any).global_text_size);
+      // 小说模式颜色
+      if ((data as any).novel_dialogue_color) setNovelDialogueColor((data as any).novel_dialogue_color);
+      if ((data as any).novel_narration_color) setNovelNarrationColor((data as any).novel_narration_color);
+      if ((data as any).novel_action_color) setNovelActionColor((data as any).novel_action_color);
+      if ((data as any).novel_thought_color) setNovelThoughtColor((data as any).novel_thought_color);
     }
   };
 
@@ -336,6 +346,10 @@ const CustomizePage: React.FC = () => {
       friend_bubble_frame_url: friendBubbleFrame,
       global_text_color: globalTextColor,
       global_text_size: globalTextSize,
+      novel_dialogue_color: novelDialogueColor,
+      novel_narration_color: novelNarrationColor,
+      novel_action_color: novelActionColor,
+      novel_thought_color: novelThoughtColor,
     } as any, { onConflict: 'user_id' });
     
     if (error) {
@@ -570,7 +584,101 @@ const CustomizePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Global App Background */}
+        {/* Novel Mode Colors */}
+        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+          <div className="flex items-center gap-2 mb-2">
+            <MessageCircle className="w-5 h-5 text-primary" />
+            <h3 className="font-bold text-lg">小说模式颜色</h3>
+          </div>
+          <p className="text-muted-foreground text-sm mb-4">自定义小说模式下各类文本的颜色</p>
+          
+          <div className="space-y-4">
+            {/* Dialogue Color */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={novelDialogueColor}
+                  onChange={(e) => setNovelDialogueColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div>
+                  <p className="text-sm font-medium">对话颜色</p>
+                  <p className="text-xs text-muted-foreground">「对话内容」的颜色</p>
+                </div>
+              </div>
+              <span style={{ color: novelDialogueColor, fontWeight: 500 }}>「示例对话」</span>
+            </div>
+
+            {/* Narration Color */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={novelNarrationColor}
+                  onChange={(e) => setNovelNarrationColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div>
+                  <p className="text-sm font-medium">旁白颜色</p>
+                  <p className="text-xs text-muted-foreground">叙述性文字的颜色</p>
+                </div>
+              </div>
+              <span style={{ color: novelNarrationColor }}>这是旁白文字</span>
+            </div>
+
+            {/* Action Color */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={novelActionColor}
+                  onChange={(e) => setNovelActionColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div>
+                  <p className="text-sm font-medium">动作颜色</p>
+                  <p className="text-xs text-muted-foreground">*动作描写* 的颜色</p>
+                </div>
+              </div>
+              <span style={{ color: novelActionColor, fontStyle: 'italic' }}>*轻轻点头*</span>
+            </div>
+
+            {/* Thought Color */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={novelThoughtColor}
+                  onChange={(e) => setNovelThoughtColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border-2 border-muted overflow-hidden"
+                  style={{ padding: 0 }}
+                />
+                <div>
+                  <p className="text-sm font-medium">心理颜色</p>
+                  <p className="text-xs text-muted-foreground">（心理活动）的颜色</p>
+                </div>
+              </div>
+              <span style={{ color: novelThoughtColor, fontStyle: 'italic' }}>（心想）</span>
+            </div>
+
+            {/* Preview */}
+            <div className="mt-4 p-4 rounded-2xl bg-muted/30 border border-primary/10">
+              <p className="text-sm text-muted-foreground mb-2">预览效果：</p>
+              <p className="text-sm leading-relaxed">
+                <span style={{ color: novelNarrationColor }}>他看着窗外的风景，</span>
+                <span style={{ color: novelActionColor, fontStyle: 'italic' }}>*微微叹了口气*</span>
+                <span style={{ color: novelNarrationColor }}>。</span>
+                <span style={{ color: novelDialogueColor, fontWeight: 500 }}>「今天的天气真好啊。」</span>
+                <span style={{ color: novelThoughtColor, fontStyle: 'italic' }}>（如果能一直这样就好了）</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">

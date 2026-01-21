@@ -389,6 +389,10 @@ export type Database = {
           lock_screen_bg_url: string | null
           lock_screen_video_url: string | null
           music_cover_url: string | null
+          novel_action_color: string | null
+          novel_dialogue_color: string | null
+          novel_narration_color: string | null
+          novel_thought_color: string | null
           space_background_url: string | null
           theme: string | null
           updated_at: string
@@ -419,6 +423,10 @@ export type Database = {
           lock_screen_bg_url?: string | null
           lock_screen_video_url?: string | null
           music_cover_url?: string | null
+          novel_action_color?: string | null
+          novel_dialogue_color?: string | null
+          novel_narration_color?: string | null
+          novel_thought_color?: string | null
           space_background_url?: string | null
           theme?: string | null
           updated_at?: string
@@ -449,6 +457,10 @@ export type Database = {
           lock_screen_bg_url?: string | null
           lock_screen_video_url?: string | null
           music_cover_url?: string | null
+          novel_action_color?: string | null
+          novel_dialogue_color?: string | null
+          novel_narration_color?: string | null
+          novel_thought_color?: string | null
           space_background_url?: string | null
           theme?: string | null
           updated_at?: string
