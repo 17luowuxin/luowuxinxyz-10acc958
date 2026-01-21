@@ -38,6 +38,7 @@ serve(async (req) => {
       imageUrl,
       hasImageInHistory,
       returnJson,
+      clientTime,
     } = body ?? {};
 
     // Backward-compat: normalize legacy params
@@ -353,9 +354,21 @@ serve(async (req) => {
     // 生成时间上下文
     let timeContextPrompt = '';
     if (timeSyncEnabled) {
-      const now = new Date();
+      // 使用客户端传来的时间，或者回退到服务器时间
+      let now: Date;
+      if (clientTime?.timestamp) {
+        // 使用客户端时间戳
+        now = new Date(clientTime.timestamp);
+        console.log('Using client time:', now.toISOString(), 'timezone:', clientTime.timezone);
+      } else {
+        // 回退到服务器时间
+        now = new Date();
+        console.log('Using server time (fallback):', now.toISOString());
+      }
+      
       const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
       const weekday = weekdays[now.getDay()];
+      const year = now.getFullYear();
       const month = now.getMonth() + 1;
       const day = now.getDate();
       const hour = now.getHours();
@@ -395,7 +408,7 @@ serve(async (req) => {
       
       timeContextPrompt = `
 【当前时间信息】
-现在是${now.getFullYear()}年${month}月${day}日 ${weekday} ${hour}:${minute.toString().padStart(2, '0')}
+现在是${year}年${month}月${day}日 ${weekday} ${hour}:${minute.toString().padStart(2, '0')}
 时段：${timeOfDay}
 ${weekendNote}
 ${holiday}

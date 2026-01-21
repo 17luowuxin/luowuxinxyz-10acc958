@@ -1803,7 +1803,13 @@ const ChatPage: React.FC = () => {
         transferEnabled: transferEnabled,
         historyLimit: historyLimit,
         useNovelFormat: useNovelFormat,
-        hasImageInHistory: hasImageInHistory
+        hasImageInHistory: hasImageInHistory,
+        // 传递客户端本地时间信息
+        clientTime: {
+          timestamp: Date.now(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offset: new Date().getTimezoneOffset(),
+        }
       };
       
       // 始终传递API配置
