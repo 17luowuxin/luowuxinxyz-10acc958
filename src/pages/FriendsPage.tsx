@@ -81,26 +81,32 @@ const FriendsPage: React.FC = () => {
   }, [user]);
 
   const fetchCharacters = async () => {
+    if (!user?.id) return;
     // 获取角色列表
     const { data: charData } = await supabase
       .from('characters')
       .select('*')
-      .eq('user_id', user?.id);
+      .eq('user_id', user.id);
     
     if (!charData) return;
     
-    // 获取每个角色的最后聊天消息（包含内容）
-    const { data: lastMessages } = await supabase
-      .from('chat_messages')
-      .select('character_id, created_at, content, role')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
-    
-    // 获取已读状态
-    const { data: readStatus } = await supabase
-      .from('chat_read_status')
-      .select('character_id, last_read_at')
-      .eq('user_id', user?.id);
+    // 并行获取：最后消息 + 已读状态（减少等待时间，提升列表打开速度）
+    const [lastMessagesRes, readStatusRes] = await Promise.all([
+      supabase
+        .from('chat_messages')
+        .select('character_id, created_at, content, role')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        // 只需要最近一段用于：最后一条消息 + 未读计数，避免拉取过多导致卡顿
+        .limit(500),
+      supabase
+        .from('chat_read_status')
+        .select('character_id, last_read_at')
+        .eq('user_id', user.id),
+    ]);
+
+    const lastMessages = lastMessagesRes.data;
+    const readStatus = readStatusRes.data;
     
     // 创建已读时间映射
     const readTimeMap: Record<string, string> = {};
