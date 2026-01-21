@@ -95,6 +95,50 @@ export type Database = {
         }
         Relationships: []
       }
+      character_blocks: {
+        Row: {
+          blocked_at: string
+          character_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_message_at: string | null
+          message_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          blocked_at?: string
+          character_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_message_at?: string | null
+          message_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          blocked_at?: string
+          character_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_message_at?: string | null
+          message_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_blocks_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       character_memories: {
         Row: {
           character_id: string
