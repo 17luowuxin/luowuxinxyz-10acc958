@@ -3776,7 +3776,7 @@ const ChatPage: React.FC = () => {
                                 content={displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
                                 baseColor={friendFontColor}
                                 dialogueColor="#e91e63"
-                                narrationColor={friendFontColor}
+                                narrationColor="#666666"
                                 actionColor="#9c27b0"
                                 thoughtColor="#607d8b"
                                 fontSize={bubbleSize}
