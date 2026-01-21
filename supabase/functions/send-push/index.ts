@@ -1,91 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildPushPayload,
+  type PushMessage,
+  type PushSubscription,
+  type VapidKeys,
+} from "https://esm.sh/@block65/webcrypto-web-push@1.0.2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Convert base64url to Uint8Array
-function base64UrlToUint8Array(base64Url: string): Uint8Array {
-  const padding = '='.repeat((4 - base64Url.length % 4) % 4);
-  const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
-
-// Generate VAPID authorization header
-async function generateVapidAuthHeader(
-  endpoint: string,
-  vapidPublicKey: string,
-  vapidPrivateKey: string,
-  subject: string
-): Promise<{ authorization: string; cryptoKey: string }> {
-  const audience = new URL(endpoint).origin;
-  
-  // Create JWT header
-  const header = { typ: 'JWT', alg: 'ES256' };
-  
-  // Create JWT payload
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    aud: audience,
-    exp: now + 12 * 60 * 60, // 12 hours
-    sub: subject
-  };
-  
-  // Encode header and payload
-  const encoder = new TextEncoder();
-  const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const unsignedToken = `${headerB64}.${payloadB64}`;
-  
-  // Import private key
-  const privateKeyBytes = base64UrlToUint8Array(vapidPrivateKey);
-  
-  // Create the key in JWK format
-  const jwk = {
-    kty: 'EC',
-    crv: 'P-256',
-    x: vapidPublicKey.slice(0, 43),
-    y: vapidPublicKey.slice(43),
-    d: btoa(String.fromCharCode(...privateKeyBytes)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
-  };
-  
-  try {
-    const key = await crypto.subtle.importKey(
-      'jwk',
-      jwk,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['sign']
-    );
-    
-    // Sign the token
-    const signature = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      key,
-      encoder.encode(unsignedToken)
-    );
-    
-    // Convert signature to base64url
-    const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    
-    const jwt = `${unsignedToken}.${signatureB64}`;
-    
-    return {
-      authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
-      cryptoKey: `p256ecdsa=${vapidPublicKey}`
-    };
-  } catch (error) {
-    console.error('Error generating VAPID header:', error);
-    throw error;
-  }
+function extractBearerToken(req: Request): string {
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader) return '';
+  if (authHeader.toLowerCase().startsWith('bearer ')) return authHeader.slice(7);
+  return authHeader;
 }
 
 serve(async (req) => {
@@ -107,16 +38,31 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
-    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || '';
+    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || '';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Security: if called by a normal user session, only allow sending to themselves.
+    // (Internal server-to-server calls may use the service role key.)
+    const bearer = extractBearerToken(req);
+    let effectiveUserId = userId as string;
+    if (bearer && bearer !== supabaseServiceKey) {
+      const { data: authData, error: authError } = await supabase.auth.getUser(bearer);
+      if (authError || !authData?.user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      effectiveUserId = authData.user.id;
+    }
 
     // Get user's push subscriptions
     const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', effectiveUserId);
 
     if (subError) {
       console.error('[send-push] Error fetching subscriptions:', subError);
@@ -127,7 +73,7 @@ serve(async (req) => {
     }
 
     if (!subscriptions || subscriptions.length === 0) {
-      console.log('[send-push] No subscriptions found for user:', userId);
+      console.log('[send-push] No subscriptions found for user:', effectiveUserId);
       return new Response(
         JSON.stringify({ message: 'No subscriptions found' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -138,9 +84,21 @@ serve(async (req) => {
 
     const results = [];
     
+    const vapid: VapidKeys | null = (vapidPublicKey && vapidPrivateKey)
+      ? {
+        subject: 'mailto:noreply@lovable.dev',
+        publicKey: vapidPublicKey,
+        privateKey: vapidPrivateKey,
+      }
+      : null;
+
+    if (!vapid) {
+      console.error('[send-push] Missing VAPID keys (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
+    }
+
     for (const sub of subscriptions) {
       try {
-        // Create push payload
+        // Create push payload (this will be encrypted by the web push protocol)
         const payload = JSON.stringify({
           title: title || `${characterName || '角色'}发来消息`,
           body: body || '你收到了一条新消息',
@@ -149,35 +107,37 @@ serve(async (req) => {
           tag: `chat-${characterId || 'default'}`
         });
 
-        // Build request headers
-        const pushHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'TTL': '86400',
+        const subscription: PushSubscription = {
+          endpoint: sub.endpoint,
+          expirationTime: null,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
+          },
         };
 
-        // Add VAPID authentication if available
-        if (vapidPublicKey && vapidPrivateKey) {
-          try {
-            const vapidHeaders = await generateVapidAuthHeader(
-              sub.endpoint,
-              vapidPublicKey,
-              vapidPrivateKey,
-              'mailto:noreply@lovable.dev'
-            );
-            pushHeaders['Authorization'] = vapidHeaders.authorization;
-            pushHeaders['Crypto-Key'] = vapidHeaders.cryptoKey;
-          } catch (vapidError) {
-            console.error('[send-push] VAPID header generation failed:', vapidError);
-            // Continue without VAPID - may fail on some push services
-          }
+        const message: PushMessage = {
+          data: payload,
+          options: {
+            ttl: 60 * 60 * 24, // 1 day
+          },
+        };
+
+        if (!vapid) {
+          results.push({ endpoint: sub.endpoint.slice(0, 50), success: false, error: 'Missing VAPID keys' });
+          continue;
         }
 
-        console.log(`[send-push] Sending to endpoint: ${sub.endpoint.slice(0, 60)}...`);
+        const requestInit = await buildPushPayload(message, subscription, vapid);
 
-        const response = await fetch(sub.endpoint, {
-          method: 'POST',
-          headers: pushHeaders,
-          body: payload
+        console.log(`[send-push] Sending to endpoint: ${sub.endpoint.slice(0, 60)}...`);
+        // Deno's type defs can be strict about Uint8Array vs BodyInit; wrap in Blob for compatibility.
+        const response = await fetch(subscription.endpoint, {
+          ...requestInit,
+          // Wrap encrypted bytes into a Blob to satisfy Deno's fetch BodyInit typing.
+          body: requestInit.body
+            ? new Blob([requestInit.body as unknown as BlobPart])
+            : undefined,
         });
 
         console.log(`[send-push] Response status: ${response.status}`);
