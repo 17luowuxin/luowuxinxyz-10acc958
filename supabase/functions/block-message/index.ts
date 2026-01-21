@@ -269,8 +269,8 @@ ${character.persona || '一个温柔体贴的人'}
         
         // 强化清理消息：处理各种API可能返回的格式
         if (messageContent) {
-          // 1. 处理常见分隔符模式
-          const separators = ['|||', '｜｜｜', '||', '|', '/', '／', '；', ';', '---', '***', '・・・'];
+          // 1. 只处理明确的多条消息分隔符（不要包含常见标点如 / ; ；）
+          const separators = ['|||', '｜｜｜', '||', '---', '***', '・・・'];
           for (const sep of separators) {
             if (messageContent.includes(sep)) {
               const parts = messageContent.split(sep);
@@ -283,22 +283,20 @@ ${character.persona || '一个温柔体贴的人'}
             }
           }
           
-          // 2. 处理换行分隔的多条消息
+          // 2. 处理换行分隔的多条消息（只处理明显的编号列表格式）
           if (messageContent.includes('\n')) {
             const lines = messageContent.split('\n').filter((l: string) => l.trim());
-            // 如果有多行且看起来像是多条独立消息
-            if (lines.length > 1) {
-              // 检查是否每行都像独立消息（不是一句话的自然换行）
-              const looksLikeMultiple = lines.some((l: string) => /^[\d一二三四五六七八九十][\.\、\:]/.test(l.trim()));
-              if (looksLikeMultiple) {
-                // 取第一行，去掉可能的序号
-                messageContent = lines[0].replace(/^[\d一二三四五六七八九十][\.\、\:]\s*/, '').trim();
-              }
+            // 只有当第一行是编号格式时才处理
+            if (lines.length > 1 && /^[\d一二三四五六七八九十][\.\、\:]/.test(lines[0].trim())) {
+              // 取第一行，去掉序号
+              messageContent = lines[0].replace(/^[\d一二三四五六七八九十][\.\、\:]\s*/, '').trim();
             }
           }
           
-          // 3. 移除各种引号包裹
-          messageContent = messageContent.replace(/^["「『""''【\[]|["」』""''】\]]$/g, '').trim();
+          // 3. 移除各种引号包裹（只移除成对的）
+          if (/^["「『""''\[].*["」』""''\]]$/.test(messageContent)) {
+            messageContent = messageContent.slice(1, -1).trim();
+          }
           
           // 4. 移除开头的"消息X："或"第X条："格式
           messageContent = messageContent.replace(/^(消息|第)?[\d一二三四五六七八九十]+(条)?[：:]\s*/g, '').trim();
