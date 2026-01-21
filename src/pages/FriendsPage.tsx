@@ -31,6 +31,7 @@ const FriendsPage: React.FC = () => {
   const [historyLimit, setHistoryLimit] = useState(10);
   const [transferEnabled, setTransferEnabled] = useState(true);
   const [replyMode, setReplyMode] = useState<'online' | 'novel'>('online');
+  const [useNovelFormat, setUseNovelFormat] = useState(false);
   const [voiceId, setVoiceId] = useState('');
   const [ringtoneUrl, setRingtoneUrl] = useState('');
   const [uploadingRingtone, setUploadingRingtone] = useState(false);
@@ -310,6 +311,7 @@ const FriendsPage: React.FC = () => {
         history_limit: historyLimit,
         transfer_enabled: transferEnabled,
         reply_mode: replyMode,
+        use_novel_format: useNovelFormat,
         voice_id: voiceId || null,
         ringtone_url: ringtoneUrl || null
       })
@@ -343,6 +345,7 @@ const FriendsPage: React.FC = () => {
     setHistoryLimit(10);
     setTransferEnabled(true);
     setReplyMode('online');
+    setUseNovelFormat(false);
     setVoiceId('');
     setRingtoneUrl('');
   };
@@ -356,6 +359,7 @@ const FriendsPage: React.FC = () => {
     setHistoryLimit(char.history_limit ?? 10);
     setTransferEnabled(char.transfer_enabled ?? true);
     setReplyMode(char.reply_mode === 'novel' ? 'novel' : 'online');
+    setUseNovelFormat(char.use_novel_format ?? false);
     setVoiceId(char.voice_id || '');
     setRingtoneUrl(char.ringtone_url || '');
     setMemorySummary('');
@@ -621,6 +625,29 @@ const FriendsPage: React.FC = () => {
                       <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
                         ⚠️ 小说模式下拉黑互动功能不生效
                       </p>
+                    )}
+                    
+                    {/* Novel Format Toggle - only show in novel mode */}
+                    {replyMode === 'novel' && (
+                      <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">📝</span>
+                          <div>
+                            <p className="font-medium text-purple-700 text-sm">使用指令格式</p>
+                            <p className="text-xs text-purple-500">AI回复自动使用 /旁白 /对话 /动作 /想法 格式</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setUseNovelFormat(!useNovelFormat)}
+                          className={`w-12 h-6 rounded-full transition-all ${
+                            useNovelFormat ? 'bg-purple-400' : 'bg-gray-300'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                            useNovelFormat ? 'translate-x-6' : 'translate-x-0.5'
+                          }`} />
+                        </button>
+                      </div>
                     )}
                   </div>
                   

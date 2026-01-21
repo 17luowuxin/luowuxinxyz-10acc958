@@ -154,6 +154,7 @@ const ChatPage: React.FC = () => {
   const [transferEnabled, setTransferEnabled] = useState(true);
   const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
+  const [useNovelFormat, setUseNovelFormat] = useState(false);
   const [onlineMessageCount, setOnlineMessageCount] = useState<string>('3-5');
   const [novelaiConfig, setNovelaiConfig] = useState<{
     enabled?: boolean;
@@ -285,6 +286,7 @@ const ChatPage: React.FC = () => {
       }
       setHistoryLimit(data.history_limit ?? 10);
       setTransferEnabled(data.transfer_enabled ?? true);
+      setUseNovelFormat((data as any).use_novel_format ?? false);
       // 加载表情包开关状态
       setStickerEnabled((data as any).sticker_enabled ?? true);
       // 加载语音模式
@@ -1584,6 +1586,7 @@ const ChatPage: React.FC = () => {
         onlineMessageCount: onlineMessageCount,
         transferEnabled: transferEnabled,
         historyLimit: historyLimit,
+        useNovelFormat: useNovelFormat,
         hasImage: true, // 标记有图片
         imageUrl: imageUrl
       };
@@ -1799,6 +1802,7 @@ const ChatPage: React.FC = () => {
         onlineMessageCount: onlineMessageCount,
         transferEnabled: transferEnabled,
         historyLimit: historyLimit,
+        useNovelFormat: useNovelFormat,
         hasImageInHistory: hasImageInHistory
       };
       
@@ -2582,6 +2586,7 @@ const ChatPage: React.FC = () => {
         onlineMessageCount: onlineMessageCount,
         transferEnabled: transferEnabled,
         historyLimit: historyLimit,
+        useNovelFormat: useNovelFormat,
       };
       
       body.userApiKey = apiConfig.apiKey;
