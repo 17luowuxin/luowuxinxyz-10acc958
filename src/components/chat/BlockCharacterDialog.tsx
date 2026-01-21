@@ -61,13 +61,14 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
         .select('api_key, provider')
         .eq('user_id', user.id);
 
-      // 解析API配置
+      // 解析API配置 - 正确的provider名称
       let apiUrl = '';
       let apiKey = '';
       let model = '';
       
       if (apiSettings) {
-        const customUrl = apiSettings.find(s => s.provider === 'custom_url');
+        // 使用正确的provider名称: custom_base_url (不是 custom_url)
+        const customUrl = apiSettings.find(s => s.provider === 'custom_base_url');
         const customKey = apiSettings.find(s => s.provider === 'custom');
         const customModel = apiSettings.find(s => s.provider === 'custom_model');
         
