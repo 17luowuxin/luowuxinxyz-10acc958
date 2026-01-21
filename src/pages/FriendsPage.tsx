@@ -1027,24 +1027,26 @@ const FriendsPage: React.FC = () => {
               className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4"
             >
               {/* Avatar with pink border and unread badge */}
-              <button 
-                onClick={() => navigate(`/chat/${char.id}`)}
-                className="relative w-14 h-14 rounded-full border-2 border-pink-200 overflow-hidden flex-shrink-0 bg-gradient-to-br from-pink-100 to-purple-100"
-              >
-                {char.avatar_url ? (
-                  <img src={char.avatar_url} className="w-full h-full object-cover" alt={char.name} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <User className="w-6 h-6 text-pink-300" />
-                  </div>
-                )}
-                {/* Unread badge */}
+              <div className="relative flex-shrink-0">
+                <button 
+                  onClick={() => navigate(`/chat/${char.id}`)}
+                  className="w-14 h-14 rounded-full border-2 border-pink-200 overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100"
+                >
+                  {char.avatar_url ? (
+                    <img src={char.avatar_url} className="w-full h-full object-cover" alt={char.name} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-pink-300" />
+                    </div>
+                  )}
+                </button>
+                {/* Unread badge - outside overflow:hidden */}
                 {char.unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-5 h-5 bg-gradient-to-r from-pink-500 to-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg">
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 bg-gradient-to-r from-pink-500 to-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-lg z-10">
                     {char.unreadCount > 99 ? '99+' : char.unreadCount}
                   </span>
                 )}
-              </button>
+              </div>
               
               {/* Info with last message preview */}
               <button 
