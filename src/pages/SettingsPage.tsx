@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
+import { PushNotificationCard } from '@/components/settings/PushNotificationCard';
 
 const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
@@ -2563,6 +2564,9 @@ const SettingsPage: React.FC = () => {
             一键恢复默认设置
           </button>
         </div>
+
+        {/* Push Notification Settings */}
+        <PushNotificationCard />
 
         {/* Admin Button */}
         <Button 
