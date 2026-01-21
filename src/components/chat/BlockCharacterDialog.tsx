@@ -55,20 +55,35 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
 
       if (error) throw error;
 
-      // 触发角色发送第一条拉黑消息
-      const { data: apiConfig } = await supabase
+      // 获取用户API配置 - 需要获取完整配置
+      const { data: apiSettings } = await supabase
         .from('api_keys')
         .select('api_key, provider')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
+
+      // 解析API配置
+      let apiUrl = '';
+      let apiKey = '';
+      let model = '';
+      
+      if (apiSettings) {
+        const customUrl = apiSettings.find(s => s.provider === 'custom_url');
+        const customKey = apiSettings.find(s => s.provider === 'custom');
+        const customModel = apiSettings.find(s => s.provider === 'custom_model');
+        
+        apiUrl = customUrl?.api_key || '';
+        apiKey = customKey?.api_key || '';
+        model = customModel?.api_key || '';
+      }
 
       await supabase.functions.invoke('block-message', {
         body: {
           action: 'generate_block_message',
           userId: user.id,
           characterId,
-          apiUrl: apiConfig?.provider === 'custom' ? undefined : undefined,
-          apiKey: apiConfig?.api_key,
+          apiUrl,
+          apiKey,
+          model,
           batchCount: 5, // 拉黑时连续发5条消息
         },
       });
