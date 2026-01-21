@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { detectSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
+import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
 
 const FriendsPage: React.FC = () => {
@@ -228,6 +228,27 @@ const FriendsPage: React.FC = () => {
     setSensitiveWarningOpen(false);
     setPendingAction(null);
     setSensitiveResult(null);
+  };
+  
+  // 一键替换敏感词
+  const handleAutoReplace = () => {
+    const { newText, replacedCount, replacements } = replaceSensitiveWords(persona);
+    
+    if (replacedCount > 0) {
+      setPersona(newText);
+      setSensitiveWarningOpen(false);
+      setSensitiveResult(null);
+      setPendingAction(null);
+      
+      // 显示替换结果
+      const replacementList = replacements.map(r => `「${r.original}」→「${r.replacement}」`).join('、');
+      toast.success(`已替换 ${replacedCount} 处敏感词`, {
+        description: replacementList.length > 50 ? replacementList.slice(0, 50) + '...' : replacementList,
+        duration: 5000,
+      });
+    } else {
+      toast.info('没有可自动替换的敏感词，请手动修改');
+    }
   };
 
   const doCreateCharacter = async () => {
@@ -868,6 +889,7 @@ const FriendsPage: React.FC = () => {
           result={sensitiveResult}
           onConfirm={handleConfirmSave}
           onCancel={handleCancelSave}
+          onAutoReplace={handleAutoReplace}
         />
       )}
     </div>

@@ -161,6 +161,66 @@ export function detectSensitiveWords(text: string): DetectionResult {
 }
 
 /**
+ * 一键替换文本中的敏感词为建议的隐晦表达
+ */
+export function replaceSensitiveWords(text: string): { 
+  newText: string; 
+  replacedCount: number;
+  replacements: Array<{ original: string; replacement: string }>;
+} {
+  if (!text) {
+    return { newText: text, replacedCount: 0, replacements: [] };
+  }
+  
+  let newText = text;
+  const replacements: Array<{ original: string; replacement: string }> = [];
+  
+  // 按词长度从长到短排序，避免短词先被替换导致长词匹配失败
+  const sortedWords = [...sensitiveWords].sort((a, b) => b.word.length - a.word.length);
+  
+  for (const sw of sortedWords) {
+    // 跳过建议为"建议避免"类型的词（这些词没有好的替代）
+    if (sw.suggestion.includes('建议避免') || sw.suggestion.includes('禁止') || sw.suggestion.includes('警告')) {
+      continue;
+    }
+    
+    // 提取建议中的第一个替代词（去掉括号内的补充说明）
+    let replacement = sw.suggestion
+      .split('/')[0]  // 取第一个选项
+      .split('（')[0]  // 去掉括号说明
+      .split('(')[0]   // 去掉英文括号说明
+      .trim();
+    
+    // 如果替代词为空或太长，跳过
+    if (!replacement || replacement.length > 10) {
+      continue;
+    }
+    
+    // 全局替换（不区分大小写）
+    const regex = new RegExp(escapeRegExp(sw.word), 'gi');
+    const matches = newText.match(regex);
+    
+    if (matches && matches.length > 0) {
+      newText = newText.replace(regex, replacement);
+      replacements.push({ original: sw.word, replacement });
+    }
+  }
+  
+  return {
+    newText,
+    replacedCount: replacements.length,
+    replacements,
+  };
+}
+
+/**
+ * 转义正则表达式特殊字符
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * 获取风险等级描述
  */
 export function getSeverityLabel(severity: string): string {
