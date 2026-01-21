@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
+import { parseCharacterCard, convertToAppFormat, extractAvatarFromFile } from '@/utils/characterCardParser';
 
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,6 +38,8 @@ const FriendsPage: React.FC = () => {
   const [uploadingRingtone, setUploadingRingtone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ringtoneInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
   
   // 敏感词检测相关状态
   const [sensitiveWarningOpen, setSensitiveWarningOpen] = useState(false);
@@ -453,6 +456,76 @@ const FriendsPage: React.FC = () => {
     }
   };
 
+  // 导入角色卡
+  const handleImportCard = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    setImporting(true);
+    try {
+      const result = await parseCharacterCard(file);
+      
+      if (!result.success || !result.data) {
+        toast.error(result.error || '导入失败');
+        return;
+      }
+      
+      const { name: cardName, persona: cardPersona, openingLine: cardOpeningLine } = convertToAppFormat(result.data);
+      
+      // 尝试提取头像（如果是PNG文件）
+      let finalAvatarUrl = '';
+      if (file.type.startsWith('image/')) {
+        const avatarBase64 = await extractAvatarFromFile(file);
+        if (avatarBase64) {
+          // 将base64转为文件并上传
+          try {
+            const response = await fetch(avatarBase64);
+            const blob = await response.blob();
+            const avatarFile = new File([blob], `imported_${Date.now()}.png`, { type: 'image/png' });
+            
+            const fileName = `${user.id}/${Date.now()}.png`;
+            const { error: uploadError } = await supabase.storage
+              .from('avatars')
+              .upload(fileName, avatarFile, { upsert: true });
+            
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+              finalAvatarUrl = publicUrl;
+            }
+          } catch (uploadErr) {
+            console.error('Avatar upload error:', uploadErr);
+          }
+        }
+      }
+      
+      // 创建角色
+      const { error } = await supabase.from('characters').insert({
+        user_id: user.id,
+        name: cardName,
+        persona: cardPersona,
+        opening_line: cardOpeningLine,
+        avatar_url: finalAvatarUrl || null,
+      });
+      
+      if (error) {
+        toast.error('创建角色失败');
+        return;
+      }
+      
+      toast.success(`成功导入角色: ${cardName}`);
+      fetchCharacters();
+      
+    } catch (err) {
+      console.error('Import error:', err);
+      toast.error('导入失败');
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background/80 backdrop-blur-sm p-4">
       <input
@@ -461,6 +534,13 @@ const FriendsPage: React.FC = () => {
         accept="image/*"
         className="hidden"
         onChange={handleAvatarSelect}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".png,.json,.jsonl"
+        className="hidden"
+        onChange={handleImportCard}
       />
 
       {/* Header */}
@@ -793,6 +873,37 @@ const FriendsPage: React.FC = () => {
               </Tabs>
             ) : (
               <div className="space-y-4 mt-4">
+                {/* Import Character Card Button */}
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={importing}
+                  className="w-full py-3 rounded-xl border-2 border-dashed border-purple-300 bg-purple-50/50 text-purple-600 font-medium flex items-center justify-center gap-2 hover:bg-purple-100/50 transition-colors disabled:opacity-50"
+                >
+                  {importing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      导入中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      导入酒馆角色卡
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-gray-400 text-center -mt-2">
+                  支持 PNG（带嵌入数据）、JSON、JSONL 格式
+                </p>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-gray-400">或手动创建</span>
+                  </div>
+                </div>
+
                 {/* Avatar Upload */}
                 <div className="flex justify-center">
                   <button
