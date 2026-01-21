@@ -232,6 +232,7 @@ export type Database = {
           sticker_enabled: boolean | null
           transfer_enabled: boolean | null
           updated_at: string
+          use_novel_format: boolean | null
           user_id: string
           voice_id: string | null
           voice_mode: string | null
@@ -252,6 +253,7 @@ export type Database = {
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
+          use_novel_format?: boolean | null
           user_id: string
           voice_id?: string | null
           voice_mode?: string | null
@@ -272,6 +274,7 @@ export type Database = {
           sticker_enabled?: boolean | null
           transfer_enabled?: boolean | null
           updated_at?: string
+          use_novel_format?: boolean | null
           user_id?: string
           voice_id?: string | null
           voice_mode?: string | null
