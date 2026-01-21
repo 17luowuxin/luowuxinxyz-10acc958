@@ -6,15 +6,98 @@ interface ParsedSegment {
 }
 
 /**
- * 解析小说模式的文本，区分不同类型的内容
+ * 指令前缀说明：
+ * - /旁白 或 [旁白] - 标记为旁白叙述
+ * - /对话 或 [对话] - 标记为角色对话
+ * - /动作 或 [动作] - 标记为动作描写
+ * - /想法 或 [想法] - 标记为心理活动
+ * 
+ * 自动检测规则（不使用指令时）：
  * - 旁白：普通叙述文字
  * - 对话：「」、『』、""、"" 等引号包裹的内容
  * - 动作：*内容* 包裹的描写
  * - 心理：（）、() 括号包裹的内心独白
  */
+
+// 指令映射表
+const COMMAND_MAP: Record<string, ParsedSegment['type']> = {
+  '旁白': 'narration',
+  '对话': 'dialogue', 
+  '动作': 'action',
+  '想法': 'thought',
+  '心理': 'thought',
+  '内心': 'thought',
+};
+
+// 匹配指令的正则：/指令 内容 或 [指令] 内容
+const COMMAND_REGEX = /(?:\/|【|［|\[)(旁白|对话|动作|想法|心理|内心)(?:】|］|\]|：|:|\s)\s*(.+?)(?=(?:\/|【|［|\[)(?:旁白|对话|动作|想法|心理|内心)|$)/gs;
+
+/**
+ * 解析带指令的文本
+ */
+function parseWithCommands(text: string): ParsedSegment[] | null {
+  const segments: ParsedSegment[] = [];
+  let hasCommands = false;
+  
+  // 检查是否包含指令
+  const commandPattern = /(?:\/|【|［|\[)(旁白|对话|动作|想法|心理|内心)(?:】|］|\]|：|:|\s)/;
+  if (!commandPattern.test(text)) {
+    return null; // 没有指令，返回null让自动检测接管
+  }
+  
+  // 重置正则的lastIndex
+  COMMAND_REGEX.lastIndex = 0;
+  
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = COMMAND_REGEX.exec(text)) !== null) {
+    hasCommands = true;
+    
+    // 添加指令前的普通文本（如果有）
+    if (match.index > lastIndex) {
+      const beforeText = text.slice(lastIndex, match.index).trim();
+      if (beforeText) {
+        segments.push({ type: 'narration', content: beforeText });
+      }
+    }
+    
+    const command = match[1];
+    const content = match[2].trim();
+    const type = COMMAND_MAP[command] || 'narration';
+    
+    if (content) {
+      segments.push({ type, content });
+    }
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // 添加剩余文本
+  if (lastIndex < text.length) {
+    const remaining = text.slice(lastIndex).trim();
+    if (remaining) {
+      segments.push({ type: 'narration', content: remaining });
+    }
+  }
+  
+  return hasCommands ? segments : null;
+}
+
+/**
+ * 解析小说模式的文本，区分不同类型的内容
+ * 优先使用指令解析，如果没有指令则使用自动检测
+ */
 export function parseNovelModeText(text: string): ParsedSegment[] {
   if (!text) return [];
   
+  // 首先尝试使用指令解析
+  const commandSegments = parseWithCommands(text);
+  if (commandSegments && commandSegments.length > 0) {
+    return commandSegments;
+  }
+  
+  // 没有指令，使用自动检测
   const segments: ParsedSegment[] = [];
   
   // 正则表达式匹配不同类型的内容
