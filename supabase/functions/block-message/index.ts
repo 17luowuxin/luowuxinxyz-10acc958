@@ -7,6 +7,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// 用户配置里通常存的是 base_url（例如 https://xxx.com/v1），这里统一补全为 OpenAI 兼容的 chat/completions 端点
+const normalizeChatCompletionsUrl = (input: string) => {
+  const trimmed = (input || '').trim();
+  if (!trimmed) return trimmed;
+
+  const url = trimmed.replace(/\/+$/g, '');
+
+  // 已经是完整端点
+  if (url.endsWith('/chat/completions')) return url;
+
+  // 只有域名（无路径）时，默认补 /v1/chat/completions
+  if (/^https?:\/\/[^/]+$/.test(url)) {
+    return `${url}/v1/chat/completions`;
+  }
+
+  // 其他情况（例如 .../v1、.../openai/v1 等），补 /chat/completions
+  return `${url}/chat/completions`;
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -162,6 +181,9 @@ serve(async (req) => {
       if (!finalApiKey) {
         throw new Error('No API key available');
       }
+
+      // 兼容用户传入 base_url（例如 https://xxx.com/v1）
+      finalApiUrl = normalizeChatCompletionsUrl(finalApiUrl);
 
       // 批量生成消息
       for (let i = 0; i < messagesToGenerate; i++) {
@@ -410,6 +432,8 @@ ${character.persona || '一个温柔体贴的人'}
       if (!finalApiKey) {
         throw new Error('No API key available');
       }
+
+      finalApiUrl = normalizeChatCompletionsUrl(finalApiUrl);
 
       const response = await fetch(finalApiUrl, {
         method: 'POST',
