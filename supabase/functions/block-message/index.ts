@@ -40,15 +40,27 @@ serve(async (req) => {
 
     if (action === 'generate_block_message') {
       
-      // 获取角色信息
+      // 获取角色信息（包含reply_mode）
       const { data: character } = await supabase
         .from('characters')
-        .select('name, persona, avatar_url')
+        .select('name, persona, avatar_url, reply_mode')
         .eq('id', characterId)
         .single();
 
       if (!character) {
         throw new Error('Character not found');
+      }
+
+      // 小说模式不支持拉黑消息功能，只有在线模式才生效
+      if (character.reply_mode === 'novel') {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          messages: [],
+          skipped: true,
+          reason: '小说模式不支持拉黑消息功能'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // 获取拉黑记录
