@@ -168,6 +168,8 @@ const SettingsPage: React.FC = () => {
   const [showSpaceImageKey, setShowSpaceImageKey] = useState(false);
   const [spaceImageConfigured, setSpaceImageConfigured] = useState(false);
   const [testingSpaceImage, setTestingSpaceImage] = useState(false);
+  const [spaceImageAvailableModels, setSpaceImageAvailableModels] = useState<string[]>([]);
+  const [fetchingSpaceImageModels, setFetchingSpaceImageModels] = useState(false);
 
   // Unsplash 免费配图 state
   const [unsplashEnabled, setUnsplashEnabled] = useState(false);
@@ -860,9 +862,10 @@ const SettingsPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: spaceImageModel || 'gemini-3.0-pro-image-preview-lite',
-          size: '512*512',
+          model: spaceImageModel || 'dall-e-3',
+          size: '1024x1024',
           prompt: '一只可爱的猫咪',
+          n: 1,
         }),
       });
 
@@ -881,6 +884,40 @@ const SettingsPage: React.FC = () => {
       toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setTestingSpaceImage(false);
+    }
+  };
+
+  // 获取空间图片API可用模型
+  const fetchSpaceImageModels = async () => {
+    if (!spaceImageApiKey || !spaceImageApiUrl) {
+      toast.error('请先填写API Key和URL');
+      return;
+    }
+
+    setFetchingSpaceImageModels(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-models', {
+        body: {
+          apiKey: spaceImageApiKey,
+          baseUrl: spaceImageApiUrl,
+        },
+      });
+
+      if (error) {
+        toast.error(`获取模型失败: ${error.message}`);
+        return;
+      }
+
+      if (data.success && data.models) {
+        setSpaceImageAvailableModels(data.models);
+        toast.success(`获取到 ${data.models.length} 个模型`);
+      } else {
+        toast.error(data.error || '获取模型失败');
+      }
+    } catch (error) {
+      toast.error('获取模型列表失败');
+    } finally {
+      setFetchingSpaceImageModels(false);
     }
   };
 
@@ -2231,14 +2268,52 @@ const SettingsPage: React.FC = () => {
               <label className="text-sm font-medium text-emerald-600 mb-2 block">
                 模型名称 (可选)
               </label>
-              <Input
-                placeholder="例如: gemini-3.0-pro-image-preview-lite"
-                value={spaceImageModel}
-                onChange={(e) => setSpaceImageModel(e.target.value)}
-                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
-              />
+              
+              {/* Model Selection - show dropdown if models fetched */}
+              {spaceImageAvailableModels.length > 0 ? (
+                <select
+                  value={spaceImageModel}
+                  onChange={(e) => setSpaceImageModel(e.target.value)}
+                  className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  style={{ 
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '20px'
+                  }}
+                >
+                  <option value="">使用API默认模型</option>
+                  {spaceImageAvailableModels.map((model, index) => (
+                    <option key={index} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  placeholder="例如: dall-e-3, gpt-image-1"
+                  value={spaceImageModel}
+                  onChange={(e) => setSpaceImageModel(e.target.value)}
+                  className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                />
+              )}
+              
+              {/* Fetch Models Button */}
+              <button
+                onClick={fetchSpaceImageModels}
+                disabled={fetchingSpaceImageModels || !spaceImageApiKey || !spaceImageApiUrl}
+                className="mt-2 w-full py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-sm font-medium flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+              >
+                {fetchingSpaceImageModels ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {spaceImageAvailableModels.length > 0 ? '重新获取模型' : '自动获取模型'}
+              </button>
+              
               <p className="text-xs text-gray-400 mt-1.5">
-                留空使用API默认模型
+                点击上方按钮自动获取可用模型，或手动输入模型名称
               </p>
             </div>
 
