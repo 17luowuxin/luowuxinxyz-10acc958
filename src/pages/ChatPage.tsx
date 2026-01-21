@@ -18,6 +18,7 @@ import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 import VoiceWaveform from '@/components/chat/VoiceWaveform';
 import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 import { BlockCharacterDialog } from '@/components/chat/BlockCharacterDialog';
+import { usePushTrigger } from '@/hooks/usePushTrigger';
 import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 import { NovelModeText } from '@/utils/novelModeParser';
 // 头像装饰图片
@@ -223,6 +224,9 @@ const ChatPage: React.FC = () => {
 
   // 音频播放队列 - 确保语音串行播放
   const audioQueue = useAudioPlaybackQueue();
+  
+  // 推送通知触发器
+  const { setCurrentChat, triggerPush, isPageVisible } = usePushTrigger();
 
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -323,8 +327,16 @@ const ChatPage: React.FC = () => {
       fetchProfile();
       fetchApiConfig();
       fetchUserStickers();
+      
+      // 设置当前聊天，用于推送通知判断
+      setCurrentChat(characterId);
     }
-  }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers]);
+    
+    // 离开页面时清除当前聊天
+    return () => {
+      setCurrentChat(null);
+    };
+  }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers, setCurrentChat]);
 
   // 优化滚动性能 - 使用防抖
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -563,6 +575,11 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: assistantContent 
         });
+        
+        // 触发推送通知（如果用户不在页面）
+        if (characterId && character?.name && !isPageVisible.current) {
+          triggerPush(characterId, character.name, assistantContent);
+        }
         
         console.log('AI response recovered successfully');
       }
@@ -1720,6 +1737,11 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: assistantContent 
         });
+        
+        // 触发推送通知（如果用户不在页面）
+        if (characterId && character?.name && !isPageVisible.current) {
+          triggerPush(characterId, character.name, assistantContent);
+        }
       }
     } catch (err) {
       console.error('Send image error:', err);
@@ -2075,6 +2097,11 @@ const ChatPage: React.FC = () => {
                 content: msgContent,
                 audio_url: audioBase64 || null
               });
+              
+              // 触发推送通知（如果用户不在页面）
+              if (characterId && character?.name && !isPageVisible.current) {
+                triggerPush(characterId, character.name, msgContent);
+              }
             }
           }, msgDelay);
           
@@ -2237,6 +2264,11 @@ const ChatPage: React.FC = () => {
           content: cleanContent,
           audio_url: audioBase64 || null
         });
+        
+        // 触发推送通知（如果用户不在页面）
+        if (characterId && character?.name && !isPageVisible.current) {
+          triggerPush(characterId, character.name, cleanContent);
+        }
         
         // 角色语音输出：用户点名必发；偶尔模式概率发（最多1-2条）
         const userWantsVoice = isVoiceRequestedByUser(messageContent);
