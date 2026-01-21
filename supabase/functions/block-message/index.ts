@@ -253,7 +253,8 @@ ${character.persona || '一个温柔体贴的人'}
               ...previousMsgs,
               { role: 'user', content: '请发一条完整的消息表达你的心情。确保句子完整，不要被截断。' }
             ],
-            max_tokens: 300,
+             // 提高输出上限，避免句子被模型提前截断（尤其是部分聚合/中转API会更“短”）
+             max_tokens: 600,
             temperature: 0.9,
           }),
         });
@@ -457,7 +458,8 @@ ${character.persona || '一个温柔体贴的人'}
             { role: 'system', content: systemPrompt },
             { role: 'user', content: '（用户取消拉黑，重新添加你为好友了）' }
           ],
-          max_tokens: 200,
+           // 提高输出上限，避免表达被截断
+           max_tokens: 400,
           temperature: 0.8,
         }),
       });
