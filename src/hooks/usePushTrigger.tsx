@@ -37,7 +37,7 @@ export function usePushTrigger() {
     navigateRef.current = navigateFn;
   }, []);
 
-  // Show in-app notification banner
+  // Show in-app notification banner (WeChat style with avatar)
   const showInAppNotification = useCallback(async (
     characterId: string,
     characterName: string,
@@ -56,8 +56,8 @@ export function usePushTrigger() {
       // Ignore errors
     }
 
-    const truncatedContent = messageContent.length > 60 
-      ? messageContent.slice(0, 60) + '...' 
+    const truncatedContent = messageContent.length > 50 
+      ? messageContent.slice(0, 50) + '...' 
       : messageContent;
 
     const handleClick = () => {
@@ -69,15 +69,50 @@ export function usePushTrigger() {
       toast.dismiss();
     };
 
-    toast(characterName + ' 发来消息', {
-      description: truncatedContent,
-      duration: 4000,
-      position: 'top-center',
-      action: {
-        label: '查看',
-        onClick: handleClick,
-      },
-    });
+    // WeChat style notification with avatar
+    toast.custom(
+      () => (
+        <div
+          onClick={handleClick}
+          className="flex items-center gap-3 w-full max-w-sm bg-card/95 backdrop-blur-md border border-border rounded-2xl p-3 shadow-lg cursor-pointer hover:bg-accent/50 transition-colors"
+          style={{ pointerEvents: 'auto' }}
+        >
+          {/* Avatar */}
+          <div className="flex-shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={characterName}
+                className="w-12 h-12 rounded-full object-cover ring-2 ring-primary/20"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-lg">
+                {characterName.charAt(0)}
+              </div>
+            )}
+          </div>
+          
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-foreground truncate">
+              {characterName}
+            </div>
+            <div className="text-sm text-muted-foreground truncate mt-0.5">
+              {truncatedContent}
+            </div>
+          </div>
+          
+          {/* Time indicator */}
+          <div className="flex-shrink-0 text-xs text-muted-foreground">
+            刚刚
+          </div>
+        </div>
+      ),
+      {
+        duration: 4000,
+        position: 'top-center',
+      }
+    );
   }, []);
 
   // Trigger push notification for new message
