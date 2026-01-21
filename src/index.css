@@ -242,15 +242,32 @@
   html {
     @apply scroll-smooth;
     font-size: 16px !important;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100% !important;
+    -moz-text-size-adjust: 100% !important;
+    -ms-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
   }
 
   body {
     @apply bg-background text-foreground font-nunito antialiased;
-    font-size: 1rem !important;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
+    font-size: 16px !important;
+    line-height: 1.5 !important;
+    -webkit-text-size-adjust: 100% !important;
+    -moz-text-size-adjust: 100% !important;
+    -ms-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+  }
+
+  /* 强制所有文本元素使用合理的最小字体 */
+  p, span, div, input, textarea, button, a, label {
+    font-size: inherit;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+  }
+
+  /* 输入框最小字体16px防止iOS缩放 */
+  input, textarea, select {
+    font-size: 16px !important;
   }
 
   /* PWA standalone mode fix */
@@ -259,6 +276,13 @@
       font-size: 16px !important;
       -webkit-text-size-adjust: 100% !important;
       text-size-adjust: 100% !important;
+    }
+  }
+
+  /* 安卓高分辨率屏幕修复 */
+  @media screen and (min-resolution: 2dppx) {
+    html {
+      font-size: 16px !important;
     }
   }
 
