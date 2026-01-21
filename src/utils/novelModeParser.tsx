@@ -1,0 +1,187 @@
+import React from 'react';
+
+interface ParsedSegment {
+  type: 'narration' | 'dialogue' | 'action' | 'thought';
+  content: string;
+}
+
+/**
+ * 解析小说模式的文本，区分不同类型的内容
+ * - 旁白/动作：*斜体标记* 或 （括号内容）
+ * - 对话：「引号内容」或 "引号内容" 或直接的台词
+ * - 心理活动：『双引号』或内心独白
+ */
+export function parseNovelModeText(text: string): ParsedSegment[] {
+  if (!text) return [];
+  
+  const segments: ParsedSegment[] = [];
+  let remaining = text;
+  
+  // 正则表达式匹配不同类型的内容
+  const patterns = [
+    // 动作描写：*内容* 或 _内容_
+    { regex: /\*([^*]+)\*/g, type: 'action' as const },
+    // 心理活动：（内容）或 (内容)
+    { regex: /[（(]([^）)]+)[）)]/g, type: 'thought' as const },
+    // 对话：「内容」
+    { regex: /「([^」]+)」/g, type: 'dialogue' as const },
+    // 对话：『内容』
+    { regex: /『([^』]+)』/g, type: 'dialogue' as const },
+    // 对话："内容" 或 "内容"
+    { regex: /"([^"]+)"/g, type: 'dialogue' as const },
+    { regex: /"([^"]+)"/g, type: 'dialogue' as const },
+  ];
+  
+  // 收集所有匹配
+  interface Match {
+    start: number;
+    end: number;
+    content: string;
+    type: ParsedSegment['type'];
+    fullMatch: string;
+  }
+  
+  const allMatches: Match[] = [];
+  
+  for (const { regex, type } of patterns) {
+    let match;
+    const re = new RegExp(regex.source, regex.flags);
+    while ((match = re.exec(text)) !== null) {
+      allMatches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1],
+        type,
+        fullMatch: match[0]
+      });
+    }
+  }
+  
+  // 按位置排序
+  allMatches.sort((a, b) => a.start - b.start);
+  
+  // 去除重叠的匹配
+  const filteredMatches: Match[] = [];
+  let lastEnd = 0;
+  for (const match of allMatches) {
+    if (match.start >= lastEnd) {
+      filteredMatches.push(match);
+      lastEnd = match.end;
+    }
+  }
+  
+  // 构建分段
+  let currentIndex = 0;
+  for (const match of filteredMatches) {
+    // 添加匹配前的普通文本（旁白）
+    if (match.start > currentIndex) {
+      const narration = text.slice(currentIndex, match.start).trim();
+      if (narration) {
+        segments.push({ type: 'narration', content: narration });
+      }
+    }
+    
+    // 添加匹配的内容
+    segments.push({ type: match.type, content: match.content });
+    currentIndex = match.end;
+  }
+  
+  // 添加剩余的文本（旁白）
+  if (currentIndex < text.length) {
+    const narration = text.slice(currentIndex).trim();
+    if (narration) {
+      segments.push({ type: 'narration', content: narration });
+    }
+  }
+  
+  // 如果没有匹配到任何特殊格式，整个文本作为旁白
+  if (segments.length === 0 && text.trim()) {
+    segments.push({ type: 'narration', content: text.trim() });
+  }
+  
+  return segments;
+}
+
+interface NovelModeTextProps {
+  content: string;
+  baseColor?: string;
+  dialogueColor?: string;
+  narrationColor?: string;
+  actionColor?: string;
+  thoughtColor?: string;
+  fontSize?: number;
+}
+
+/**
+ * 小说模式文本渲染组件
+ * 将不同类型的内容用不同颜色显示
+ */
+export const NovelModeText: React.FC<NovelModeTextProps> = ({
+  content,
+  baseColor = '#333',
+  dialogueColor = '#e91e63',    // 对话：粉红色
+  narrationColor = '#666',       // 旁白：灰色
+  actionColor = '#9c27b0',       // 动作：紫色
+  thoughtColor = '#607d8b',      // 心理：蓝灰色
+  fontSize = 16,
+}) => {
+  const segments = parseNovelModeText(content);
+  
+  if (segments.length === 0) {
+    return <span style={{ color: baseColor }}>{content}</span>;
+  }
+  
+  const getColor = (type: ParsedSegment['type']) => {
+    switch (type) {
+      case 'dialogue': return dialogueColor;
+      case 'narration': return narrationColor;
+      case 'action': return actionColor;
+      case 'thought': return thoughtColor;
+      default: return baseColor;
+    }
+  };
+  
+  const getStyle = (type: ParsedSegment['type']): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      color: getColor(type),
+      fontSize: `${fontSize}px`,
+    };
+    
+    switch (type) {
+      case 'action':
+        return { ...base, fontStyle: 'italic' };
+      case 'thought':
+        return { ...base, fontStyle: 'italic', opacity: 0.9 };
+      case 'dialogue':
+        return { ...base, fontWeight: 500 };
+      default:
+        return base;
+    }
+  };
+  
+  const getWrapper = (type: ParsedSegment['type'], content: string) => {
+    switch (type) {
+      case 'action':
+        return `*${content}*`;
+      case 'thought':
+        return `（${content}）`;
+      case 'dialogue':
+        return `「${content}」`;
+      default:
+        return content;
+    }
+  };
+  
+  return (
+    <span>
+      {segments.map((segment, index) => (
+        <span key={index} style={getStyle(segment.type)}>
+          {getWrapper(segment.type, segment.content)}
+          {index < segments.length - 1 && segment.type !== 'dialogue' ? ' ' : ''}
+        </span>
+      ))}
+    </span>
+  );
+};
+
+export default NovelModeText;
