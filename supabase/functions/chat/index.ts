@@ -172,6 +172,7 @@ serve(async (req) => {
     let savedCustomKey = '';
     let savedBaseUrl = '';
     let savedModel = '';
+    let timeSyncEnabledFromDb = false;
     
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -205,10 +206,8 @@ serve(async (req) => {
           savedModel = modelSetting.api_key;
         }
         
-        // 时间同步设置
-        if (timeSyncSetting && timeSyncSetting.api_key === 'true') {
-          (globalThis as any).__timeSyncEnabled = true;
-        }
+        // 时间同步设置（注意：不要用 globalThis 缓存，避免跨用户/跨请求串值）
+        timeSyncEnabledFromDb = Boolean(timeSyncSetting && timeSyncSetting.api_key === 'true');
         
         // 应用历史消息限制 - 使用请求中的 historyLimit（角色级别）或从设置中读取（兼容旧版本）
         const historyLimitValue = reqHistoryLimit || (historyLimitSetting ? Number(historyLimitSetting.api_key) : 10);
@@ -348,31 +347,43 @@ serve(async (req) => {
     const userPersonaInfo = userProfile?.persona || '';
     // 优先使用请求中的replyMode，其次是从数据库加载的
     const replyMode = reqReplyMode || (globalThis as any).__replyMode || 'novel';
-    const timeSyncEnabled = (globalThis as any).__timeSyncEnabled || false;
+    const timeSyncEnabled = timeSyncEnabledFromDb;
     console.log('Reply mode:', replyMode, 'Time sync:', timeSyncEnabled);
 
     // 生成时间上下文
     let timeContextPrompt = '';
     if (timeSyncEnabled) {
-      // 使用客户端传来的时间，或者回退到服务器时间
+      // 使用客户端传来的时间，并用 offset 纠正为“客户端本地时间”（避免 Deno/容器时区影响）
       let now: Date;
       if (clientTime?.timestamp) {
-        // 使用客户端时间戳
-        now = new Date(clientTime.timestamp);
-        console.log('Using client time:', now.toISOString(), 'timezone:', clientTime.timezone);
+        const offsetMinutes = typeof clientTime.offset === 'number' && Number.isFinite(clientTime.offset)
+          ? clientTime.offset
+          : undefined;
+
+        // getTimezoneOffset(): UTC - Local（分钟）
+        // LocalTime = UTC - offset
+        // timestamp 是绝对时间（UTC epoch ms），为了让后续用 UTC getters 读到“本地时间”，这里做一次平移。
+        if (typeof offsetMinutes === 'number') {
+          now = new Date(clientTime.timestamp - offsetMinutes * 60_000);
+          console.log('Using client time (offset-adjusted):', now.toISOString(), 'tz:', clientTime.timezone, 'offset:', offsetMinutes);
+        } else {
+          now = new Date(clientTime.timestamp);
+          console.log('Using client time (no offset):', now.toISOString(), 'tz:', clientTime.timezone);
+        }
       } else {
         // 回退到服务器时间
         now = new Date();
         console.log('Using server time (fallback):', now.toISOString());
       }
-      
+
+      // 这里统一用 UTC getters（因为上面已经把时间平移到“本地时间”）
       const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-      const weekday = weekdays[now.getDay()];
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-      const day = now.getDate();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
+      const weekday = weekdays[now.getUTCDay()];
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth() + 1;
+      const day = now.getUTCDate();
+      const hour = now.getUTCHours();
+      const minute = now.getUTCMinutes();
       
       // 判断时段
       let timeOfDay = '';
@@ -403,7 +414,7 @@ serve(async (req) => {
       else if (month === 12 && day === 31) holiday = '今天是跨年夜🎊';
       
       // 判断周末
-      const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+      const isWeekend = now.getUTCDay() === 0 || now.getUTCDay() === 6;
       const weekendNote = isWeekend ? '今天是周末' : '';
       
       timeContextPrompt = `
@@ -412,6 +423,7 @@ serve(async (req) => {
 时段：${timeOfDay}
 ${weekendNote}
 ${holiday}
+如果用户询问“今天几号/星期几/现在几点”等时间信息，必须严格以上述时间为准回答，不要猜测。
 请根据这个时间自然地调整你的问候和对话内容。比如早上可以说早安，晚上可以说晚安，节日可以送祝福等。`;
     }
 

@@ -445,6 +445,12 @@ const ChatPage: React.FC = () => {
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         userApiKey: apiConfig.apiKey,
         provider: apiConfig.provider,
+        // 传递客户端本地时间信息（用于时间同步）
+        clientTime: {
+          timestamp: Date.now(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offset: new Date().getTimezoneOffset(),
+        },
       };
       
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
@@ -2593,6 +2599,12 @@ const ChatPage: React.FC = () => {
         transferEnabled: transferEnabled,
         historyLimit: historyLimit,
         useNovelFormat: useNovelFormat,
+        // 传递客户端本地时间信息（用于时间同步）
+        clientTime: {
+          timestamp: Date.now(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offset: new Date().getTimezoneOffset(),
+        },
       };
       
       body.userApiKey = apiConfig.apiKey;
@@ -3078,7 +3090,13 @@ const ChatPage: React.FC = () => {
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         replyMode: 'online',
         onlineMessageCount: '1-2',
-        historyLimit: 10
+        historyLimit: 10,
+        // 传递客户端本地时间信息（用于时间同步）
+        clientTime: {
+          timestamp: Date.now(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offset: new Date().getTimezoneOffset(),
+        },
       };
 
       body.userApiKey = apiConfig.apiKey;
