@@ -176,6 +176,9 @@ const SettingsPage: React.FC = () => {
   const [testingUnsplash, setTestingUnsplash] = useState(false);
   const [unsplashCategory, setUnsplashCategory] = useState('auto');
 
+  // 时间同步 state
+  const [timeSyncEnabled, setTimeSyncEnabled] = useState(false);
+
   useEffect(() => {
     if (user) fetchApiKeys();
   }, [user]);
@@ -354,6 +357,10 @@ const SettingsPage: React.FC = () => {
         setUnsplashConfigured(true);
       }
       if (unsplashCategorySetting) setUnsplashCategory(unsplashCategorySetting.api_key);
+      
+      // 时间同步设置
+      const timeSyncSetting = data.find(k => k.provider === 'time_sync_enabled');
+      if (timeSyncSetting) setTimeSyncEnabled(timeSyncSetting.api_key === 'true');
       
       // 判断当前使用哪种API
       if (useDefault && useDefault.api_key === 'true') {
@@ -1032,6 +1039,34 @@ const SettingsPage: React.FC = () => {
                 <Check className="w-3.5 h-3.5" /> 已配置
               </span>
             )}
+          </div>
+
+          {/* Time Sync Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50/80 to-cyan-50/80 rounded-2xl mb-4">
+            <div>
+              <p className="font-medium text-gray-800 flex items-center gap-2">
+                🕐 时间同步
+              </p>
+              <p className="text-xs text-gray-500">让AI知道当前时间、星期、节日等</p>
+            </div>
+            <button
+              onClick={async () => {
+                const newVal = !timeSyncEnabled;
+                setTimeSyncEnabled(newVal);
+                if (user) {
+                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'time_sync_enabled');
+                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'time_sync_enabled', api_key: newVal ? 'true' : 'false' });
+                  toast.success(newVal ? '时间同步已开启' : '时间同步已关闭');
+                }
+              }}
+              className={`w-14 h-8 rounded-full transition-all ${
+                timeSyncEnabled ? 'bg-blue-400' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                timeSyncEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
           </div>
 
           {/* Default API Button */}
