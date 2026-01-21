@@ -239,12 +239,27 @@
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground font-nunito antialiased;
-  }
-
   html {
     @apply scroll-smooth;
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-nunito antialiased;
+    font-size: 1rem !important;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* PWA standalone mode fix */
+  @media all and (display-mode: standalone) {
+    html, body {
+      font-size: 16px !important;
+      -webkit-text-size-adjust: 100% !important;
+      text-size-adjust: 100% !important;
+    }
   }
 
   img {
