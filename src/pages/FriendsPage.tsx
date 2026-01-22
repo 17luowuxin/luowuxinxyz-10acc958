@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
-import { parseCharacterCard, convertToAppFormat, extractAvatarFromFile } from '@/utils/characterCardParser';
+
 
 // 格式化消息时间
 const formatMessageTime = (timeStr: string): string => {
@@ -527,57 +527,28 @@ const FriendsPage: React.FC = () => {
     }
   };
 
-  // 导入角色卡
+  // 导入角色卡（简单JSON格式）
   const handleImportCard = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     
     setImporting(true);
     try {
-      const result = await parseCharacterCard(file);
+      const text = await file.text();
+      const data = JSON.parse(text);
       
-      if (!result.success || !result.data) {
-        toast.error(result.error || '导入失败');
+      // 简单格式: { name, persona, opening_line }
+      if (!data.name) {
+        toast.error('无效的角色文件：缺少角色名称');
         return;
-      }
-      
-      const { name: cardName, persona: cardPersona, openingLine: cardOpeningLine } = convertToAppFormat(result.data);
-      
-      // 尝试提取头像（如果是PNG文件）
-      let finalAvatarUrl = '';
-      if (file.type.startsWith('image/')) {
-        const avatarBase64 = await extractAvatarFromFile(file);
-        if (avatarBase64) {
-          // 将base64转为文件并上传
-          try {
-            const response = await fetch(avatarBase64);
-            const blob = await response.blob();
-            const avatarFile = new File([blob], `imported_${Date.now()}.png`, { type: 'image/png' });
-            
-            const fileName = `${user.id}/${Date.now()}.png`;
-            const { error: uploadError } = await supabase.storage
-              .from('avatars')
-              .upload(fileName, avatarFile, { upsert: true });
-            
-            if (!uploadError) {
-              const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(fileName);
-              finalAvatarUrl = publicUrl;
-            }
-          } catch (uploadErr) {
-            console.error('Avatar upload error:', uploadErr);
-          }
-        }
       }
       
       // 创建角色
       const { error } = await supabase.from('characters').insert({
         user_id: user.id,
-        name: cardName,
-        persona: cardPersona,
-        opening_line: cardOpeningLine,
-        avatar_url: finalAvatarUrl || null,
+        name: data.name,
+        persona: data.persona || '',
+        opening_line: data.opening_line || '',
       });
       
       if (error) {
@@ -585,12 +556,12 @@ const FriendsPage: React.FC = () => {
         return;
       }
       
-      toast.success(`成功导入角色: ${cardName}`);
+      toast.success(`成功导入角色: ${data.name}`);
       fetchCharacters();
       
     } catch (err) {
       console.error('Import error:', err);
-      toast.error('导入失败');
+      toast.error('导入失败，请检查文件格式');
     } finally {
       setImporting(false);
       e.target.value = '';
@@ -958,12 +929,12 @@ const FriendsPage: React.FC = () => {
                   ) : (
                     <>
                       <Upload className="w-4 h-4" />
-                      导入酒馆角色卡
+                      导入角色
                     </>
                   )}
                 </button>
                 <p className="text-xs text-gray-400 text-center -mt-2">
-                  支持 PNG（带嵌入数据）、JSON、JSONL 格式
+                  支持 JSON 格式
                 </p>
                 
                 <div className="relative">
