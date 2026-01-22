@@ -80,24 +80,9 @@ serve(async (req) => {
     }
 
     if (action === 'get_trend') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const startDate = thirtyDaysAgo.toISOString();
-
-      // 分批获取数据
-      const [usersRes, msgsRes] = await Promise.all([
-        adminClient.from('profiles')
-          .select('created_at')
-          .gte('created_at', startDate)
-          .order('created_at', { ascending: true }),
-        adminClient.from('chat_messages')
-          .select('created_at')
-          .gte('created_at', startDate)
-          .order('created_at', { ascending: true })
-          .limit(10000),
-      ]);
-
       const dateMap: Record<string, { users: number; messages: number }> = {};
+      
+      // 初始化30天的日期
       for (let i = 29; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -105,14 +90,36 @@ serve(async (req) => {
         dateMap[dateStr] = { users: 0, messages: 0 };
       }
 
-      (usersRes.data || []).forEach((item: { created_at: string }) => {
-        const date = item.created_at.split('T')[0];
-        if (dateMap[date]) dateMap[date].users++;
+      // 逐天获取精确的消息数量
+      const promises = Object.keys(dateMap).map(async (dateStr) => {
+        const startOfDay = `${dateStr}T00:00:00.000Z`;
+        const endOfDay = `${dateStr}T23:59:59.999Z`;
+        
+        const [usersRes, msgsRes] = await Promise.all([
+          adminClient.from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', startOfDay)
+            .lte('created_at', endOfDay),
+          adminClient.from('chat_messages')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', startOfDay)
+            .lte('created_at', endOfDay),
+        ]);
+        
+        return {
+          date: dateStr,
+          users: usersRes.count || 0,
+          messages: msgsRes.count || 0,
+        };
       });
 
-      (msgsRes.data || []).forEach((item: { created_at: string }) => {
-        const date = item.created_at.split('T')[0];
-        if (dateMap[date]) dateMap[date].messages++;
+      const results = await Promise.all(promises);
+      
+      results.forEach(result => {
+        if (dateMap[result.date]) {
+          dateMap[result.date].users = result.users;
+          dateMap[result.date].messages = result.messages;
+        }
       });
 
       const trend = Object.entries(dateMap)
