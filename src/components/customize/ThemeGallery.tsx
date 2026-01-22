@@ -18,6 +18,7 @@ interface Theme {
   lock_screen_video_url: string | null;
   video_background_url: string | null;
   app_icons: Record<string, string> | null;
+  desktop_widgets: string[] | null;
 }
 
 interface ThemeGalleryProps {
@@ -79,22 +80,38 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
         updateData.video_background_url = theme.video_background_url;
       }
       
-      // 合并 APP 图标
+      // 先获取现有的 app_icons
+      const { data: existingData } = await supabase
+        .from('customization')
+        .select('app_icons')
+        .eq('user_id', user.id)
+        .single();
+      
+      const existingIcons = (existingData?.app_icons as Record<string, string>) || {};
+      
+      // 合并主题图标
+      let mergedIcons = { ...existingIcons };
+      
       if (theme.app_icons && Object.keys(theme.app_icons).length > 0) {
-        // 先获取现有的 app_icons
-        const { data: existingData } = await supabase
-          .from('customization')
-          .select('app_icons')
-          .eq('user_id', user.id)
-          .single();
-        
-        const existingIcons = (existingData?.app_icons as Record<string, string>) || {};
-        
-        // 合并主题图标（主题图标覆盖现有的）
-        updateData.app_icons = {
-          ...existingIcons,
+        mergedIcons = {
+          ...mergedIcons,
           ...theme.app_icons
         };
+      }
+      
+      // 合并桌面大图 (desktop_widgets -> page_image_top/mid/bottom)
+      if (theme.desktop_widgets && theme.desktop_widgets.length > 0) {
+        const widgetKeys = ['page_image_top', 'page_image_mid', 'page_image_bottom'];
+        theme.desktop_widgets.forEach((url, index) => {
+          if (url && widgetKeys[index]) {
+            mergedIcons[widgetKeys[index]] = url;
+          }
+        });
+      }
+      
+      // 只有有变化时才更新 app_icons
+      if (Object.keys(mergedIcons).length > 0) {
+        updateData.app_icons = mergedIcons;
       }
 
       const { error } = await supabase
@@ -112,8 +129,14 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       sessionStorage.removeItem(`bg_${user.id}`);
       
       const iconCount = theme.app_icons ? Object.keys(theme.app_icons).length : 0;
+      const widgetCount = theme.desktop_widgets ? theme.desktop_widgets.filter(w => w).length : 0;
+      const description = [
+        iconCount > 0 ? `${iconCount}个APP图标` : '',
+        widgetCount > 0 ? `${widgetCount}张桌面大图` : ''
+      ].filter(Boolean).join(' + ');
+      
       toast.success(`已应用主题: ${theme.name}`, {
-        description: iconCount > 0 ? `包含 ${iconCount} 个APP图标` : undefined
+        description: description || undefined
       });
       onThemeApplied?.();
     } catch (err) {
