@@ -193,20 +193,39 @@ const AdminPage: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const [usersRes, charsRes, msgsRes, todayRes] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('characters').select('*', { count: 'exact', head: true }),
-        supabase.from('chat_messages').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true })
-          .gte('created_at', new Date().toISOString().split('T')[0]),
-      ]);
-      
-      setStats({
-        totalUsers: usersRes.count || 0,
-        totalCharacters: charsRes.count || 0,
-        totalMessages: msgsRes.count || 0,
-        todayUsers: todayRes.count || 0,
+      // 使用edge function来获取统计，绕过RLS限制
+      const { data, error } = await supabase.functions.invoke('admin-stats', {
+        body: { action: 'get_stats' }
       });
+      
+      if (error) {
+        console.error('Error from edge function:', error);
+        // Fallback to direct query (只能看到自己的数据)
+        const [usersRes, charsRes, msgsRes, todayRes] = await Promise.all([
+          supabase.from('profiles').select('*', { count: 'exact', head: true }),
+          supabase.from('characters').select('*', { count: 'exact', head: true }),
+          supabase.from('chat_messages').select('*', { count: 'exact', head: true }),
+          supabase.from('profiles').select('*', { count: 'exact', head: true })
+            .gte('created_at', new Date().toISOString().split('T')[0]),
+        ]);
+        
+        setStats({
+          totalUsers: usersRes.count || 0,
+          totalCharacters: charsRes.count || 0,
+          totalMessages: msgsRes.count || 0,
+          todayUsers: todayRes.count || 0,
+        });
+        return;
+      }
+      
+      if (data) {
+        setStats({
+          totalUsers: data.totalUsers || 0,
+          totalCharacters: data.totalCharacters || 0,
+          totalMessages: data.totalMessages || 0,
+          todayUsers: data.todayUsers || 0,
+        });
+      }
     } catch (err) {
       console.error('Error fetching stats:', err);
     }
@@ -214,56 +233,61 @@ const AdminPage: React.FC = () => {
 
   const fetchTrendData = async () => {
     try {
-      // 获取过去30天的数据
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // 使用edge function来获取趋势数据，绕过RLS限制
+      const { data, error } = await supabase.functions.invoke('admin-stats', {
+        body: { action: 'get_trend' }
+      });
       
-      const [usersRes, msgsRes] = await Promise.all([
-        supabase.from('profiles')
-          .select('created_at')
-          .gte('created_at', thirtyDaysAgo.toISOString()),
-        supabase.from('chat_messages')
-          .select('created_at')
-          .gte('created_at', thirtyDaysAgo.toISOString()),
-      ]);
-      
-      // 按日期分组
-      const dateMap: Record<string, { users: number; messages: number }> = {};
-      
-      // 初始化过去30天的日期
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        dateMap[dateStr] = { users: 0, messages: 0 };
+      if (error) {
+        console.error('Error from edge function:', error);
+        // Fallback: 直接查询（数据可能不完整）
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const [usersRes, msgsRes] = await Promise.all([
+          supabase.from('profiles')
+            .select('created_at')
+            .gte('created_at', thirtyDaysAgo.toISOString())
+            .limit(1000),
+          supabase.from('chat_messages')
+            .select('created_at')
+            .gte('created_at', thirtyDaysAgo.toISOString())
+            .limit(1000),
+        ]);
+        
+        const dateMap: Record<string, { users: number; messages: number }> = {};
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split('T')[0];
+          dateMap[dateStr] = { users: 0, messages: 0 };
+        }
+        
+        (usersRes.data || []).forEach(item => {
+          const date = item.created_at.split('T')[0];
+          if (dateMap[date]) dateMap[date].users++;
+        });
+        
+        (msgsRes.data || []).forEach(item => {
+          const date = item.created_at.split('T')[0];
+          if (dateMap[date]) dateMap[date].messages++;
+        });
+        
+        const trend = Object.entries(dateMap)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, data]) => ({
+            date: date.slice(5),
+            users: data.users,
+            messages: data.messages,
+          }));
+        
+        setTrendData(trend);
+        return;
       }
       
-      // 统计用户
-      (usersRes.data || []).forEach(item => {
-        const date = item.created_at.split('T')[0];
-        if (dateMap[date]) {
-          dateMap[date].users++;
-        }
-      });
-      
-      // 统计消息
-      (msgsRes.data || []).forEach(item => {
-        const date = item.created_at.split('T')[0];
-        if (dateMap[date]) {
-          dateMap[date].messages++;
-        }
-      });
-      
-      // 转换为数组
-      const trend = Object.entries(dateMap)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, data]) => ({
-          date: date.slice(5), // 只显示月-日
-          users: data.users,
-          messages: data.messages,
-        }));
-      
-      setTrendData(trend);
+      if (data?.trend) {
+        setTrendData(data.trend);
+      }
     } catch (err) {
       console.error('Error fetching trend data:', err);
     }
