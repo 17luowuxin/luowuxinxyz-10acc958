@@ -3578,7 +3578,7 @@ const ChatPage: React.FC = () => {
               </div>
               <button
                 className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted rounded-md transition-colors"
-                onClick={() => setShowStickerUpload(true)}
+                onClick={() => { setShowMenu(false); setShowStickerUpload(true); }}
               >
                 <Upload className="w-3 h-3" />
                 上传自定义表情包
