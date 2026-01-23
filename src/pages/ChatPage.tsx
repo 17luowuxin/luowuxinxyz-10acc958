@@ -190,6 +190,9 @@ const ChatPage: React.FC = () => {
   const [pendingStickerFile, setPendingStickerFile] = useState<{ file: File; previewUrl: string } | null>(null);
   const [uploadingSticker, setUploadingSticker] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false); // 快捷发送表情包面板
+  const [batchStickerUrls, setBatchStickerUrls] = useState(''); // 批量导入URL
+  const [importingBatch, setImportingBatch] = useState(false);
+  const [editingStickerKeywords, setEditingStickerKeywords] = useState<{ id: string; keywords: string } | null>(null);
   // 通话相关状态
   const [showCallDialog, setShowCallDialog] = useState<'voice' | 'video' | null>(null);
   const [inCall, setInCall] = useState(false);
@@ -2618,7 +2621,111 @@ const ChatPage: React.FC = () => {
     toast.success('已删除');
   };
 
-  // 快捷发送表情包（用户点击即发送，并触发AI回复）
+  // 批量导入表情包URL（自动生成关键词）
+  const handleBatchImportStickers = async () => {
+    if (!user?.id) return;
+    
+    const urls = batchStickerUrls
+      .split('\n')
+      .map(u => u.trim())
+      .filter(u => u.startsWith('http'));
+    
+    if (urls.length === 0) {
+      toast.error('请输入有效的URL（每行一个）');
+      return;
+    }
+    
+    if (urls.length > 20) {
+      toast.error('一次最多导入20个表情包');
+      return;
+    }
+    
+    setImportingBatch(true);
+    let successCount = 0;
+    
+    try {
+      for (const url of urls) {
+        try {
+          // 自动生成简单关键词（从URL或通用关键词）
+          const urlParts = url.split('/');
+          const fileName = urlParts[urlParts.length - 1].split('?')[0];
+          const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+          
+          // 用文件名或通用关键词
+          const autoKeywords = nameWithoutExt && nameWithoutExt.length > 0 && nameWithoutExt.length < 20
+            ? [nameWithoutExt, '表情', '表情包']
+            : ['表情包', '自定义表情'];
+          
+          const { data, error } = await supabase
+            .from('user_stickers')
+            .insert({
+              user_id: user.id,
+              image_url: url,
+              keywords: autoKeywords
+            })
+            .select()
+            .single();
+          
+          if (!error && data) {
+            setUserStickers(prev => [{
+              id: data.id,
+              imageUrl: url,
+              keywords: autoKeywords,
+              text: autoKeywords[0]
+            }, ...prev]);
+            successCount++;
+          }
+        } catch (err) {
+          console.error('Failed to import:', url, err);
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`成功导入 ${successCount} 个表情包`);
+        setBatchStickerUrls('');
+      } else {
+        toast.error('导入失败');
+      }
+    } finally {
+      setImportingBatch(false);
+    }
+  };
+
+  // 更新表情包关键词
+  const handleUpdateStickerKeywords = async () => {
+    if (!editingStickerKeywords || !user?.id) return;
+    
+    const keywords = editingStickerKeywords.keywords
+      .split(/[,，、\s]+/)
+      .map(k => k.trim())
+      .filter(k => k.length > 0);
+    
+    if (keywords.length === 0) {
+      toast.error('请输入至少一个关键词');
+      return;
+    }
+    
+    const { error } = await supabase
+      .from('user_stickers')
+      .update({ keywords })
+      .eq('id', editingStickerKeywords.id);
+    
+    if (error) {
+      toast.error('更新失败');
+      return;
+    }
+    
+    setUserStickers(prev => prev.map(s => 
+      s.id === editingStickerKeywords.id 
+        ? { ...s, keywords, text: keywords[0] }
+        : s
+    ));
+    
+    setEditingStickerKeywords(null);
+    toast.success('关键词已更新');
+  };
+
+
   const sendStickerDirectly = async (sticker: StickerType) => {
     if (!user?.id || !characterId || !character) return;
     setShowStickerPicker(false);
@@ -4131,13 +4238,21 @@ const ChatPage: React.FC = () => {
           </PopoverContent>
         </Popover>
 
-        {/* 表情包快捷发送弹窗 - 单独控制 */}
-        <Popover open={showStickerPicker} onOpenChange={setShowStickerPicker}>
-          <PopoverTrigger asChild>
-            <span className="hidden" />
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2 bg-background border shadow-lg z-50" align="start" side="top">
-            <div className="text-xs font-medium text-muted-foreground mb-2 px-1">点击表情包直接发送</div>
+        {/* 表情包快捷发送弹窗 - 固定左下角显示 */}
+        {showStickerPicker && (
+          <div 
+            className="absolute bottom-14 left-2 w-64 p-2 bg-background border rounded-lg shadow-lg z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-xs font-medium text-muted-foreground">点击表情包直接发送</span>
+              <button 
+                onClick={() => setShowStickerPicker(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <div className="max-h-48 overflow-y-auto">
               {userStickers.length > 0 && (
                 <div className="mb-2">
@@ -4170,8 +4285,8 @@ const ChatPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          </PopoverContent>
-        </Popover>
+          </div>
+        )}
         
         {/* 表情按钮 */}
         <Popover open={showEmoji} onOpenChange={setShowEmoji}>
@@ -4322,6 +4437,29 @@ const ChatPage: React.FC = () => {
               </p>
             </div>
             
+            {/* 批量导入URL */}
+            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+              <label className="block text-sm font-medium mb-2">批量导入URL</label>
+              <textarea
+                value={batchStickerUrls}
+                onChange={(e) => setBatchStickerUrls(e.target.value)}
+                placeholder="每行一个图片URL，例如：&#10;https://example.com/sticker1.png&#10;https://example.com/sticker2.gif"
+                className="w-full h-24 px-3 py-2 text-sm bg-background border rounded-lg resize-none"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-muted-foreground">
+                  系统将自动生成通用关键词，导入后可点击表情包修改
+                </p>
+                <Button 
+                  size="sm"
+                  onClick={handleBatchImportStickers}
+                  disabled={importingBatch || !batchStickerUrls.trim()}
+                >
+                  {importingBatch ? '导入中...' : '批量导入'}
+                </Button>
+              </div>
+            </div>
+            
             {/* 已上传的表情包列表 */}
             <div>
               <label className="block text-sm font-medium mb-2">
@@ -4334,17 +4472,22 @@ const ChatPage: React.FC = () => {
                       <img 
                         src={sticker.imageUrl} 
                         alt={sticker.text}
-                        className="w-full aspect-square object-cover rounded-lg border"
+                        className="w-full aspect-square object-cover rounded-lg border cursor-pointer hover:ring-2 hover:ring-primary"
+                        onClick={() => setEditingStickerKeywords({ id: sticker.id, keywords: sticker.keywords.join(', ') })}
                       />
                       <Button
                         variant="destructive"
                         size="icon"
                         className="absolute -top-1 -right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDeleteSticker(sticker.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSticker(sticker.id); }}
                       >
                         <X className="w-3 h-3" />
                       </Button>
-                      <div className="text-[10px] text-center text-muted-foreground truncate mt-1" title={sticker.keywords.join(', ')}>
+                      <div 
+                        className="text-[10px] text-center text-muted-foreground truncate mt-1 cursor-pointer hover:text-primary" 
+                        title={`点击编辑: ${sticker.keywords.join(', ')}`}
+                        onClick={() => setEditingStickerKeywords({ id: sticker.id, keywords: sticker.keywords.join(', ') })}
+                      >
                         {sticker.text}
                       </div>
                     </div>
@@ -4353,6 +4496,29 @@ const ChatPage: React.FC = () => {
               ) : (
                 <div className="text-center py-6 text-muted-foreground text-sm">
                   还没有上传表情包
+                </div>
+              )}
+              
+              {/* 编辑关键词弹窗 */}
+              {editingStickerKeywords && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setEditingStickerKeywords(null)}>
+                  <div className="bg-background rounded-xl p-4 w-[90%] max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+                    <h4 className="font-medium mb-3">编辑关键词</h4>
+                    <Input
+                      value={editingStickerKeywords.keywords}
+                      onChange={(e) => setEditingStickerKeywords({ ...editingStickerKeywords, keywords: e.target.value })}
+                      placeholder="输入关键词，用逗号分隔"
+                      className="mb-3"
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => setEditingStickerKeywords(null)}>
+                        取消
+                      </Button>
+                      <Button className="flex-1" onClick={handleUpdateStickerKeywords}>
+                        保存
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
