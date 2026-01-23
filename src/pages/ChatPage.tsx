@@ -4238,10 +4238,10 @@ const ChatPage: React.FC = () => {
           </PopoverContent>
         </Popover>
 
-        {/* 表情包快捷发送弹窗 - 固定左下角显示 */}
+        {/* 表情包快捷发送弹窗 - 固定左下角显示，避免和底部菜单重叠 */}
         {showStickerPicker && (
           <div 
-            className="absolute bottom-14 left-2 w-64 p-2 bg-background border rounded-lg shadow-lg z-50"
+            className="absolute bottom-28 left-2 w-64 p-2 bg-background border rounded-lg shadow-lg z-[100]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-2 px-1">
