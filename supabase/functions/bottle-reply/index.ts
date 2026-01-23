@@ -52,7 +52,7 @@ async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boo
   return { useDefault, defaultModel };
 }
 
-async function getAICompletion(messages: any[], config: AIConfig) {
+async function getAICompletion(messages: any[], config: AIConfig, maxRetries = 3): Promise<string> {
   let apiUrl: string;
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -99,66 +99,97 @@ async function getAICompletion(messages: any[], config: AIConfig) {
 
   console.log('Calling AI API:', apiUrl, 'Model:', model);
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ model, messages, max_tokens: 500, stream: false }),
-  });
+  let fullContent = '';
+  let currentMessages = [...messages];
+  let retryCount = 0;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('AI API Error:', response.status, errorText);
-    if (response.status === 429) {
-      throw new Error("请求太频繁，请稍后再试");
-    } else if (response.status === 402) {
-      throw new Error("AI额度不足，请充值");
+  while (retryCount < maxRetries) {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model, messages: currentMessages, max_tokens: 800, stream: false }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI API Error:', response.status, errorText);
+      if (response.status === 429) {
+        throw new Error("请求太频繁，请稍后再试");
+      } else if (response.status === 402) {
+        throw new Error("AI额度不足，请充值");
+      }
+      throw new Error(`AI API error: ${response.status}`);
     }
-    throw new Error(`AI API error: ${response.status}`);
+
+    const data = await response.json();
+    
+    console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
+    
+    let content = '';
+    // 尝试多种格式提取内容
+    if (data.choices?.[0]?.message?.content) {
+      content = data.choices[0].message.content;
+    } else if (data.choices?.[0]?.delta?.content) {
+      content = data.choices[0].delta.content;
+    } else if (data.choices?.[0]?.text) {
+      content = data.choices[0].text;
+    } else if (data.content) {
+      content = data.content;
+    } else if (data.result) {
+      content = data.result;
+    } else if (data.output?.text) {
+      content = data.output.text;
+    } else if (data.output?.content) {
+      content = data.output.content;
+    } else if (data.output) {
+      content = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
+    } else if (data.response) {
+      content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
+    } else if (data.text) {
+      content = data.text;
+    } else if (data.answer) {
+      content = data.answer;
+    } else if (data.message?.content) {
+      content = data.message.content;
+    } else if (typeof data === 'string') {
+      content = data;
+    }
+    
+    console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
+    
+    if (!content || content.trim() === '') {
+      console.error("Empty content from API. Full response:", JSON.stringify(data));
+      if (fullContent) {
+        break; // 已有内容则返回
+      }
+      return '(AI暂时无法回复，请稍后再试)';
+    }
+
+    fullContent += content;
+
+    // 检查是否因为长度被截断
+    const finishReason = data.choices?.[0]?.finish_reason;
+    console.log("Finish reason:", finishReason, "Content length:", fullContent.length);
+
+    if (finishReason === 'length') {
+      // 被截断了，需要续写
+      retryCount++;
+      console.log(`Response truncated, auto-continuing... (attempt ${retryCount}/${maxRetries})`);
+      
+      // 添加已生成的内容作为assistant消息，请求继续
+      currentMessages = [
+        ...messages,
+        { role: 'assistant', content: fullContent },
+        { role: 'user', content: '请继续' }
+      ];
+    } else {
+      // 正常结束
+      break;
+    }
   }
 
-  const data = await response.json();
-  
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
-  
-  let content = '';
-  // 尝试多种格式提取内容
-  if (data.choices?.[0]?.message?.content) {
-    content = data.choices[0].message.content;
-  } else if (data.choices?.[0]?.delta?.content) {
-    content = data.choices[0].delta.content;
-  } else if (data.choices?.[0]?.text) {
-    content = data.choices[0].text;
-  } else if (data.content) {
-    content = data.content;
-  } else if (data.result) {
-    content = data.result;
-  } else if (data.output?.text) {
-    content = data.output.text;
-  } else if (data.output?.content) {
-    content = data.output.content;
-  } else if (data.output) {
-    content = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
-  } else if (data.response) {
-    content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
-  } else if (data.text) {
-    content = data.text;
-  } else if (data.answer) {
-    content = data.answer;
-  } else if (data.message?.content) {
-    content = data.message.content;
-  } else if (typeof data === 'string') {
-    content = data;
-  }
-  
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
-  
-  if (!content || content.trim() === '') {
-    console.error("Empty content from API. Full response:", JSON.stringify(data));
-    return '(AI暂时无法回复，请稍后再试)';
-  }
-  
   // 清理内容 - 移除前后空白和多余换行
-  return content.trim().replace(/^\n+|\n+$/g, '');
+  return fullContent.trim().replace(/^\n+|\n+$/g, '');
 }
 
 serve(async (req) => {
