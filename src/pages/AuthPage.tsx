@@ -195,9 +195,18 @@ const AuthPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-center text-foreground mb-2">
             {getTitle()}
           </h1>
-          <p className="text-sm text-muted-foreground text-center mb-6">
+          <p className="text-sm text-muted-foreground text-center mb-4">
             {getSubtitle()}
           </p>
+          {/* 服务状态提示 */}
+          <div className="bg-amber-50/80 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4">
+            <p className="text-xs text-amber-700 dark:text-amber-300 text-center leading-relaxed">
+              💡 如遇"服务暂时不可用"，请稍等几分钟后重试。
+              <br />
+              这是云服务波动，通常会自动恢复。
+            </p>
+          </div>
+
 
           {/* 登录/注册表单 */}
           {(mode === 'login' || mode === 'signup') && (
