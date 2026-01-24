@@ -70,10 +70,17 @@ const AuthPage: React.FC = () => {
       if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
+          const msg = error.message || '';
+          if (msg.includes('Invalid login credentials')) {
             toast.error('邮箱或密码错误');
+          } else if (msg.includes('503') || msg.includes('upstream') || msg.includes('Service Unavailable')) {
+            toast.error('服务暂时不可用，请稍后再试');
+          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch')) {
+            toast.error('网络连接失败，请检查网络后重试');
+          } else if (msg) {
+            toast.error(msg);
           } else {
-            toast.error(error.message);
+            toast.error('登录失败，请稍后重试');
           }
         } else {
           toast.success('登录成功!');
@@ -88,10 +95,17 @@ const AuthPage: React.FC = () => {
         }
         const { error } = await signUp(email, password);
         if (error) {
-          if (error.message.includes('already registered')) {
+          const msg = error.message || '';
+          if (msg.includes('already registered')) {
             toast.error('该邮箱已注册');
+          } else if (msg.includes('503') || msg.includes('upstream') || msg.includes('Service Unavailable')) {
+            toast.error('服务暂时不可用，请稍后再试');
+          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch')) {
+            toast.error('网络连接失败，请检查网络后重试');
+          } else if (msg) {
+            toast.error(msg);
           } else {
-            toast.error(error.message);
+            toast.error('注册失败，请稍后重试');
           }
         } else {
           toast.success('注册成功!');
@@ -100,7 +114,8 @@ const AuthPage: React.FC = () => {
         }
       }
     } catch (error: any) {
-      toast.error('发生错误，请重试');
+      console.error('Auth error:', error);
+      toast.error('服务暂时不可用，请稍后再试');
     }
 
     setLoading(false);
