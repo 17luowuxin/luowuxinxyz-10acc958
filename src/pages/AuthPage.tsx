@@ -198,12 +198,12 @@ const AuthPage: React.FC = () => {
           <p className="text-sm text-muted-foreground text-center mb-4">
             {getSubtitle()}
           </p>
-          {/* 服务状态提示 */}
-          <div className="bg-amber-50/80 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4">
-            <p className="text-xs text-amber-700 dark:text-amber-300 text-center leading-relaxed">
-              💡 如遇"服务暂时不可用"，请稍等几分钟后重试。
+          {/* 数据清理政策说明 */}
+          <div className="bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 mb-4">
+            <p className="text-xs text-blue-700 dark:text-blue-300 text-center leading-relaxed">
+              📢 为保障服务质量，超过3个月未登录的账号数据将被清理。
               <br />
-              这是云服务波动，通常会自动恢复。
+              请定期登录以保留您的聊天记录和角色数据。
             </p>
           </div>
 
