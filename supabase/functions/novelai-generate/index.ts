@@ -200,11 +200,15 @@ serve(async (req) => {
       }
     }
 
-    // Check for vibe transfer
-    if (config.vibeTransfer && config.vibeImage) {
+    // Check for vibe transfer - 只在图片有效时才生效
+    // 由于历史数据可能存在残留配置，必须严格校验
+    if (config.vibeTransfer && config.vibeImage && config.vibeImage.trim() !== '') {
       vibeImageBase64 = await fetchImageAsBase64(config.vibeImage);
-      if (vibeImageBase64) {
-        console.log("Vibe transfer enabled with reference image");
+      if (vibeImageBase64 && vibeImageBase64.length > 100) {
+        console.log("Vibe transfer enabled with valid reference image");
+      } else {
+        console.log("Vibe transfer config exists but image invalid, ignoring");
+        vibeImageBase64 = null;
       }
     }
 
@@ -253,12 +257,17 @@ serve(async (req) => {
     }
 
     // Add vibe transfer parameters (V4/V4.5 only)
-    if (vibeImageBase64 && isV4OrNewer) {
+    // 只有在 vibeImageBase64 确实有效（长度足够）时才添加，防止无效数据导致 400 错误
+    if (vibeImageBase64 && vibeImageBase64.length > 100 && isV4OrNewer) {
       v4Params.reference_image_multiple = [{
         image: vibeImageBase64,
         strength: config.vibeStrength || 0.6,
         information_extracted: 1.0,
       }];
+      console.log("Added vibe transfer to payload, image length:", vibeImageBase64.length);
+    } else if (config.vibeTransfer) {
+      // 配置了 vibeTransfer 但图片无效，记录日志便于排查
+      console.log("Vibe transfer enabled but no valid image, skipping reference_image_multiple");
     }
 
     // V3 parameters

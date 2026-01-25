@@ -649,7 +649,18 @@ const SettingsPage: React.FC = () => {
       });
       
       if (error) {
-        toast.error(`画图失败: ${error.message}`);
+        // 尝试提取后端返回的具体错误信息
+        let detail = error.message;
+        try {
+          const resp = (error as any)?.context?.response as Response | undefined;
+          if (resp) {
+            const body = await resp.clone().json();
+            if (body?.error) detail = body.error;
+          }
+        } catch {
+          // ignore
+        }
+        toast.error(`画图失败: ${detail}`);
         return;
       }
       
