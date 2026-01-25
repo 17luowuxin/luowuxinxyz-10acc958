@@ -915,37 +915,6 @@ const FriendsPage: React.FC = () => {
               </Tabs>
             ) : (
               <div className="space-y-4 mt-4">
-                {/* Import Character Card Button */}
-                <button
-                  onClick={() => importInputRef.current?.click()}
-                  disabled={importing}
-                  className="w-full py-3 rounded-xl border-2 border-dashed border-purple-300 bg-purple-50/50 text-purple-600 font-medium flex items-center justify-center gap-2 hover:bg-purple-100/50 transition-colors disabled:opacity-50"
-                >
-                  {importing ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      导入中...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      导入角色
-                    </>
-                  )}
-                </button>
-                <p className="text-xs text-gray-400 text-center -mt-2">
-                  支持 JSON 格式
-                </p>
-                
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-2 text-gray-400">或手动创建</span>
-                  </div>
-                </div>
-
                 {/* Avatar Upload */}
                 <div className="flex justify-center">
                   <button
