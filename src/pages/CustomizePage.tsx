@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';
-import ThemeGallery from '@/components/customize/ThemeGallery';
+// ThemeGallery moved to Admin Panel - import removed
 
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
@@ -391,8 +391,7 @@ const CustomizePage: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-6 pb-24">
-        {/* Theme Gallery */}
-        <ThemeGallery onThemeApplied={fetchSettings} />
+        {/* Theme Gallery - Moved to Admin Panel, accessible via /admin */}
 
         {/* Video Background */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
