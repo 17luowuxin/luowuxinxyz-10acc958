@@ -91,8 +91,19 @@ function parseWithCommands(text: string): ParsedSegment[] | null {
 export function parseNovelModeText(text: string): ParsedSegment[] {
   if (!text) return [];
   
+  // 预处理：清理 ||| 分隔符（这些不应该出现在小说模式中）
+  let cleanedText = text
+    // 移除所有 ||| 或 || 分隔符及其周围的空白
+    .replace(/\s*\|{2,}\s*/g, '\n')
+    // 移除单独的 | 符号（但保留正常的竖线用途）
+    .replace(/^\s*\|\s*/gm, '')
+    .replace(/\s*\|\s*$/gm, '')
+    // 清理多余的换行
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  
   // 首先尝试使用指令解析
-  const commandSegments = parseWithCommands(text);
+  const commandSegments = parseWithCommands(cleanedText);
   if (commandSegments && commandSegments.length > 0) {
     return commandSegments;
   }
@@ -135,7 +146,7 @@ export function parseNovelModeText(text: string): ParsedSegment[] {
   for (const { regex, type } of patterns) {
     let match;
     const re = new RegExp(regex.source, regex.flags);
-    while ((match = re.exec(text)) !== null) {
+    while ((match = re.exec(cleanedText)) !== null) {
       allMatches.push({
         start: match.index,
         end: match.index + match[0].length,
@@ -164,7 +175,7 @@ export function parseNovelModeText(text: string): ParsedSegment[] {
   for (const match of filteredMatches) {
     // 添加匹配前的普通文本（旁白）
     if (match.start > currentIndex) {
-      const narration = text.slice(currentIndex, match.start).trim();
+      const narration = cleanedText.slice(currentIndex, match.start).trim();
       if (narration) {
         segments.push({ type: 'narration', content: narration });
       }
@@ -176,16 +187,16 @@ export function parseNovelModeText(text: string): ParsedSegment[] {
   }
   
   // 添加剩余的文本（旁白）
-  if (currentIndex < text.length) {
-    const narration = text.slice(currentIndex).trim();
+  if (currentIndex < cleanedText.length) {
+    const narration = cleanedText.slice(currentIndex).trim();
     if (narration) {
       segments.push({ type: 'narration', content: narration });
     }
   }
   
   // 如果没有匹配到任何特殊格式，整个文本作为旁白
-  if (segments.length === 0 && text.trim()) {
-    segments.push({ type: 'narration', content: text.trim() });
+  if (segments.length === 0 && cleanedText.trim()) {
+    segments.push({ type: 'narration', content: cleanedText.trim() });
   }
   
   return segments;
