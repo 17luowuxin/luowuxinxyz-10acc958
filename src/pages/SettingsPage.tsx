@@ -2645,16 +2645,6 @@ const SettingsPage: React.FC = () => {
 
         {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 
-        {/* Lock Screen Button */}
-        <Button 
-          variant="outline" 
-          className="w-full rounded-2xl py-5 bg-white/60 backdrop-blur-sm border-purple-200 text-purple-600 hover:bg-purple-50" 
-          onClick={() => navigate('/?locked=true')}
-        >
-          <Lock className="w-4 h-4 mr-2" />
-          锁定屏幕
-        </Button>
-
         {/* Logout Button */}
         <Button 
           variant="outline" 
