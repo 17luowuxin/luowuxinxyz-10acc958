@@ -1185,8 +1185,12 @@ const ChatPage: React.FC = () => {
     // 检查是否设置了 * 表示任意消息触发
     const alwaysTrigger = keywordList.includes('*') || keywordList.includes('任意') || keywordList.includes('全部');
 
+    // 检测是否是"看看你在干嘛"类请求（优先处理，直接触发生图）
+    const isWhatDoingTrigger = /(看看你?在干嘛|在干嘛|你在做什么|你在干什么|现在在做什么|现在在干嘛|你现在干嘛|看看你现在|你现在在干嘛)/.test(userInput);
+    
     const userRequestsImage =
       alwaysTrigger ||
+      isWhatDoingTrigger || // "看看你在干嘛"类请求自动触发生图
       keywordList.some((kw) => kw && input.includes(kw)) ||
       /(画|发|来|给|要|想看|看|拍|秀|展示|show).*?(图|图片|照片|自拍|一下|你|pic|photo)/.test(userInput) ||
       /(给|让|能|可以).{0,4}(我|偶).{0,4}(看|见)/.test(userInput) ||
@@ -1236,7 +1240,9 @@ const ChatPage: React.FC = () => {
       userIntentParts.push('detailed environment, background');
     }
     
-    // 检测动作请求
+    // 检测动作请求（使用之前已定义的isWhatDoingTrigger）
+    const isWhatDoingRequest = isWhatDoingTrigger;
+    
     const actionKeywords: Record<string, string> = {
       '在干嘛': 'action, doing something',
       '在做什么': 'action, activity',
@@ -1255,6 +1261,23 @@ const ChatPage: React.FC = () => {
       '抱': 'hugging, embrace',
       '亲': 'kissing',
       '牵手': 'holding hands',
+      // 扩展更多动作关键词
+      '看书': 'reading book',
+      '听音乐': 'listening to music, headphones',
+      '玩手机': 'using smartphone, looking at phone',
+      '做饭': 'cooking, in kitchen',
+      '化妆': 'applying makeup, mirror',
+      '工作': 'working, at desk',
+      '学习': 'studying, books',
+      '画画': 'drawing, painting',
+      '弹琴': 'playing piano',
+      '唱歌': 'singing',
+      '跳舞': 'dancing',
+      '健身': 'exercising, workout',
+      '瑜伽': 'yoga, stretching',
+      '发呆': 'spacing out, relaxed',
+      '想你': 'thinking, gentle smile',
+      '等你': 'waiting, looking forward',
     };
     for (const [zh, en] of Object.entries(actionKeywords)) {
       if (userInput.includes(zh) || reply.includes(zh)) {
@@ -1336,6 +1359,41 @@ const ChatPage: React.FC = () => {
         }
         promptParts.push(translated);
       }
+    }
+    
+    // 如果是"看看你在干嘛"请求，深度提取AI回复中的动作描述（现在可以使用zhToEnMap了）
+    if (isWhatDoingRequest && reply) {
+      // 从AI回复中提取具体动作描述
+      const actionPatterns = [
+        /我?(?:正在|在|刚|刚刚)([^，。！？\n]{2,20})/g,
+        /(?:现在|此刻|这会儿)([^，。！？\n]{2,20})/g,
+        /(?:躺在|坐在|站在|趴在|靠在|窝在)([^，。！？\n]{2,15})/g,
+        /(?:穿着|身穿|身着|换上了?)([^，。！？\n]{2,15})/g,
+      ];
+      
+      for (const pattern of actionPatterns) {
+        const matches = reply.matchAll(pattern);
+        for (const m of matches) {
+          if (m[1]) {
+            const extracted = m[1].trim();
+            // 尝试翻译提取的内容
+            let translated = extracted;
+            for (const [zh, en] of Object.entries(zhToEnMap)) {
+              if (extracted.includes(zh)) {
+                translated = en;
+                break;
+              }
+            }
+            if (translated !== extracted) {
+              promptParts.push(translated);
+            } else {
+              // 没有匹配到翻译，添加原文（NovelAI可以理解部分中文）
+              promptParts.push(extracted);
+            }
+          }
+        }
+      }
+      console.log('What-doing request: extracted actions from AI reply:', promptParts.slice(0, 5));
     }
     
     console.log('User intent:', userIntentParts);
