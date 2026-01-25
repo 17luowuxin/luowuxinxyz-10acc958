@@ -5,13 +5,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// NovelAI可用的模型列表
+// NovelAI可用的模型列表 - 官方最新模型列表
 const NOVELAI_MODELS = [
-  { id: 'nai-diffusion-4-curated-preview', name: 'NAI Diffusion V4 (Curated)', description: '最新模型，高质量输出' },
-  { id: 'nai-diffusion-3', name: 'NAI Diffusion V3 (Anime Full)', description: '动漫风格，完整版' },
-  { id: 'nai-diffusion-2', name: 'NAI Diffusion V2', description: '上一代模型' },
-  { id: 'safe-diffusion', name: 'Safe Diffusion', description: '安全版本' },
-  { id: 'nai-diffusion-furry', name: 'NAI Diffusion Furry', description: 'Furry风格' },
+  // NEW - V4.5 最新模型
+  { id: 'nai-diffusion-4-5-curated', name: 'NAI Diffusion V4.5 Curated', description: '最新模型，精选数据集训练，推荐流媒体使用' },
+  { id: 'nai-diffusion-4-5-full', name: 'NAI Diffusion V4.5 Full', description: '最新最强模型' },
+  // V4 模型
+  { id: 'nai-diffusion-4-curated-preview', name: 'NAI Diffusion V4 Curated', description: '精选模型，不再推荐使用' },
+  { id: 'nai-diffusion-4-full', name: 'NAI Diffusion V4 Full', description: 'V4完整模型' },
+  // Legacy 旧版模型
+  { id: 'nai-diffusion-3', name: 'NAI Diffusion Anime V3', description: '旧版动漫模型，不再推荐' },
+  { id: 'nai-diffusion-furry-3', name: 'NAI Diffusion Furry V3', description: 'Furry风格V3' },
 ];
 
 serve(async (req) => {

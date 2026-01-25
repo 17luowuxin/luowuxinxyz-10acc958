@@ -105,19 +105,20 @@ serve(async (req) => {
       });
     }
 
-    const modelId = config.model || "nai-diffusion-4-full";
-    const isV4 = modelId.includes("diffusion-4");
+    const modelId = config.model || "nai-diffusion-4-5-full";
+    // V4 和 V4.5 都使用 v4_prompt 格式
+    const isV4OrNewer = modelId.includes("diffusion-4") || modelId.includes("diffusion-4-5");
     
     // User configurable parameters with defaults
     const userSteps = config.steps || 28;
-    const userScale = config.scale || (isV4 ? 6.0 : 7.0);
+    const userScale = config.scale || (isV4OrNewer ? 6.0 : 7.0);
     const userSampler = config.sampler || "k_euler_ancestral";
-    const userWidth = config.width || (isV4 ? 832 : 640);
-    const userHeight = config.height || (isV4 ? 1216 : 640);
+    const userWidth = config.width || (isV4OrNewer ? 832 : 640);
+    const userHeight = config.height || (isV4OrNewer ? 1216 : 640);
     
     console.log("Generating image with NovelAI:", {
       model: modelId,
-      isV4,
+      isV4OrNewer,
       steps: userSteps,
       scale: userScale,
       sampler: userSampler,
@@ -221,8 +222,8 @@ serve(async (req) => {
       v4Params.strength = config.referenceStrength || 0.6;
     }
 
-    // Add vibe transfer parameters (V4 only)
-    if (vibeImageBase64 && isV4) {
+    // Add vibe transfer parameters (V4/V4.5 only)
+    if (vibeImageBase64 && isV4OrNewer) {
       v4Params.reference_image_multiple = [{
         image: vibeImageBase64,
         strength: config.vibeStrength || 0.6,
@@ -251,10 +252,10 @@ serve(async (req) => {
     }
 
     const novelaiPayload = {
-      input: isV4 ? "" : prompt,
+      input: isV4OrNewer ? "" : prompt,
       model: modelId,
       action: actionType,
-      parameters: isV4 ? v4Params : v3Params,
+      parameters: isV4OrNewer ? v4Params : v3Params,
     };
     
     console.log("NovelAI payload:", JSON.stringify(novelaiPayload, null, 2));

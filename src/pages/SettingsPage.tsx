@@ -142,6 +142,14 @@ const SettingsPage: React.FC = () => {
   const [novelaiVibeStrength, setNovelaiVibeStrength] = useState(0.6);
   const [showImg2ImgParams, setShowImg2ImgParams] = useState(false);
   
+  // NovelAI 测试画图 state
+  const [novelaiTestPrompt, setNovelaiTestPrompt] = useState('');
+  const [novelaiTestDrawing, setNovelaiTestDrawing] = useState(false);
+  const [novelaiTestResult, setNovelaiTestResult] = useState<string | null>(null);
+  
+  // NovelAI 可用模型列表
+  const [novelaiModels, setNovelaiModels] = useState<{ id: string; name: string; description: string }[]>([]);
+  
   // TTS state
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [ttsBaseUrl, setTtsBaseUrl] = useState('');
@@ -727,6 +735,43 @@ const SettingsPage: React.FC = () => {
       toast.error('连接测试失败');
     } finally {
       setTestingNovelai(false);
+    }
+  };
+  
+  // NovelAI 测试画图函数
+  const testNovelaiDraw = async () => {
+    if (!novelaiKey || !novelaiTestPrompt.trim()) {
+      toast.error('请先输入API密钥和提示词');
+      return;
+    }
+    
+    setNovelaiTestDrawing(true);
+    setNovelaiTestResult(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('novelai-generate', {
+        body: { 
+          prompt: novelaiTestPrompt.trim(),
+          userId: user?.id,
+        },
+      });
+      
+      if (error) {
+        toast.error(`画图失败: ${error.message}`);
+        return;
+      }
+      
+      if (data.success && data.imageUrl) {
+        setNovelaiTestResult(data.imageUrl);
+        toast.success('NovelAI画图成功！');
+      } else {
+        toast.error(`画图失败: ${data.error || '未知错误'}`);
+      }
+    } catch (error) {
+      toast.error('画图测试失败');
+      console.error('NovelAI test draw error:', error);
+    } finally {
+      setNovelaiTestDrawing(false);
     }
   };
 
@@ -1405,7 +1450,46 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            {/* 模型固定使用V4 Full，不再显示选择器 */}
+            {/* Model Selection - 支持 V4.5 最新模型 */}
+            <div>
+              <label className="text-sm font-medium text-pink-600 mb-2 block">
+                模型选择
+              </label>
+              <select
+                value={novelaiModel}
+                onChange={(e) => setNovelaiModel(e.target.value)}
+                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-300"
+                style={{ 
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '20px'
+                }}
+              >
+                <optgroup label="NEW - V4.5 最新">
+                  <option value="nai-diffusion-4-5-curated">V4.5 Curated (推荐)</option>
+                  <option value="nai-diffusion-4-5-full">V4.5 Full (最强)</option>
+                </optgroup>
+                <optgroup label="V4">
+                  <option value="nai-diffusion-4-curated-preview">V4 Curated</option>
+                  <option value="nai-diffusion-4-full">V4 Full</option>
+                </optgroup>
+                <optgroup label="Legacy - 旧版">
+                  <option value="nai-diffusion-3">Anime V3</option>
+                  <option value="nai-diffusion-furry-3">Furry V3</option>
+                </optgroup>
+                {novelaiModels.length > 0 && (
+                  <optgroup label="从API获取">
+                    {novelaiModels.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <p className="text-xs text-gray-400 mt-1.5">
+                V4.5是官方最新模型，推荐使用V4.5 Curated或V4.5 Full
+              </p>
+            </div>
 
             {/* Style Template Selection */}
             <div>
@@ -2063,6 +2147,60 @@ const SettingsPage: React.FC = () => {
             >
               保存NovelAI配置
             </Button>
+            
+            {/* NovelAI 测试画图区域 */}
+            <div className="mt-6 pt-6 border-t border-pink-100">
+              <div className="flex items-center gap-2 mb-3">
+                <Brush className="w-4 h-4 text-pink-500" />
+                <span className="text-sm font-medium text-gray-700">NovelAI 测试画图</span>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">
+                输入提示词测试NovelAI图片生成效果
+              </p>
+              
+              <div className="flex gap-2">
+                <Input
+                  placeholder="输入绘图提示词，如：1girl, cute anime girl, smile"
+                  value={novelaiTestPrompt}
+                  onChange={(e) => setNovelaiTestPrompt(e.target.value)}
+                  className="flex-1 rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !novelaiTestDrawing) {
+                      testNovelaiDraw();
+                    }
+                  }}
+                />
+                <Button
+                  onClick={testNovelaiDraw}
+                  disabled={novelaiTestDrawing || !novelaiKey || !novelaiTestPrompt.trim()}
+                  className="px-6 h-12 rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium"
+                >
+                  {novelaiTestDrawing ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Brush className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+              
+              {/* 绘图结果展示 */}
+              {novelaiTestResult && (
+                <div className="mt-4 relative">
+                  <img
+                    src={novelaiTestResult}
+                    alt="NovelAI生成的图片"
+                    className="w-full rounded-2xl shadow-lg border border-pink-100"
+                    style={{ maxHeight: '300px', objectFit: 'contain', backgroundColor: '#fdf2f8' }}
+                  />
+                  <button
+                    onClick={() => setNovelaiTestResult(null)}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
