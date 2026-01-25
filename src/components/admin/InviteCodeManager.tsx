@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Ticket, Plus, Copy, Trash2, Check, RefreshCw } from 'lucide-react';
+import { Ticket, Plus, Copy, Trash2, Check, RefreshCw, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -166,6 +166,64 @@ const InviteCodeManager: React.FC = () => {
     }
   };
 
+  // 导出为 CSV
+  const handleExportCSV = () => {
+    const unusedCodes = codes.filter(c => !c.is_used);
+    if (unusedCodes.length === 0) {
+      toast.error('没有可用的邀请码可导出');
+      return;
+    }
+
+    const headers = ['邀请码', '备注', '创建时间'];
+    const rows = unusedCodes.map(c => [
+      c.code,
+      c.note || '',
+      new Date(c.created_at).toLocaleString('zh-CN')
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `邀请码_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`已导出 ${unusedCodes.length} 个邀请码`);
+  };
+
+  // 导出为 Excel (实际上是 TSV，Excel 可直接打开)
+  const handleExportExcel = () => {
+    const unusedCodes = codes.filter(c => !c.is_used);
+    if (unusedCodes.length === 0) {
+      toast.error('没有可用的邀请码可导出');
+      return;
+    }
+
+    const headers = ['邀请码', '备注', '创建时间'];
+    const rows = unusedCodes.map(c => [
+      c.code,
+      c.note || '',
+      new Date(c.created_at).toLocaleString('zh-CN')
+    ]);
+
+    const tsvContent = [headers, ...rows]
+      .map(row => row.join('\t'))
+      .join('\n');
+
+    const blob = new Blob(['\uFEFF' + tsvContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `邀请码_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.xls`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`已导出 ${unusedCodes.length} 个邀请码`);
+  };
+
   const unusedCount = codes.filter(c => !c.is_used).length;
   const usedCount = codes.filter(c => c.is_used).length;
 
@@ -228,14 +286,22 @@ const InviteCodeManager: React.FC = () => {
         </div>
 
         {/* 操作按钮 */}
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleCopyAll} className="flex-1">
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" size="sm" onClick={handleCopyAll}>
             <Copy className="w-4 h-4 mr-1" />
             复制全部可用
           </Button>
-          <Button variant="outline" size="sm" onClick={handleDeleteAllUsed} className="flex-1 text-destructive hover:text-destructive">
+          <Button variant="outline" size="sm" onClick={handleDeleteAllUsed} className="text-destructive hover:text-destructive">
             <Trash2 className="w-4 h-4 mr-1" />
             清理已使用
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            <Download className="w-4 h-4 mr-1" />
+            导出 CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <Download className="w-4 h-4 mr-1" />
+            导出 Excel
           </Button>
         </div>
 
