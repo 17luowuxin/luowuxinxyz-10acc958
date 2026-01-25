@@ -718,6 +718,8 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           id: string
+          interaction_settings: Json | null
+          lively_mode: boolean | null
           name: string
           user_id: string
         }
@@ -725,6 +727,8 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          interaction_settings?: Json | null
+          lively_mode?: boolean | null
           name: string
           user_id: string
         }
@@ -732,6 +736,8 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          interaction_settings?: Json | null
+          lively_mode?: boolean | null
           name?: string
           user_id?: string
         }

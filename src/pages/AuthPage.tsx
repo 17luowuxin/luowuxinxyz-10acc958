@@ -5,62 +5,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Heart, Sparkles, Mail, Lock, KeyRound } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Heart, Sparkles, Mail, Lock } from 'lucide-react';
 
 const AuthPage: React.FC = () => {
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'update'>('login');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // 发送密码重置邮件
-  const handleResetPassword = async () => {
-    if (!email) {
-      toast.error('请输入邮箱地址');
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth?mode=update`,
-    });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('重置密码邮件已发送，请查收邮箱');
-      setMode('login');
-    }
-    setLoading(false);
-  };
-
-  // 更新密码
-  const handleUpdatePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error('密码至少需要6个字符');
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('密码修改成功!');
-      navigate('/');
-    }
-    setLoading(false);
-  };
-
-  // 检查URL参数是否是重置密码回调
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'update') {
-      setMode('update');
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,21 +76,11 @@ const AuthPage: React.FC = () => {
   };
 
   const getTitle = () => {
-    switch (mode) {
-      case 'login': return '欢迎回来 💕';
-      case 'signup': return '加入我们 ✨';
-      case 'reset': return '重置密码 🔑';
-      case 'update': return '设置新密码 🔐';
-    }
+    return mode === 'login' ? '欢迎回来 💕' : '加入我们 ✨';
   };
 
   const getSubtitle = () => {
-    switch (mode) {
-      case 'login': return '登录你的梦女小窝';
-      case 'signup': return '创建你的专属空间';
-      case 'reset': return '输入邮箱接收重置链接';
-      case 'update': return '请设置你的新密码';
-    }
+    return mode === 'login' ? '登录你的梦女小窝' : '创建你的专属空间';
   };
 
   return (
@@ -246,68 +190,12 @@ const AuthPage: React.FC = () => {
             </form>
           )}
 
-          {/* 重置密码表单 */}
-          {mode === 'reset' && (
-            <div className="space-y-4">
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="邮箱地址"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="candy"
-                size="lg"
-                className="w-full"
-                disabled={loading}
-                onClick={handleResetPassword}
-              >
-                {loading ? '发送中...' : '发送重置链接'}
-              </Button>
-            </div>
-          )}
-
-          {/* 更新密码表单 */}
-          {mode === 'update' && (
-            <div className="space-y-4">
-              <div className="relative">
-                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  type="password"
-                  placeholder="新密码 (至少6位)"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="candy"
-                size="lg"
-                className="w-full"
-                disabled={loading}
-                onClick={handleUpdatePassword}
-              >
-                {loading ? '更新中...' : '确认修改密码'}
-              </Button>
-            </div>
-          )}
-
           <div className="mt-6 text-center space-y-2">
             {mode === 'login' && (
               <>
-                <button
-                  type="button"
-                  onClick={() => setMode('reset')}
-                  className="text-sm text-muted-foreground hover:text-primary hover:underline block w-full"
-                >
-                  忘记密码?
-                </button>
+                <p className="text-xs text-muted-foreground">
+                  忘记密码? 请联系管理员重置
+                </p>
                 <button
                   type="button"
                   onClick={() => setMode('signup')}
@@ -324,15 +212,6 @@ const AuthPage: React.FC = () => {
                 className="text-sm text-primary hover:underline font-medium"
               >
                 已有账号? 立即登录
-              </button>
-            )}
-            {(mode === 'reset' || mode === 'update') && (
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className="text-sm text-primary hover:underline font-medium"
-              >
-                返回登录
               </button>
             )}
           </div>

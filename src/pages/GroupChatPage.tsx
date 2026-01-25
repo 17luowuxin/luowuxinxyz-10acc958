@@ -139,6 +139,20 @@ const GroupChatPage: React.FC = () => {
         setGroup(data);
         const chars = data.group_members?.map((m: any) => m.characters).filter(Boolean) || [];
         setMembers(chars);
+        
+        // 加载保存的互动设置
+        if (data.lively_mode !== undefined) {
+          setLivelyMode(data.lively_mode);
+        }
+        if (data.interaction_settings) {
+          const settings = data.interaction_settings as Record<string, number>;
+          setInteractionSettings({
+            maxRounds: settings.maxRounds ?? 3,
+            firstTriggerChance: settings.firstTriggerChance ?? 50,
+            continueChanceBase: settings.continueChanceBase ?? 40,
+            continueChanceDecay: settings.continueChanceDecay ?? 10
+          });
+        }
       } else {
         toast.error('群聊不存在');
         navigate('/group');
@@ -147,6 +161,42 @@ const GroupChatPage: React.FC = () => {
       console.error('获取群聊异常:', err);
       toast.error('加载群聊失败');
     }
+  };
+
+  // 保存互动设置到数据库
+  const saveInteractionSettings = async (newSettings: typeof interactionSettings, newLivelyMode?: boolean) => {
+    if (!groupId) return;
+    
+    const updateData: any = {
+      interaction_settings: newSettings
+    };
+    
+    if (newLivelyMode !== undefined) {
+      updateData.lively_mode = newLivelyMode;
+    }
+    
+    const { error } = await supabase
+      .from('group_chats')
+      .update(updateData)
+      .eq('id', groupId);
+    
+    if (error) {
+      console.error('保存设置失败:', error);
+    }
+  };
+
+  // 更新互动设置并保存
+  const updateInteractionSetting = (key: keyof typeof interactionSettings, value: number) => {
+    const newSettings = { ...interactionSettings, [key]: value };
+    setInteractionSettings(newSettings);
+    saveInteractionSettings(newSettings);
+  };
+
+  // 切换热闹模式并保存
+  const toggleLivelyMode = () => {
+    const newMode = !livelyMode;
+    setLivelyMode(newMode);
+    saveInteractionSettings(interactionSettings, newMode);
   };
 
   const fetchMessages = async () => {
@@ -769,7 +819,7 @@ const GroupChatPage: React.FC = () => {
         
         {/* 热闹模式开关 */}
         <button
-          onClick={() => setLivelyMode(!livelyMode)}
+          onClick={toggleLivelyMode}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
             livelyMode 
               ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/30' 
@@ -806,7 +856,7 @@ const GroupChatPage: React.FC = () => {
                     min="1"
                     max="8"
                     value={interactionSettings.maxRounds}
-                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, maxRounds: parseInt(e.target.value) }))}
+                    onChange={(e) => updateInteractionSetting('maxRounds', parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
                 </div>
@@ -819,7 +869,7 @@ const GroupChatPage: React.FC = () => {
                     max="100"
                     step="5"
                     value={interactionSettings.firstTriggerChance}
-                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, firstTriggerChance: parseInt(e.target.value) }))}
+                    onChange={(e) => updateInteractionSetting('firstTriggerChance', parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
                 </div>
@@ -832,7 +882,7 @@ const GroupChatPage: React.FC = () => {
                     max="80"
                     step="5"
                     value={interactionSettings.continueChanceBase}
-                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, continueChanceBase: parseInt(e.target.value) }))}
+                    onChange={(e) => updateInteractionSetting('continueChanceBase', parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
                 </div>
@@ -845,7 +895,7 @@ const GroupChatPage: React.FC = () => {
                     max="20"
                     step="5"
                     value={interactionSettings.continueChanceDecay}
-                    onChange={(e) => setInteractionSettings(prev => ({ ...prev, continueChanceDecay: parseInt(e.target.value) }))}
+                    onChange={(e) => updateInteractionSetting('continueChanceDecay', parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
                 </div>
