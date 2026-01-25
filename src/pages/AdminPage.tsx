@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -156,6 +156,11 @@ const AdminPage: React.FC = () => {
   const [inactiveMonths, setInactiveMonths] = useState<string>('6');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
+  
+  // 密码重置状态
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
   
   // 公告管理状态
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -500,7 +505,41 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  // 批量清理不活跃用户
+  // 重置用户密码
+  const resetUserPassword = async () => {
+    if (!resetPasswordUserId || !newPassword) {
+      toast.error('请输入新密码');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      toast.error('密码至少需要6个字符');
+      return;
+    }
+    
+    setResettingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'reset_password', userId: resetPasswordUserId, newPassword }
+      });
+      
+      if (error) {
+        console.error('Error resetting password:', error);
+        toast.error('重置密码失败');
+        return;
+      }
+      
+      toast.success('密码已重置');
+      setResetPasswordUserId(null);
+      setNewPassword('');
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      toast.error('重置密码失败');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const batchCleanupInactiveUsers = async () => {
     if (inactiveUsers.length === 0) {
       toast.error('没有需要清理的用户');
@@ -1003,37 +1042,6 @@ const AdminPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 消息活跃度趋势 */}
-            <div>
-              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-pink-500" />
-                每日消息量
-              </h4>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }} 
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="messages" 
-                      stroke="hsl(330.4 81.2% 60.4%)" 
-                      strokeWidth={2}
-                      dot={{ fill: 'hsl(330.4 81.2% 60.4%)', strokeWidth: 0, r: 3 }}
-                      name="消息数量"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </CardContent>
         </Card>
 
@@ -1239,6 +1247,18 @@ const AdminPage: React.FC = () => {
                           }
                         </p>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-primary"
+                        onClick={() => {
+                          setResetPasswordUserId(user.id);
+                          setNewPassword('');
+                        }}
+                        title="重置密码"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1246,6 +1266,50 @@ const AdminPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* 密码重置弹窗 */}
+        <AlertDialog open={!!resetPasswordUserId} onOpenChange={(open) => !open && setResetPasswordUserId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5" />
+                重置用户密码
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                为用户设置新密码（最少6个字符）
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <Label htmlFor="new-password">新密码</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="请输入新密码（至少6个字符）"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setResetPasswordUserId(null);
+                setNewPassword('');
+              }}>
+                取消
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={resetUserPassword}
+                disabled={resettingPassword || newPassword.length < 6}
+                className="bg-primary"
+              >
+                {resettingPassword ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                确认重置
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* 不活跃用户清理 */}
         <Card>
