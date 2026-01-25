@@ -972,23 +972,76 @@ const FriendsPage: React.FC = () => {
               </div>
               
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">正面提示词 (Positive Prompt)</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">正面提示词 (Positive Prompt)</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        // 选择全部文本
+                        const textarea = document.getElementById('nai-positive-textarea') as HTMLTextAreaElement;
+                        if (textarea) {
+                          textarea.select();
+                          textarea.focus();
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                      title="全选文本"
+                    >
+                      全选
+                    </button>
+                    <button
+                      onClick={() => setNaiPositivePrompt('')}
+                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
+                      title="清空"
+                    >
+                      清空
+                    </button>
+                  </div>
+                </div>
                 <Textarea
+                  id="nai-positive-textarea"
                   value={naiPositivePrompt}
                   onChange={(e) => setNaiPositivePrompt(e.target.value)}
-                  className="rounded-xl min-h-[100px]"
-                  placeholder="1boy"
+                  className="rounded-xl min-h-[100px] font-mono text-sm"
+                  placeholder="1boy, blue hair, ..."
+                  style={{ wordBreak: 'break-all' }}
                 />
-                <p className="text-xs text-gray-400">描述你希望生成的图像风格，可填入画师串</p>
+                <p className="text-xs text-gray-400">描述你希望生成的图像风格，可填入画师串。点击文本框后可用 Ctrl+A 全选</p>
               </div>
               
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">负面提示词 (Negative Prompt)</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">负面提示词 (Negative Prompt)</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        const textarea = document.getElementById('nai-negative-textarea') as HTMLTextAreaElement;
+                        if (textarea) {
+                          textarea.select();
+                          textarea.focus();
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                      title="全选文本"
+                    >
+                      全选
+                    </button>
+                    <button
+                      onClick={() => setNaiNegativePrompt('')}
+                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
+                      title="清空"
+                    >
+                      清空
+                    </button>
+                  </div>
+                </div>
                 <Textarea
+                  id="nai-negative-textarea"
                   value={naiNegativePrompt}
                   onChange={(e) => setNaiNegativePrompt(e.target.value)}
-                  className="rounded-xl min-h-[80px]"
-                  placeholder="例如: lowres, bad anatomy, bad hands, text, error, missing fingers"
+                  className="rounded-xl min-h-[80px] font-mono text-sm"
+                  placeholder="lowres, bad anatomy, ..."
+                  style={{ wordBreak: 'break-all' }}
                 />
                 <p className="text-xs text-gray-400">描述你希望避免的元素</p>
               </div>
@@ -998,7 +1051,7 @@ const FriendsPage: React.FC = () => {
                   onClick={clearNaiPrompts}
                   className="flex-1 py-3 rounded-xl bg-white border border-red-200 text-red-600 font-medium hover:bg-red-50 transition-colors"
                 >
-                  清空配置
+                  清空全部
                 </button>
                 <button
                   onClick={saveNaiPrompts}
