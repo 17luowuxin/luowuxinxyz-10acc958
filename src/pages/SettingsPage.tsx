@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, ChevronDown, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -160,7 +160,7 @@ const SettingsPage: React.FC = () => {
   const [vnConfigured, setVnConfigured] = useState(false);
   const [testingVn, setTestingVn] = useState(false);
 
-  // 空间图片生成API state
+  // 图片生成API state (统一用于聊天和空间)
   const [spaceImageEnabled, setSpaceImageEnabled] = useState(false);
   const [spaceImageApiKey, setSpaceImageApiKey] = useState('');
   const [spaceImageApiUrl, setSpaceImageApiUrl] = useState('');
@@ -170,6 +170,11 @@ const SettingsPage: React.FC = () => {
   const [testingSpaceImage, setTestingSpaceImage] = useState(false);
   const [spaceImageAvailableModels, setSpaceImageAvailableModels] = useState<string[]>([]);
   const [fetchingSpaceImageModels, setFetchingSpaceImageModels] = useState(false);
+  
+  // 测试绘图功能 state
+  const [testDrawPrompt, setTestDrawPrompt] = useState('');
+  const [testDrawing, setTestDrawing] = useState(false);
+  const [testDrawResult, setTestDrawResult] = useState<string | null>(null);
 
   // Unsplash 免费配图 state
   const [unsplashEnabled, setUnsplashEnabled] = useState(false);
@@ -849,36 +854,25 @@ const SettingsPage: React.FC = () => {
 
     setTestingSpaceImage(true);
     try {
-      // 自动补全API路径
-      let apiUrl = spaceImageApiUrl.replace(/\/+$/, '');
-      if (!apiUrl.includes('/images/generations')) {
-        apiUrl = `${apiUrl}/images/generations`;
-      }
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${spaceImageApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: spaceImageModel || 'dall-e-3',
-          size: '1024x1024',
+      const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: {
           prompt: '一只可爱的猫咪',
-          n: 1,
-        }),
+          testMode: true,
+          apiKey: spaceImageApiKey,
+          apiUrl: spaceImageApiUrl,
+          model: spaceImageModel,
+        },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.data?.[0]?.url || data.data?.[0]?.b64_json) {
-          toast.success('空间图片API连接成功！');
-        } else {
-          toast.success('API响应正常，但未返回图片');
-        }
+      if (error) {
+        toast.error('连接测试失败: ' + error.message);
+        return;
+      }
+
+      if (data.success && data.imageUrl) {
+        toast.success('图片API连接成功！');
       } else {
-        const errText = await response.text();
-        toast.error(`API错误: ${response.status} - ${errText.slice(0, 100)}`);
+        toast.error(data.error || 'API响应异常');
       }
     } catch (error) {
       toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
@@ -887,7 +881,49 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  // 获取空间图片API可用模型
+  // 测试绘图功能 - 输入提示词生成图片
+  const testDrawImage = async () => {
+    if (!spaceImageApiKey || !spaceImageApiUrl) {
+      toast.error('请先填写并保存API配置');
+      return;
+    }
+    if (!testDrawPrompt.trim()) {
+      toast.error('请输入绘图提示词');
+      return;
+    }
+
+    setTestDrawing(true);
+    setTestDrawResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: {
+          prompt: testDrawPrompt.trim(),
+          testMode: true,
+          apiKey: spaceImageApiKey,
+          apiUrl: spaceImageApiUrl,
+          model: spaceImageModel,
+        },
+      });
+
+      if (error) {
+        toast.error('绘图失败: ' + error.message);
+        return;
+      }
+
+      if (data.success && data.imageUrl) {
+        setTestDrawResult(data.imageUrl);
+        toast.success('绘图成功！');
+      } else {
+        toast.error(data.error || '绘图失败');
+      }
+    } catch (error) {
+      toast.error('绘图失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setTestDrawing(false);
+    }
+  };
+
+  // 获取图片API可用模型
   const fetchSpaceImageModels = async () => {
     if (!spaceImageApiKey || !spaceImageApiUrl) {
       toast.error('请先填写API Key和URL');
@@ -2175,18 +2211,18 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 空间图片生成API配置 */}
+        {/* 图片生成API配置 (统一用于聊天和空间) */}
         <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-emerald-100/50">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center">
-                <Camera className="w-5 h-5 text-emerald-500" />
+                <Brush className="w-5 h-5 text-emerald-500" />
               </div>
               <div>
-                <h2 className="font-bold text-gray-800">空间图片生成 API</h2>
+                <h2 className="font-bold text-gray-800">图片生成 API</h2>
                 <p className="text-xs text-gray-500">
-                  配置后角色发动态时可自动生成配图
+                  统一用于角色聊天和空间动态的AI绘图
                 </p>
               </div>
             </div>
@@ -2201,7 +2237,7 @@ const SettingsPage: React.FC = () => {
           <div className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 rounded-2xl mb-4">
             <div>
               <p className="font-medium text-gray-800">启用图片生成</p>
-              <p className="text-xs text-gray-500">开启后角色发动态时自动生成配图</p>
+              <p className="text-xs text-gray-500">开启后聊天和空间都可以AI绘图</p>
             </div>
             <button
               onClick={async () => {
@@ -2317,7 +2353,7 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Test Button */}
+            {/* Test Connection Button */}
             <button
               onClick={testSpaceImageApi}
               disabled={testingSpaceImage || !spaceImageApiKey || !spaceImageApiUrl}
@@ -2337,8 +2373,62 @@ const SettingsPage: React.FC = () => {
               disabled={!spaceImageApiUrl || !spaceImageApiKey}
               className="w-full py-6 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
             >
-              保存空间图片API配置
+              保存图片API配置
             </Button>
+
+            {/* 测试绘图功能 */}
+            <div className="mt-6 pt-6 border-t border-emerald-100">
+              <div className="flex items-center gap-2 mb-3">
+                <Brush className="w-4 h-4 text-emerald-500" />
+                <span className="text-sm font-medium text-gray-700">测试绘图</span>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">
+                输入提示词测试图片生成效果
+              </p>
+              
+              <div className="flex gap-2">
+                <Input
+                  placeholder="输入绘图提示词，如：一只可爱的猫咪"
+                  value={testDrawPrompt}
+                  onChange={(e) => setTestDrawPrompt(e.target.value)}
+                  className="flex-1 rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !testDrawing) {
+                      testDrawImage();
+                    }
+                  }}
+                />
+                <Button
+                  onClick={testDrawImage}
+                  disabled={testDrawing || !spaceImageApiKey || !spaceImageApiUrl || !testDrawPrompt.trim()}
+                  className="px-6 h-12 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium"
+                >
+                  {testDrawing ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Brush className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+              
+              {/* 绘图结果展示 */}
+              {testDrawResult && (
+                <div className="mt-4 relative">
+                  <img
+                    src={testDrawResult}
+                    alt="生成的图片"
+                    className="w-full rounded-2xl shadow-lg border border-emerald-100"
+                    style={{ maxHeight: '300px', objectFit: 'contain', backgroundColor: '#f0fdf4' }}
+                  />
+                  <button
+                    onClick={() => setTestDrawResult(null)}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
