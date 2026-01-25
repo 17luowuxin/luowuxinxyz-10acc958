@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -130,6 +130,14 @@ interface InactiveUser {
   last_activity_at: string | null;
 }
 
+interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  wechat_id: string | null;
+  is_active: boolean;
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -153,6 +161,16 @@ const AdminPage: React.FC = () => {
   const [inactiveMonths, setInactiveMonths] = useState<string>('6');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
+  
+  // 公告管理状态
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '',
+    content: '',
+    wechat_id: '',
+    is_active: true
+  });
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
   
   // 编辑状态
   const [editingTheme, setEditingTheme] = useState<Theme | null>(null);
@@ -188,6 +206,7 @@ const AdminPage: React.FC = () => {
         fetchTrendData();
         fetchActivityTrend();
         fetchUserList();
+        fetchAnnouncement();
       } else {
         setIsAdmin(false);
       }
@@ -195,6 +214,68 @@ const AdminPage: React.FC = () => {
       console.error('Error checking admin role:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 获取公告
+  const fetchAnnouncement = async () => {
+    const { data } = await supabase
+      .from('announcements')
+      .select('*')
+      .limit(1)
+      .maybeSingle();
+    
+    if (data) {
+      setAnnouncement(data);
+      setAnnouncementForm({
+        title: data.title || '',
+        content: data.content || '',
+        wechat_id: data.wechat_id || '',
+        is_active: data.is_active ?? true
+      });
+    }
+  };
+
+  // 保存公告
+  const saveAnnouncement = async () => {
+    setSavingAnnouncement(true);
+    try {
+      if (announcement) {
+        // 更新
+        const { error } = await supabase
+          .from('announcements')
+          .update({
+            title: announcementForm.title,
+            content: announcementForm.content,
+            wechat_id: announcementForm.wechat_id || null,
+            is_active: announcementForm.is_active,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', announcement.id);
+        
+        if (error) throw error;
+        toast.success('公告已更新');
+      } else {
+        // 新建
+        const { error } = await supabase
+          .from('announcements')
+          .insert({
+            title: announcementForm.title,
+            content: announcementForm.content,
+            wechat_id: announcementForm.wechat_id || null,
+            is_active: announcementForm.is_active
+          });
+        
+        if (error) throw error;
+        toast.success('公告已创建');
+      }
+      
+      fetchAnnouncement();
+    } catch (err) {
+      console.error('Error saving announcement:', err);
+      toast.error('保存公告失败');
+    } finally {
+      setSavingAnnouncement(false);
     }
   };
 
@@ -223,6 +304,7 @@ const AdminPage: React.FC = () => {
       fetchTrendData();
       fetchActivityTrend();
       fetchUserList();
+      fetchAnnouncement();
       toast.success('管理员登录成功');
     } else {
       toast.error('密码错误');
@@ -831,6 +913,80 @@ const AdminPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 公告管理 */}
+        <Card className="border-purple-500/30 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-900/20 dark:to-pink-900/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-400">
+              <Megaphone className="w-5 h-5" />
+              公告管理
+            </CardTitle>
+            <CardDescription>
+              编辑登录后弹出的公告内容（用户关闭后不再显示）
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="announcement-title">公告标题</Label>
+              <Input
+                id="announcement-title"
+                placeholder="例如：梦境小手机交流群"
+                value={announcementForm.title}
+                onChange={(e) => setAnnouncementForm(prev => ({ ...prev, title: e.target.value }))}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="announcement-content">公告内容</Label>
+              <Textarea
+                id="announcement-content"
+                placeholder="公告正文内容..."
+                value={announcementForm.content}
+                onChange={(e) => setAnnouncementForm(prev => ({ ...prev, content: e.target.value }))}
+                rows={3}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="announcement-wechat">微信号（可点击复制）</Label>
+              <Input
+                id="announcement-wechat"
+                placeholder="例如：XxyLxs9201314"
+                value={announcementForm.wechat_id}
+                onChange={(e) => setAnnouncementForm(prev => ({ ...prev, wechat_id: e.target.value }))}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={announcementForm.is_active}
+                  onCheckedChange={(checked) => setAnnouncementForm(prev => ({ ...prev, is_active: checked }))}
+                />
+                <Label>启用公告</Label>
+              </div>
+              
+              <Button 
+                onClick={saveAnnouncement}
+                disabled={savingAnnouncement || !announcementForm.title}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {savingAnnouncement ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                保存公告
+              </Button>
+            </div>
+            
+            {announcement && (
+              <p className="text-xs text-muted-foreground">
+                上次更新: {new Date(announcement.id ? (announcement as any).updated_at || (announcement as any).created_at : Date.now()).toLocaleString('zh-CN')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* 数据趋势图表 */}
         <Card>

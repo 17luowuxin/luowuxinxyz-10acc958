@@ -546,12 +546,6 @@ const HomeScreen: React.FC = () => {
 
       {/* Bottom area */}
       <div className="pb-3 flex flex-col items-center gap-2 mt-4">
-        <button
-          onClick={() => navigate('/?locked=true')}
-          className="text-xs text-foreground/60 hover:text-foreground/80 transition-colors"
-        >
-          返回锁屏
-        </button>
 
         {/* Page dots */}
         <div className="flex gap-2">
