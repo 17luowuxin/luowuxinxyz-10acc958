@@ -461,8 +461,25 @@ const SettingsPage: React.FC = () => {
 
   // NovelAI functions
   const saveNovelaiSettings = async () => {
-    if (!user || !novelaiKey.trim()) {
+    if (!user) {
+      toast.error('请先登录');
+      return;
+    }
+    
+    if (!novelaiKey.trim()) {
       toast.error('请输入NovelAI API密钥');
+      return;
+    }
+
+    // 验证Token格式
+    const trimmedKey = novelaiKey.trim();
+    if (!trimmedKey.startsWith('pst-')) {
+      toast.error('NovelAI Token格式不正确，应以 pst- 开头');
+      return;
+    }
+    
+    if (trimmedKey.length < 50) {
+      toast.error('NovelAI Token长度不足，请确认复制完整');
       return;
     }
 
@@ -475,6 +492,8 @@ const SettingsPage: React.FC = () => {
       'novelai_auto_generate',
     ];
 
+    console.log('Saving NovelAI settings for user:', user.id, 'key length:', trimmedKey.length);
+
     const { error: delErr } = await supabase
       .from('api_keys')
       .delete()
@@ -482,23 +501,27 @@ const SettingsPage: React.FC = () => {
       .in('provider', providersToReplace);
 
     if (delErr) {
-      toast.error('保存失败: ' + delErr.message);
+      console.error('Delete error:', delErr);
+      toast.error('删除旧配置失败: ' + delErr.message);
       return;
     }
 
     const rows: Array<{ user_id: string; provider: string; api_key: string }> = [
-      { user_id: user.id, provider: 'novelai', api_key: novelaiKey.trim() },
+      { user_id: user.id, provider: 'novelai', api_key: trimmedKey },
       { user_id: user.id, provider: 'novelai_enabled', api_key: novelaiEnabled ? 'true' : 'false' },
       { user_id: user.id, provider: 'novelai_model', api_key: modelToSave },
       { user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' },
     ];
 
-    const { error: insErr } = await supabase.from('api_keys').insert(rows);
+    const { data: insData, error: insErr } = await supabase.from('api_keys').insert(rows).select();
+    
     if (insErr) {
+      console.error('Insert error:', insErr);
       toast.error('保存失败: ' + insErr.message);
       return;
     }
 
+    console.log('NovelAI settings saved successfully:', insData?.length, 'rows');
     setNovelaiConfigured(true);
     toast.success('NovelAI配置已保存');
   };
