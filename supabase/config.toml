@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.validate-invite-code]
 verify_jwt = false
+
+[functions.test-unsplash]
+verify_jwt = false
