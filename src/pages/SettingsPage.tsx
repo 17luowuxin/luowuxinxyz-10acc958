@@ -1056,22 +1056,20 @@ const SettingsPage: React.FC = () => {
 
     setTestingUnsplash(true);
     try {
-      const response = await fetch(`https://api.unsplash.com/search/photos?query=cat&per_page=1`, {
-        headers: {
-          'Authorization': `Client-ID ${unsplashAccessKey}`,
-        },
+      // 通过 Edge Function 测试，避免 CORS 问题
+      const { data, error } = await supabase.functions.invoke('test-unsplash', {
+        body: { accessKey: unsplashAccessKey }
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.results && data.results.length > 0) {
-          toast.success('Unsplash 连接成功！');
-        } else {
-          toast.success('API响应正常');
-        }
+      if (error) {
+        toast.error('连接测试失败: ' + error.message);
+        return;
+      }
+
+      if (data.success) {
+        toast.success(data.message || 'Unsplash 连接成功！');
       } else {
-        const errText = await response.text();
-        toast.error(`API错误: ${response.status} - ${errText.slice(0, 100)}`);
+        toast.error(data.error || '连接测试失败');
       }
     } catch (error) {
       toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
