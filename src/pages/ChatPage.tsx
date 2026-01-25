@@ -21,6 +21,7 @@ import { BlockCharacterDialog } from '@/components/chat/BlockCharacterDialog';
 import { usePushTrigger } from '@/hooks/usePushTrigger';
 import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 import { NovelModeText } from '@/utils/novelModeParser';
+import { sanitizeMessageContent } from '@/utils/messageParser';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -3937,7 +3938,9 @@ const ChatPage: React.FC = () => {
                 {(() => {
                   // 检查是否有内联转账指令
                   const transferData = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
-                  const displayContent = transferData ? removeTransferCommand(msg.content) : msg.content;
+                  // 对显示内容进行最终清理，移除所有残留的 ||| 分隔符
+                  const rawContent = transferData ? removeTransferCommand(msg.content) : msg.content;
+                  const displayContent = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
                   const showBubble = displayContent && !displayContent.startsWith('[STICKER:') && !(msg.image_url && displayContent.startsWith('[图片]'));
                   
                   // 检测是否是通话记录消息

@@ -11,19 +11,30 @@
 export function sanitizeMessageContent(content: string): string {
   if (!content) return '';
   
-  return content
+  let result = content
     // 移除开头和结尾的空白
     .trim()
     // 移除开头的各种格式字符（竖线、破折号、星号等）
     .replace(/^[\s|*\-_#>]+/g, '')
     // 移除结尾的格式字符
-    .replace(/[\s|*\-_#]+$/g, '')
-    // 完全移除 ||| 或 || 分隔符（小说模式禁止使用）
-    .replace(/\s*\|{2,}\s*/g, '\n')
-    // 移除行首/行尾的单个竖线
+    .replace(/[\s|*\-_#]+$/g, '');
+  
+  // 关键：完全移除所有 ||| 和 || 分隔符，不保留任何形式
+  // 处理各种变体：|||、| | |、|  |  |、| || 等
+  result = result
+    // 先处理带空格的变体 | | | 或 |  |  |
+    .replace(/\|\s*\|\s*\|/g, ' ')
+    // 处理连续的 ||| 或 ||
+    .replace(/\|{2,}/g, ' ')
+    // 处理单独的竖线（行首/行尾）
     .replace(/^\s*\|\s*/gm, '')
     .replace(/\s*\|\s*$/gm, '')
-    // 移除可能的 markdown 代码块标记
+    // 处理文本中间孤立的单竖线（前后有空格）
+    .replace(/\s+\|\s+/g, ' ');
+  
+  // 进一步清理
+  result = result
+    // 移除可能的 markdown 代码块标记中的竖线
     .replace(/```[\s\S]*?```/g, (match) => match.replace(/\|/g, ' '))
     // 清理多余的空格和换行
     .replace(/\n{3,}/g, '\n\n')
@@ -32,6 +43,8 @@ export function sanitizeMessageContent(content: string): string {
     .replace(/\n[\s|*\-]+/g, '\n')
     // 最终再次trim
     .trim();
+  
+  return result;
 }
 
 /**
