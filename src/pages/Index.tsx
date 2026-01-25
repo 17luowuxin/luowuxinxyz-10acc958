@@ -4,12 +4,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import LockScreen from '@/components/phone/LockScreen';
 import HomeScreen from '@/components/phone/HomeScreen';
 import PhoneFrame from '@/components/phone/PhoneFrame';
+import AnnouncementDialog, { shouldShowAnnouncement, markAnnouncementShown } from '@/components/AnnouncementDialog';
 
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isLocked, setIsLocked] = useState(true);
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
+
+  // Show announcement after login (with frequency control)
+  useEffect(() => {
+    if (user && !loading && shouldShowAnnouncement()) {
+      // Delay slightly to let the UI settle
+      const timer = setTimeout(() => {
+        setShowAnnouncement(true);
+        markAnnouncementShown();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [user, loading]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -44,13 +58,20 @@ const Index: React.FC = () => {
   }
 
   return (
-    <PhoneFrame>
-      {isLocked ? (
-        <LockScreen onUnlock={() => setIsLocked(false)} />
-      ) : (
-        <HomeScreen />
-      )}
-    </PhoneFrame>
+    <>
+      <PhoneFrame>
+        {isLocked ? (
+          <LockScreen onUnlock={() => setIsLocked(false)} />
+        ) : (
+          <HomeScreen />
+        )}
+      </PhoneFrame>
+      
+      <AnnouncementDialog 
+        open={showAnnouncement} 
+        onOpenChange={setShowAnnouncement} 
+      />
+    </>
   );
 };
 
