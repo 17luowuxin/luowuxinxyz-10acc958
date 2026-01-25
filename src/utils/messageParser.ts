@@ -18,11 +18,15 @@ export function sanitizeMessageContent(content: string): string {
     .replace(/^[\s|*\-_#>]+/g, '')
     // 移除结尾的格式字符
     .replace(/[\s|*\-_#]+$/g, '')
-    // 替换所有连续的竖线为空格（无论多少个）
-    .replace(/\|{1,}/g, ' ')
+    // 完全移除 ||| 或 || 分隔符（小说模式禁止使用）
+    .replace(/\s*\|{2,}\s*/g, '\n')
+    // 移除行首/行尾的单个竖线
+    .replace(/^\s*\|\s*/gm, '')
+    .replace(/\s*\|\s*$/gm, '')
     // 移除可能的 markdown 代码块标记
     .replace(/```[\s\S]*?```/g, (match) => match.replace(/\|/g, ' '))
-    // 清理多余的空格
+    // 清理多余的空格和换行
+    .replace(/\n{3,}/g, '\n\n')
     .replace(/\s{2,}/g, ' ')
     // 移除行首的格式字符
     .replace(/\n[\s|*\-]+/g, '\n')
