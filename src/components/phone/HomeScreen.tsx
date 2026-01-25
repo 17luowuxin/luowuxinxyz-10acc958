@@ -546,6 +546,12 @@ const HomeScreen: React.FC = () => {
 
       {/* Bottom area */}
       <div className="pb-3 flex flex-col items-center gap-2 mt-4">
+        {/* Lock screen button */}
+        <button
+          onClick={() => navigate('/?locked=true')}
+          className="w-10 h-1.5 rounded-full bg-foreground/30 hover:bg-foreground/50 transition-colors"
+          title="锁屏"
+        />
 
         {/* Page dots */}
         <div className="flex gap-2">

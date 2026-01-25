@@ -196,9 +196,9 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   };
 
   const handleDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
-    // 需要用户明确向上滑动超过100px且速度足够快才解锁
-    // 这样可以避免意外触发
-    if (info.offset.y < -100 && info.velocity.y < -50) {
+    // 需要用户明确向上滑动超过150px且速度足够快才解锁
+    // 提高阈值避免意外触发
+    if (info.offset.y < -150 && info.velocity.y < -200) {
       animate(y, -300, { duration: 0.3 });
       setTimeout(onUnlock, 300);
     } else {
