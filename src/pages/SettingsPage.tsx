@@ -2681,7 +2681,7 @@ const SettingsPage: React.FC = () => {
               if (!user) return;
               if (!window.confirm('确定要恢复所有设置为默认值吗？此操作不可撤销。')) return;
               
-              // Reset customization
+              // Reset customization - including lock screen, theme, app icons, all backgrounds
               await supabase.from('customization').update({
                 bubble_color: '#FFB5C5',
                 friend_bubble_color: '#B5D8FF',
@@ -2691,6 +2691,11 @@ const SettingsPage: React.FC = () => {
                 chat_background_url: null,
                 global_background_url: null,
                 video_background_url: null,
+                lock_screen_bg_url: null,
+                lock_screen_video_url: null,
+                space_background_url: null,
+                group_chat_background_url: null,
+                music_cover_url: null,
                 theme: 'pink',
                 font_family: 'default',
                 font_color: '#333333',
@@ -2701,6 +2706,11 @@ const SettingsPage: React.FC = () => {
                 friend_avatar_frame_url: null,
                 bubble_frame_url: null,
                 friend_bubble_frame_url: null,
+                app_icons: null,
+                novel_dialogue_color: null,
+                novel_narration_color: null,
+                novel_thought_color: null,
+                novel_action_color: null,
               } as any).eq('user_id', user.id);
               
               // Reset API settings
