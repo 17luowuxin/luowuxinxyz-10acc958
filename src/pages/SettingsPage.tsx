@@ -684,6 +684,86 @@ const SettingsPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
   
+  // 清除NovelAI数据确认弹窗状态
+  const [clearNovelaiConfirmOpen, setClearNovelaiConfirmOpen] = useState(false);
+  const [clearingNovelai, setClearingNovelai] = useState(false);
+
+  // 清除所有NovelAI数据
+  const clearAllNovelaiData = async () => {
+    if (!user) return;
+    
+    setClearingNovelai(true);
+    try {
+      // 所有NovelAI相关的provider前缀
+      const novelaiProviders = [
+        'novelai',
+        'novelai_enabled',
+        'novelai_model',
+        'novelai_auto_generate',
+        'novelai_size',
+        'novelai_steps',
+        'novelai_scale',
+        'novelai_sampler',
+        'novelai_seed',
+        'novelai_uc_preset',
+        'novelai_quality_tags',
+        'novelai_smea',
+        'novelai_smea_dyn',
+        'novelai_default_prompt',
+        'novelai_default_negative',
+      ];
+      
+      // 删除所有NovelAI配置
+      const { error } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('user_id', user.id)
+        .in('provider', novelaiProviders);
+      
+      if (error) {
+        toast.error('清除失败: ' + error.message);
+        return;
+      }
+      
+      // 同时删除所有角色专属的NAI提示词
+      const { error: charError } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('user_id', user.id)
+        .or('provider.like.nai_positive_%,provider.like.nai_negative_%');
+      
+      if (charError) {
+        console.error('清除角色NAI提示词失败:', charError);
+      }
+      
+      // 重置本地状态
+      setNovelaiKey('');
+      setNovelaiModel('nai-diffusion-4-5-curated');
+      setNovelaiAutoGenerate(false);
+      setNovelaiEnabled(true);
+      setNovelaiConfigured(false);
+      setNovelaiSize('portrait');
+      setNovelaiSteps(28);
+      setNovelaiScale(5);
+      setNovelaiSampler('k_euler_ancestral');
+      setNovelaiSeed(-1);
+      setNovelaiUcPreset(0);
+      setNovelaiQualityTags(true);
+      setNovelaiSmea(true);
+      setNovelaiSmeaDyn(false);
+      setNovelaiDefaultPrompt('masterpiece, best quality, 1girl, beautiful, detailed face, detailed eyes, long hair, anime style');
+      setNovelaiDefaultNegative('lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark');
+      
+      setClearNovelaiConfirmOpen(false);
+      toast.success('NovelAI数据已清除');
+    } catch (error) {
+      toast.error('清除失败');
+      console.error('Clear NovelAI data error:', error);
+    } finally {
+      setClearingNovelai(false);
+    }
+  };
+
   // 复制提示词
   const copyPromptToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -1454,8 +1534,65 @@ const SettingsPage: React.FC = () => {
             >
               保存NovelAI配置
             </Button>
+
+            {/* 清除数据按钮 */}
+            {novelaiConfigured && (
+              <button
+                onClick={() => setClearNovelaiConfirmOpen(true)}
+                className="w-full py-3 rounded-2xl bg-red-50 text-red-500 font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                清除所有NovelAI数据
+              </button>
+            )}
           </div>
         </div>
+
+        {/* NovelAI 清除数据确认弹窗 */}
+        <Dialog open={clearNovelaiConfirmOpen} onOpenChange={setClearNovelaiConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                确认清除NovelAI数据
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <p className="text-gray-600 text-sm">
+                此操作将清除您的所有NovelAI配置，包括：
+              </p>
+              <ul className="text-sm text-gray-500 space-y-1 list-disc list-inside">
+                <li>API Token</li>
+                <li>模型选择和生成设置</li>
+                <li>默认提示词设置</li>
+                <li>所有角色专属的提示词</li>
+              </ul>
+              <p className="text-red-500 text-sm font-medium">
+                ⚠️ 此操作不可恢复！
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setClearNovelaiConfirmOpen(false)}
+                  className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={clearAllNovelaiData}
+                  disabled={clearingNovelai}
+                  className="flex-1 py-3 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {clearingNovelai ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  确认清除
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* NovelAI 生成设置弹窗 */}
         <Dialog open={novelaiSettingsOpen} onOpenChange={setNovelaiSettingsOpen}>
