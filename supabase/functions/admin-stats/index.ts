@@ -135,6 +135,86 @@ serve(async (req) => {
       });
     }
 
+    // 获取每日活跃用户趋势（基于发送消息的唯一用户数）
+    if (action === 'get_active_users_trend') {
+      const days = 30;
+      const dateMap: Record<string, { activeUsers: number; totalSessions: number }> = {};
+      
+      // 初始化日期
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        dateMap[dateStr] = { activeUsers: 0, totalSessions: 0 };
+      }
+
+      // 获取每天的活跃用户数（发送过消息的唯一用户）
+      const promises = Object.keys(dateMap).map(async (dateStr) => {
+        const startOfDay = `${dateStr}T00:00:00.000Z`;
+        const endOfDay = `${dateStr}T23:59:59.999Z`;
+        
+        // 获取当天发送消息的用户
+        const { data: msgData } = await adminClient
+          .from('chat_messages')
+          .select('user_id')
+          .gte('created_at', startOfDay)
+          .lte('created_at', endOfDay)
+          .eq('role', 'user')
+          .limit(10000);
+        
+        // 统计唯一用户数
+        const uniqueUsers = new Set((msgData || []).map(m => m.user_id));
+        
+        return {
+          date: dateStr,
+          activeUsers: uniqueUsers.size,
+          totalSessions: (msgData || []).length,
+        };
+      });
+
+      const results = await Promise.all(promises);
+      
+      results.forEach(result => {
+        if (dateMap[result.date]) {
+          dateMap[result.date].activeUsers = result.activeUsers;
+          dateMap[result.date].totalSessions = result.totalSessions;
+        }
+      });
+
+      const trend = Object.entries(dateMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, data]) => ({
+          date: date.slice(5),
+          activeUsers: data.activeUsers,
+          totalSessions: data.totalSessions,
+        }));
+
+      // 计算周活跃用户（最近7天）
+      const last7Days = trend.slice(-7);
+      const weeklyActiveUsers = new Set<string>();
+      
+      // 需要重新获取最近7天的唯一用户
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const { data: weekMsgData } = await adminClient
+        .from('chat_messages')
+        .select('user_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .eq('role', 'user')
+        .limit(50000);
+      
+      (weekMsgData || []).forEach(m => weeklyActiveUsers.add(m.user_id));
+
+      return new Response(JSON.stringify({ 
+        trend,
+        weeklyActiveUsers: weeklyActiveUsers.size,
+        todayActiveUsers: trend[trend.length - 1]?.activeUsers || 0,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

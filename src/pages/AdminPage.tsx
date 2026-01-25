@@ -98,6 +98,12 @@ interface TrendData {
   messages: number;
 }
 
+interface ActivityTrendData {
+  date: string;
+  activeUsers: number;
+  totalSessions: number;
+}
+
 interface UserProfile {
   id: string;
   user_id: string;
@@ -135,6 +141,9 @@ const AdminPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [stats, setStats] = useState<AppStats>({ totalUsers: 0, totalCharacters: 0, totalMessages: 0, todayUsers: 0 });
   const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [activityTrend, setActivityTrend] = useState<ActivityTrendData[]>([]);
+  const [weeklyActiveUsers, setWeeklyActiveUsers] = useState(0);
+  const [todayActiveUsers, setTodayActiveUsers] = useState(0);
   const [userList, setUserList] = useState<UserProfile[]>([]);
   const [showUserList, setShowUserList] = useState(false);
   
@@ -177,6 +186,7 @@ const AdminPage: React.FC = () => {
         fetchThemes();
         fetchStats();
         fetchTrendData();
+        fetchActivityTrend();
         fetchUserList();
       } else {
         setIsAdmin(false);
@@ -211,6 +221,7 @@ const AdminPage: React.FC = () => {
       fetchThemes();
       fetchStats();
       fetchTrendData();
+      fetchActivityTrend();
       fetchUserList();
       toast.success('管理员登录成功');
     } else {
@@ -317,6 +328,28 @@ const AdminPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error fetching trend data:', err);
+    }
+  };
+
+  // 获取活跃用户趋势
+  const fetchActivityTrend = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-stats', {
+        body: { action: 'get_active_users_trend' }
+      });
+      
+      if (error) {
+        console.error('Error fetching activity trend:', error);
+        return;
+      }
+      
+      if (data?.trend) {
+        setActivityTrend(data.trend);
+        setWeeklyActiveUsers(data.weeklyActiveUsers || 0);
+        setTodayActiveUsers(data.todayActiveUsers || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching activity trend:', err);
     }
   };
 
@@ -859,6 +892,95 @@ const AdminPage: React.FC = () => {
                       strokeWidth={2}
                       dot={{ fill: 'hsl(330.4 81.2% 60.4%)', strokeWidth: 0, r: 3 }}
                       name="消息数量"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 用户活跃度图表 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              用户活跃度（近30天）
+            </CardTitle>
+            <CardDescription>
+              基于每日发送消息的唯一用户数统计
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* 活跃度统计卡片 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs text-muted-foreground">今日活跃</span>
+                </div>
+                <p className="text-2xl font-bold text-orange-600">{todayActiveUsers}</p>
+              </div>
+              <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs text-muted-foreground">周活跃用户</span>
+                </div>
+                <p className="text-2xl font-bold text-emerald-600">{weeklyActiveUsers}</p>
+              </div>
+            </div>
+
+            {/* 每日活跃用户趋势 */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-orange-500" />
+                每日活跃用户 (DAU)
+              </h4>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activityTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Bar dataKey="activeUsers" fill="hsl(24.6 95% 53.1%)" name="活跃用户" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* 每日会话数趋势 */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-emerald-500" />
+                每日用户发送消息数
+              </h4>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={activityTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="totalSessions" 
+                      stroke="hsl(152 76.1% 36.5%)" 
+                      strokeWidth={2}
+                      dot={{ fill: 'hsl(152 76.1% 36.5%)', strokeWidth: 0, r: 3 }}
+                      name="用户消息数"
                     />
                   </LineChart>
                 </ResponsiveContainer>
