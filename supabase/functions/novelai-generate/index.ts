@@ -143,15 +143,34 @@ serve(async (req) => {
     // Helper function to fetch image as base64
     const fetchImageAsBase64 = async (imageUrl: string): Promise<string | null> => {
       try {
+        // Skip empty or invalid URLs
+        if (!imageUrl || imageUrl.trim() === '') {
+          return null;
+        }
+        
         // If already base64, extract the data part
         if (imageUrl.startsWith('data:')) {
-          return imageUrl.split(',')[1];
+          const base64Part = imageUrl.split(',')[1];
+          // Validate base64 is not empty and has reasonable length
+          if (!base64Part || base64Part.length < 100) {
+            console.log("Invalid base64 image data, too short");
+            return null;
+          }
+          return base64Part;
         }
         
         const response = await fetch(imageUrl);
-        if (!response.ok) return null;
+        if (!response.ok) {
+          console.log("Failed to fetch image:", response.status);
+          return null;
+        }
         
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 100) {
+          console.log("Image data too small, likely invalid");
+          return null;
+        }
+        
         const base64 = base64Encode(arrayBuffer);
         return base64;
       } catch (e) {
@@ -165,16 +184,19 @@ serve(async (req) => {
     let referenceImageBase64: string | null = null;
     let vibeImageBase64: string | null = null;
     
-    // 优先使用请求体中的垫图，其次使用config中的
-    const effectiveRefImage = requestRefImage || config.referenceImage;
-    const effectiveRefStrength = requestRefImage ? requestRefStrength : (config.referenceStrength || 0.6);
+    // 只使用请求体中的垫图，不使用config中的（避免之前保存的无效图片导致问题）
+    // 测试绘图时显式传入垫图，普通生成时不使用
+    const effectiveRefImage = requestRefImage || null;
+    const effectiveRefStrength = requestRefStrength || 0.6;
 
-    // Check for img2img reference image
+    // Check for img2img reference image - only if explicitly provided in request
     if (effectiveRefImage) {
       referenceImageBase64 = await fetchImageAsBase64(effectiveRefImage);
       if (referenceImageBase64) {
         actionType = "img2img";
         console.log("Using img2img mode with reference image, strength:", effectiveRefStrength);
+      } else {
+        console.log("Reference image provided but failed to load, falling back to generate mode");
       }
     }
 
