@@ -2687,17 +2687,45 @@ const ChatPage: React.FC = () => {
   const handleBatchImportStickers = async () => {
     if (!user?.id) return;
     
-    const urls = batchStickerUrls
+    // 解析每行，支持两种格式：
+    // 1. 关键词:https://... （冒号前是关键词，支持用/分隔多个关键词）
+    // 2. 纯URL https://...
+    const lines = batchStickerUrls
       .split('\n')
-      .map(u => u.trim())
-      .filter(u => u.startsWith('http'));
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
     
-    if (urls.length === 0) {
-      toast.error('请输入有效的URL（每行一个）');
+    const parsedItems: { url: string; keywords: string[] }[] = [];
+    
+    for (const line of lines) {
+      // 尝试匹配 "关键词:https://..." 或 "关键词：https://..." 格式
+      const colonMatch = line.match(/^(.+?)[:：](https?:\/\/.+)$/);
+      if (colonMatch) {
+        const keywordPart = colonMatch[1].trim();
+        const url = colonMatch[2].trim();
+        // 支持用 / 分隔多个关键词，如 "咬你/啃你"
+        const keywords = keywordPart.split(/[\/、,，]/).map(k => k.trim()).filter(k => k.length > 0);
+        if (keywords.length > 0 && url) {
+          parsedItems.push({ url, keywords: [...keywords, '表情', '表情包'] });
+        }
+      } else if (line.startsWith('http')) {
+        // 纯URL格式，自动生成关键词
+        const urlParts = line.split('/');
+        const fileName = urlParts[urlParts.length - 1].split('?')[0];
+        const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+        const autoKeywords = nameWithoutExt && nameWithoutExt.length > 0 && nameWithoutExt.length < 20
+          ? [nameWithoutExt, '表情', '表情包']
+          : ['表情包', '自定义表情'];
+        parsedItems.push({ url: line, keywords: autoKeywords });
+      }
+    }
+    
+    if (parsedItems.length === 0) {
+      toast.error('请输入有效的格式（每行一个）');
       return;
     }
     
-    if (urls.length > 20) {
+    if (parsedItems.length > 20) {
       toast.error('一次最多导入20个表情包');
       return;
     }
@@ -2706,24 +2734,14 @@ const ChatPage: React.FC = () => {
     let successCount = 0;
     
     try {
-      for (const url of urls) {
+      for (const item of parsedItems) {
         try {
-          // 自动生成简单关键词（从URL或通用关键词）
-          const urlParts = url.split('/');
-          const fileName = urlParts[urlParts.length - 1].split('?')[0];
-          const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-          
-          // 用文件名或通用关键词
-          const autoKeywords = nameWithoutExt && nameWithoutExt.length > 0 && nameWithoutExt.length < 20
-            ? [nameWithoutExt, '表情', '表情包']
-            : ['表情包', '自定义表情'];
-          
           const { data, error } = await supabase
             .from('user_stickers')
             .insert({
               user_id: user.id,
-              image_url: url,
-              keywords: autoKeywords
+              image_url: item.url,
+              keywords: item.keywords
             })
             .select()
             .single();
@@ -2731,14 +2749,14 @@ const ChatPage: React.FC = () => {
           if (!error && data) {
             setUserStickers(prev => [{
               id: data.id,
-              imageUrl: url,
-              keywords: autoKeywords,
-              text: autoKeywords[0]
+              imageUrl: item.url,
+              keywords: item.keywords,
+              text: item.keywords[0]
             }, ...prev]);
             successCount++;
           }
         } catch (err) {
-          console.error('Failed to import:', url, err);
+          console.error('Failed to import:', item.url, err);
         }
       }
       
@@ -4436,16 +4454,16 @@ const ChatPage: React.FC = () => {
             
             {/* 批量导入URL */}
             <div className="mb-4 p-3 bg-muted/50 rounded-lg">
-              <label className="block text-sm font-medium mb-2">批量导入URL</label>
+              <label className="block text-sm font-medium mb-2">批量导入</label>
               <textarea
                 value={batchStickerUrls}
                 onChange={(e) => setBatchStickerUrls(e.target.value)}
-                placeholder="每行一个图片URL，例如：&#10;https://example.com/sticker1.png&#10;https://example.com/sticker2.gif"
-                className="w-full h-24 px-3 py-2 text-sm bg-background border rounded-lg resize-none"
+                placeholder="支持两种格式，每行一个：&#10;关键词:https://example.com/sticker.png&#10;咬你/啃你:https://example.com/sticker2.gif&#10;https://example.com/sticker3.png"
+                className="w-full h-28 px-3 py-2 text-sm bg-background border rounded-lg resize-none"
               />
               <div className="flex items-center justify-between mt-2">
                 <p className="text-xs text-muted-foreground">
-                  系统将自动生成通用关键词，导入后可点击表情包修改
+                  格式：关键词:链接 或 纯链接（自动生成关键词）
                 </p>
                 <Button 
                   size="sm"
