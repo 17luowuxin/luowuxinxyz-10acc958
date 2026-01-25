@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -75,6 +75,11 @@ const FriendsPage: React.FC = () => {
   const [sensitiveWarningOpen, setSensitiveWarningOpen] = useState(false);
   const [sensitiveResult, setSensitiveResult] = useState<DetectionResult | null>(null);
   const [pendingAction, setPendingAction] = useState<'create' | 'update' | null>(null);
+  
+  // NovelAI 角色专属提示词
+  const [naiPromptOpen, setNaiPromptOpen] = useState(false);
+  const [naiPositivePrompt, setNaiPositivePrompt] = useState('');
+  const [naiNegativePrompt, setNaiNegativePrompt] = useState('');
 
   useEffect(() => {
     if (user) fetchCharacters();
@@ -437,25 +442,87 @@ const FriendsPage: React.FC = () => {
     setVoiceId(char.voice_id || '');
     setRingtoneUrl(char.ringtone_url || '');
     setMemorySummary('');
+    setNaiPositivePrompt('');
+    setNaiNegativePrompt('');
     setOpen(true);
     
-    // 加载记忆摘要
+    // 并行加载记忆摘要和NAI提示词
     setMemoryLoading(true);
     try {
-      const { data } = await supabase
-        .from('character_memories')
-        .select('summary')
-        .eq('character_id', char.id)
-        .eq('user_id', user?.id)
-        .maybeSingle();
+      const [memoryRes, naiRes] = await Promise.all([
+        supabase
+          .from('character_memories')
+          .select('summary')
+          .eq('character_id', char.id)
+          .eq('user_id', user?.id)
+          .maybeSingle(),
+        supabase
+          .from('api_keys')
+          .select('provider, api_key')
+          .eq('user_id', user?.id)
+          .in('provider', [`nai_positive_${char.id}`, `nai_negative_${char.id}`])
+      ]);
       
-      if (data?.summary) {
-        setMemorySummary(data.summary);
+      if (memoryRes.data?.summary) {
+        setMemorySummary(memoryRes.data.summary);
+      }
+      
+      if (naiRes.data) {
+        const positiveRow = naiRes.data.find(r => r.provider === `nai_positive_${char.id}`);
+        const negativeRow = naiRes.data.find(r => r.provider === `nai_negative_${char.id}`);
+        if (positiveRow) setNaiPositivePrompt(positiveRow.api_key);
+        if (negativeRow) setNaiNegativePrompt(negativeRow.api_key);
       }
     } catch (err) {
-      console.error('Failed to load memory:', err);
+      console.error('Failed to load character data:', err);
     } finally {
       setMemoryLoading(false);
+    }
+  };
+
+  // 保存角色专属NAI提示词
+  const saveNaiPrompts = async () => {
+    if (!editingChar || !user) return;
+    
+    try {
+      const providers = [`nai_positive_${editingChar.id}`, `nai_negative_${editingChar.id}`];
+      await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      
+      const rows = [];
+      if (naiPositivePrompt.trim()) {
+        rows.push({ user_id: user.id, provider: `nai_positive_${editingChar.id}`, api_key: naiPositivePrompt.trim() });
+      }
+      if (naiNegativePrompt.trim()) {
+        rows.push({ user_id: user.id, provider: `nai_negative_${editingChar.id}`, api_key: naiNegativePrompt.trim() });
+      }
+      
+      if (rows.length > 0) {
+        await supabase.from('api_keys').insert(rows);
+      }
+      
+      setNaiPromptOpen(false);
+      toast.success('角色NAI提示词已保存');
+    } catch (err) {
+      console.error('Save NAI prompts error:', err);
+      toast.error('保存失败');
+    }
+  };
+
+  // 清空角色专属NAI提示词
+  const clearNaiPrompts = async () => {
+    if (!editingChar || !user) return;
+    
+    try {
+      const providers = [`nai_positive_${editingChar.id}`, `nai_negative_${editingChar.id}`];
+      await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      
+      setNaiPositivePrompt('');
+      setNaiNegativePrompt('');
+      setNaiPromptOpen(false);
+      toast.success('角色NAI提示词已清空');
+    } catch (err) {
+      console.error('Clear NAI prompts error:', err);
+      toast.error('清空失败');
     }
   };
 
@@ -861,6 +928,28 @@ const FriendsPage: React.FC = () => {
                     )}
                   </div>
                   
+                  {/* NAI 角色专属提示词 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎨</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">角色专属NAI提示词</p>
+                        <p className="text-xs text-gray-400">仅用于该角色的NovelAI出图</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full rounded-xl bg-pink-50 border-pink-200 text-pink-600 hover:bg-pink-100"
+                      onClick={() => setNaiPromptOpen(true)}
+                    >
+                      <Brush className="w-4 h-4 mr-2" />
+                      配置NAI提示词
+                    </Button>
+                    {(naiPositivePrompt || naiNegativePrompt) && (
+                      <p className="text-xs text-green-500">✓ 已配置专属提示词</p>
+                    )}
+                  </div>
+                  
                   <Button 
                     className="w-full rounded-xl py-6 bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-lg" 
                     onClick={updateCharacter}
@@ -868,6 +957,59 @@ const FriendsPage: React.FC = () => {
                     保存设置
                   </Button>
                 </TabsContent>
+
+        {/* NAI 角色专属提示词弹窗 */}
+        <Dialog open={naiPromptOpen} onOpenChange={setNaiPromptOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>角色专属NAI提示词配置</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-sm text-amber-700">
+                  💡 这里配置的提示词仅用于当前角色的NAI出图，不影响其他角色或系统设置
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">正面提示词 (Positive Prompt)</label>
+                <Textarea
+                  value={naiPositivePrompt}
+                  onChange={(e) => setNaiPositivePrompt(e.target.value)}
+                  className="rounded-xl min-h-[100px]"
+                  placeholder="1boy"
+                />
+                <p className="text-xs text-gray-400">描述你希望生成的图像风格，可填入画师串</p>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">负面提示词 (Negative Prompt)</label>
+                <Textarea
+                  value={naiNegativePrompt}
+                  onChange={(e) => setNaiNegativePrompt(e.target.value)}
+                  className="rounded-xl min-h-[80px]"
+                  placeholder="例如: lowres, bad anatomy, bad hands, text, error, missing fingers"
+                />
+                <p className="text-xs text-gray-400">描述你希望避免的元素</p>
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={clearNaiPrompts}
+                  className="flex-1 py-3 rounded-xl bg-white border border-red-200 text-red-600 font-medium hover:bg-red-50 transition-colors"
+                >
+                  清空配置
+                </button>
+                <button
+                  onClick={saveNaiPrompts}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium hover:shadow-lg transition-all"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
                 
                 <TabsContent value="memory" className="space-y-4 mt-4">
                   <div className="flex items-center justify-between">

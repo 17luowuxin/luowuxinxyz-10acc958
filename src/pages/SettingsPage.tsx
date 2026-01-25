@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -13,9 +15,32 @@ const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
 ];
 
-// 默认使用V4 Full模型，不再显示选择器
+// NovelAI 尺寸预设
+const NOVELAI_SIZES = [
+  { id: 'square', name: '方图 (1024x1024)', width: 1024, height: 1024 },
+  { id: 'portrait', name: '竖图 (832x1216)', width: 832, height: 1216 },
+  { id: 'landscape', name: '横图 (1216x832)', width: 1216, height: 832 },
+  { id: 'portrait_small', name: '竖图小 (640x1024)', width: 640, height: 1024 },
+  { id: 'landscape_small', name: '横图小 (1024x640)', width: 1024, height: 640 },
+];
 
-// NovelAI 默认配置
+// NovelAI 采样器
+const NOVELAI_SAMPLERS = [
+  'k_euler_ancestral',
+  'k_euler',
+  'k_dpmpp_2s_ancestral',
+  'k_dpmpp_2m',
+  'k_dpmpp_sde',
+  'ddim_v3',
+];
+
+// NovelAI UC预设
+const NOVELAI_UC_PRESETS = [
+  { id: 0, name: 'Preset 1 - Light' },
+  { id: 1, name: 'Preset 2 - Heavy' },
+  { id: 2, name: 'Preset 3 - Human Focus' },
+  { id: 3, name: 'None' },
+];
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -35,15 +60,31 @@ const SettingsPage: React.FC = () => {
   // NovelAI state
   const [novelaiEnabled, setNovelaiEnabled] = useState(true);
   const [novelaiKey, setNovelaiKey] = useState('');
-  const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-4-full');
+  const [novelaiModel, setNovelaiModel] = useState('nai-diffusion-4-5-curated');
   const [novelaiCustomModel, setNovelaiCustomModel] = useState('');
   const [showNovelaiKey, setShowNovelaiKey] = useState(false);
   const [novelaiConfigured, setNovelaiConfigured] = useState(false);
   const [testingNovelai, setTestingNovelai] = useState(false);
   const [novelaiAutoGenerate, setNovelaiAutoGenerate] = useState(false);
   
-  // NovelAI 测试画图 state
-  const [novelaiTestPrompt, setNovelaiTestPrompt] = useState('');
+  // NovelAI 生成设置
+  const [novelaiSettingsOpen, setNovelaiSettingsOpen] = useState(false);
+  const [novelaiSize, setNovelaiSize] = useState('portrait');
+  const [novelaiSteps, setNovelaiSteps] = useState(28);
+  const [novelaiScale, setNovelaiScale] = useState(5);
+  const [novelaiSampler, setNovelaiSampler] = useState('k_euler_ancestral');
+  const [novelaiSeed, setNovelaiSeed] = useState(-1);
+  const [novelaiUcPreset, setNovelaiUcPreset] = useState(0);
+  const [novelaiQualityTags, setNovelaiQualityTags] = useState(true);
+  const [novelaiSmea, setNovelaiSmea] = useState(true);
+  const [novelaiSmeaDyn, setNovelaiSmeaDyn] = useState(false);
+  const [novelaiDefaultPrompt, setNovelaiDefaultPrompt] = useState('masterpiece, best quality, 1girl, beautiful, detailed face, detailed eyes, long hair, anime style');
+  const [novelaiDefaultNegative, setNovelaiDefaultNegative] = useState('lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark');
+  
+  // NovelAI 测试生成弹窗
+  const [novelaiTestOpen, setNovelaiTestOpen] = useState(false);
+  const [novelaiTestPrompt, setNovelaiTestPrompt] = useState('1girl, solo, long hair, blue eyes, smile, outdoors, cherry blossoms, spring');
+  const [novelaiTestNegative, setNovelaiTestNegative] = useState('');
   const [novelaiTestDrawing, setNovelaiTestDrawing] = useState(false);
   const [novelaiTestResult, setNovelaiTestResult] = useState<string | null>(null);
   
@@ -144,7 +185,30 @@ const SettingsPage: React.FC = () => {
         setNovelaiAutoGenerate(novelaiAutoSetting.api_key === 'true');
       }
       
-      // NovelAI settings loaded - simplified version (removed advanced params)
+      // NovelAI 高级设置
+      const novelaiSizeSetting = data.find(k => k.provider === 'novelai_size');
+      const novelaiStepsSetting = data.find(k => k.provider === 'novelai_steps');
+      const novelaiScaleSetting = data.find(k => k.provider === 'novelai_scale');
+      const novelaiSamplerSetting = data.find(k => k.provider === 'novelai_sampler');
+      const novelaiSeedSetting = data.find(k => k.provider === 'novelai_seed');
+      const novelaiUcPresetSetting = data.find(k => k.provider === 'novelai_uc_preset');
+      const novelaiQualityTagsSetting = data.find(k => k.provider === 'novelai_quality_tags');
+      const novelaiSmeaSetting = data.find(k => k.provider === 'novelai_smea');
+      const novelaiSmeaDynSetting = data.find(k => k.provider === 'novelai_smea_dyn');
+      const novelaiDefaultPromptSetting = data.find(k => k.provider === 'novelai_default_prompt');
+      const novelaiDefaultNegativeSetting = data.find(k => k.provider === 'novelai_default_negative');
+      
+      if (novelaiSizeSetting) setNovelaiSize(novelaiSizeSetting.api_key);
+      if (novelaiStepsSetting) setNovelaiSteps(parseInt(novelaiStepsSetting.api_key) || 28);
+      if (novelaiScaleSetting) setNovelaiScale(parseFloat(novelaiScaleSetting.api_key) || 5);
+      if (novelaiSamplerSetting) setNovelaiSampler(novelaiSamplerSetting.api_key);
+      if (novelaiSeedSetting) setNovelaiSeed(parseInt(novelaiSeedSetting.api_key) || -1);
+      if (novelaiUcPresetSetting) setNovelaiUcPreset(parseInt(novelaiUcPresetSetting.api_key) || 0);
+      if (novelaiQualityTagsSetting) setNovelaiQualityTags(novelaiQualityTagsSetting.api_key !== 'false');
+      if (novelaiSmeaSetting) setNovelaiSmea(novelaiSmeaSetting.api_key !== 'false');
+      if (novelaiSmeaDynSetting) setNovelaiSmeaDyn(novelaiSmeaDynSetting.api_key === 'true');
+      if (novelaiDefaultPromptSetting) setNovelaiDefaultPrompt(novelaiDefaultPromptSetting.api_key);
+      if (novelaiDefaultNegativeSetting) setNovelaiDefaultNegative(novelaiDefaultNegativeSetting.api_key);
       
       // TTS settings
       const ttsEnabledSetting = data.find(k => k.provider === 'tts_enabled');
@@ -402,10 +466,8 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    // 固定使用用户选择的模型
-    const modelToSave = novelaiModel || 'nai-diffusion-4-full';
+    const modelToSave = novelaiModel || 'nai-diffusion-4-5-curated';
 
-    // 简化版本 - 只保存核心配置
     const providersToReplace = [
       'novelai',
       'novelai_enabled',
@@ -439,6 +501,59 @@ const SettingsPage: React.FC = () => {
 
     setNovelaiConfigured(true);
     toast.success('NovelAI配置已保存');
+  };
+
+  // NovelAI 生成设置保存
+  const saveNovelaiGenSettings = async () => {
+    if (!user) return;
+
+    const settingsToSave = [
+      { provider: 'novelai_size', value: novelaiSize },
+      { provider: 'novelai_steps', value: String(novelaiSteps) },
+      { provider: 'novelai_scale', value: String(novelaiScale) },
+      { provider: 'novelai_sampler', value: novelaiSampler },
+      { provider: 'novelai_seed', value: String(novelaiSeed) },
+      { provider: 'novelai_uc_preset', value: String(novelaiUcPreset) },
+      { provider: 'novelai_quality_tags', value: novelaiQualityTags ? 'true' : 'false' },
+      { provider: 'novelai_smea', value: novelaiSmea ? 'true' : 'false' },
+      { provider: 'novelai_smea_dyn', value: novelaiSmeaDyn ? 'true' : 'false' },
+      { provider: 'novelai_default_prompt', value: novelaiDefaultPrompt },
+      { provider: 'novelai_default_negative', value: novelaiDefaultNegative },
+    ];
+
+    const providers = settingsToSave.map(s => s.provider);
+    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+
+    const rows = settingsToSave.map(s => ({
+      user_id: user.id,
+      provider: s.provider,
+      api_key: s.value,
+    }));
+
+    const { error } = await supabase.from('api_keys').insert(rows);
+    if (error) {
+      toast.error('保存失败: ' + error.message);
+      return;
+    }
+
+    setNovelaiSettingsOpen(false);
+    toast.success('生成设置已保存');
+  };
+
+  // NovelAI 恢复默认设置
+  const resetNovelaiGenSettings = () => {
+    setNovelaiSize('portrait');
+    setNovelaiSteps(28);
+    setNovelaiScale(5);
+    setNovelaiSampler('k_euler_ancestral');
+    setNovelaiSeed(-1);
+    setNovelaiUcPreset(0);
+    setNovelaiQualityTags(true);
+    setNovelaiSmea(true);
+    setNovelaiSmeaDyn(false);
+    setNovelaiDefaultPrompt('masterpiece, best quality, 1girl, beautiful, detailed face, detailed eyes, long hair, anime style');
+    setNovelaiDefaultNegative('lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark');
+    toast.success('已恢复默认设置');
   };
 
   const testNovelaiConnection = async () => {
@@ -480,11 +595,25 @@ const SettingsPage: React.FC = () => {
     setNovelaiTestDrawing(true);
     setNovelaiTestResult(null);
     
+    // 获取尺寸
+    const sizeConfig = NOVELAI_SIZES.find(s => s.id === novelaiSize) || NOVELAI_SIZES[1];
+    
     try {
       const { data, error } = await supabase.functions.invoke('novelai-generate', {
         body: { 
           prompt: novelaiTestPrompt.trim(),
+          negativePrompt: novelaiTestNegative.trim() || novelaiDefaultNegative,
           userId: user?.id,
+          width: sizeConfig.width,
+          height: sizeConfig.height,
+          steps: novelaiSteps,
+          scale: novelaiScale,
+          sampler: novelaiSampler,
+          seed: novelaiSeed,
+          ucPreset: novelaiUcPreset,
+          qualityTags: novelaiQualityTags,
+          smea: novelaiSmea,
+          smeaDyn: novelaiSmeaDyn,
         },
       });
       
@@ -1241,19 +1370,24 @@ const SettingsPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Test Button */}
-            <button
-              onClick={testNovelaiConnection}
-              disabled={testingNovelai || !novelaiKey}
-              className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              {testingNovelai ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <TestTube className="w-4 h-4 text-pink-500" />
-              )}
-              测试NovelAI连接
-            </button>
+            {/* 生成设置 和 测试生成 按钮 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setNovelaiSettingsOpen(true)}
+                className="flex-1 py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+              >
+                <Settings className="w-4 h-4 text-pink-500" />
+                生成设置
+              </button>
+              <button
+                onClick={() => setNovelaiTestOpen(true)}
+                disabled={!novelaiKey}
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium flex items-center justify-center gap-2 hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                <Brush className="w-4 h-4" />
+                测试生成
+              </button>
+            </div>
 
             {/* Save Button */}
             <Button
@@ -1263,62 +1397,277 @@ const SettingsPage: React.FC = () => {
             >
               保存NovelAI配置
             </Button>
-            
-            {/* NovelAI 测试画图区域 */}
-            <div className="mt-6 pt-6 border-t border-pink-100">
-              <div className="flex items-center gap-2 mb-3">
-                <Brush className="w-4 h-4 text-pink-500" />
-                <span className="text-sm font-medium text-gray-700">NovelAI 测试画图</span>
+          </div>
+        </div>
+
+        {/* NovelAI 生成设置弹窗 */}
+        <Dialog open={novelaiSettingsOpen} onOpenChange={setNovelaiSettingsOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>NovelAI 生成设置</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* 图像尺寸 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">图像尺寸（oplus可无限出小图）</label>
+                <select
+                  value={novelaiSize}
+                  onChange={(e) => setNovelaiSize(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl bg-white border border-gray-200 text-gray-700 text-sm"
+                >
+                  {NOVELAI_SIZES.map(size => (
+                    <option key={size.id} value={size.id}>{size.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400">建议使用官方支持的标准尺寸以获得最佳效果</p>
               </div>
-              <p className="text-xs text-gray-500 mb-3">
-                输入提示词测试NovelAI图片生成效果
-              </p>
-              
-              <div className="flex gap-2">
+
+              {/* 采样步数 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">采样步数 (Steps)</label>
                 <Input
-                  placeholder="输入绘图提示词，如：1girl, cute anime girl, smile"
+                  type="number"
+                  value={novelaiSteps}
+                  onChange={(e) => setNovelaiSteps(parseInt(e.target.value) || 28)}
+                  className="rounded-xl"
+                  min={1}
+                  max={50}
+                />
+                <p className="text-xs text-gray-400">推荐值: 28 (值越高质量越好但耗时越长)</p>
+              </div>
+
+              {/* CFG Scale */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">提示词相关性 (CFG Scale)</label>
+                <Input
+                  type="number"
+                  value={novelaiScale}
+                  onChange={(e) => setNovelaiScale(parseFloat(e.target.value) || 5)}
+                  className="rounded-xl"
+                  min={0}
+                  max={20}
+                  step={0.5}
+                />
+                <p className="text-xs text-gray-400">推荐值: 5 (控制图像与提示词的相关程度)</p>
+              </div>
+
+              {/* Sampler */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">采样器 (Sampler)</label>
+                <select
+                  value={novelaiSampler}
+                  onChange={(e) => setNovelaiSampler(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl bg-white border border-gray-200 text-gray-700 text-sm"
+                >
+                  {NOVELAI_SAMPLERS.map(sampler => (
+                    <option key={sampler} value={sampler}>
+                      {sampler === 'k_euler_ancestral' ? 'Euler Ancestral' : 
+                       sampler === 'k_euler' ? 'Euler' :
+                       sampler === 'k_dpmpp_2s_ancestral' ? 'DPM++ 2S Ancestral' :
+                       sampler === 'k_dpmpp_2m' ? 'DPM++ 2M' :
+                       sampler === 'k_dpmpp_sde' ? 'DPM++ SDE' :
+                       sampler === 'ddim_v3' ? 'DDIM V3' : sampler}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Seed */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">随机种子 (Seed)</label>
+                <Input
+                  type="number"
+                  value={novelaiSeed}
+                  onChange={(e) => setNovelaiSeed(parseInt(e.target.value) || -1)}
+                  className="rounded-xl"
+                />
+                <p className="text-xs text-gray-400">-1 表示随机，固定种子可复现相同图像</p>
+              </div>
+
+              {/* UC Preset */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">负面提示词预设 (UC Preset)</label>
+                <select
+                  value={novelaiUcPreset}
+                  onChange={(e) => setNovelaiUcPreset(parseInt(e.target.value))}
+                  className="w-full h-10 px-3 rounded-xl bg-white border border-gray-200 text-gray-700 text-sm"
+                >
+                  {NOVELAI_UC_PRESETS.map(preset => (
+                    <option key={preset.id} value={preset.id}>{preset.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 质量标签 */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-gray-700 text-sm">质量标签</p>
+                  <p className="text-xs text-gray-500">自动添加质量提升标签</p>
+                </div>
+                <button
+                  onClick={() => setNovelaiQualityTags(!novelaiQualityTags)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    novelaiQualityTags ? 'bg-pink-400' : 'bg-gray-300'
+                  }`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    novelaiQualityTags ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+
+              {/* SMEA */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-gray-700 text-sm">SMEA (提升细节)</p>
+                  <p className="text-xs text-gray-500">启用SMEA增强</p>
+                </div>
+                <button
+                  onClick={() => setNovelaiSmea(!novelaiSmea)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    novelaiSmea ? 'bg-pink-400' : 'bg-gray-300'
+                  }`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    novelaiSmea ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+
+              {/* SMEA DYN */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-gray-700 text-sm">SMEA DYN (动态优化)</p>
+                  <p className="text-xs text-gray-500">启用动态SMEA</p>
+                </div>
+                <button
+                  onClick={() => setNovelaiSmeaDyn(!novelaiSmeaDyn)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    novelaiSmeaDyn ? 'bg-pink-400' : 'bg-gray-300'
+                  }`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    novelaiSmeaDyn ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+
+              {/* 默认正面提示词 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">默认正面提示词</label>
+                <Textarea
+                  value={novelaiDefaultPrompt}
+                  onChange={(e) => setNovelaiDefaultPrompt(e.target.value)}
+                  className="rounded-xl min-h-[80px]"
+                  placeholder="masterpiece, best quality, 1girl..."
+                />
+                <p className="text-xs text-gray-400">此提示词将在生成时自动使用（如果测试弹窗中未填写）</p>
+              </div>
+
+              {/* 默认负面提示词 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">默认负面提示词</label>
+                <Textarea
+                  value={novelaiDefaultNegative}
+                  onChange={(e) => setNovelaiDefaultNegative(e.target.value)}
+                  className="rounded-xl min-h-[80px]"
+                  placeholder="lowres, bad anatomy, bad hands..."
+                />
+              </div>
+
+              {/* 按钮 */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={resetNovelaiGenSettings}
+                  className="flex-1 py-3 rounded-xl bg-white border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  恢复默认
+                </button>
+                <button
+                  onClick={saveNovelaiGenSettings}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium hover:shadow-lg transition-all"
+                >
+                  保存设置
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* NovelAI 测试生成弹窗 */}
+        <Dialog open={novelaiTestOpen} onOpenChange={setNovelaiTestOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span className="text-xl">🖼️</span>
+                NovelAI 测试生成
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* 正面提示词 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">正面提示词（此处提示词仅用于该弹窗测试）</label>
+                <Textarea
                   value={novelaiTestPrompt}
                   onChange={(e) => setNovelaiTestPrompt(e.target.value)}
-                  className="flex-1 rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !novelaiTestDrawing) {
-                      testNovelaiDraw();
-                    }
-                  }}
+                  className="rounded-xl min-h-[100px]"
+                  placeholder="1girl, solo, long hair, blue eyes, smile, outdoors, cherry blossoms, spring"
                 />
-                <Button
-                  onClick={testNovelaiDraw}
-                  disabled={novelaiTestDrawing || !novelaiKey || !novelaiTestPrompt.trim()}
-                  className="px-6 h-12 rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium"
-                >
-                  {novelaiTestDrawing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Brush className="w-5 h-5" />
-                  )}
-                </Button>
               </div>
-              
-              {/* 绘图结果展示 */}
+
+              {/* 负面提示词 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">负面提示词（可选，留空使用默认）</label>
+                <Textarea
+                  value={novelaiTestNegative}
+                  onChange={(e) => setNovelaiTestNegative(e.target.value)}
+                  className="rounded-xl min-h-[80px]"
+                  placeholder="留空将使用设置中的默认负面提示词"
+                />
+              </div>
+
+              {/* 生成按钮 */}
+              <Button
+                onClick={testNovelaiDraw}
+                disabled={novelaiTestDrawing || !novelaiTestPrompt.trim()}
+                className="w-full py-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium"
+              >
+                {novelaiTestDrawing ? (
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                ) : (
+                  <Brush className="w-5 h-5 mr-2" />
+                )}
+                生成图像
+              </Button>
+
+              {/* 结果展示 */}
               {novelaiTestResult && (
-                <div className="mt-4 relative">
+                <div className="relative">
                   <img
                     src={novelaiTestResult}
                     alt="NovelAI生成的图片"
-                    className="w-full rounded-2xl shadow-lg border border-pink-100"
-                    style={{ maxHeight: '300px', objectFit: 'contain', backgroundColor: '#fdf2f8' }}
+                    className="w-full rounded-xl shadow-lg border border-gray-200"
+                    style={{ maxHeight: '300px', objectFit: 'contain', backgroundColor: '#f8f8f8' }}
                   />
                   <button
                     onClick={() => setNovelaiTestResult(null)}
                     className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
                   >
-                    ×
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
+
+              {/* 关闭按钮 */}
+              <button
+                onClick={() => setNovelaiTestOpen(false)}
+                className="w-full py-3 rounded-xl bg-red-100 text-red-600 font-medium hover:bg-red-200 transition-colors"
+              >
+                关闭
+              </button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
 
         {/* TTS Configuration Card */}
         <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-blue-100/50">
