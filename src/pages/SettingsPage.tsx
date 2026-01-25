@@ -1022,6 +1022,50 @@ const SettingsPage: React.FC = () => {
   };
 
   // ----- Unsplash 免费配图 测试 & 保存 -----
+  const formatEdgeFunctionError = async (err: unknown) => {
+    const anyErr = err as any;
+    const fallback =
+      (anyErr && typeof anyErr.message === 'string' && anyErr.message) ||
+      (typeof err === 'string' ? err : '未知错误');
+
+    const ctx = anyErr?.context;
+    if (ctx && typeof ctx === 'object') {
+      const status = typeof (ctx as any).status === 'number' ? (ctx as any).status : undefined;
+      const statusText = typeof (ctx as any).statusText === 'string' ? (ctx as any).statusText : undefined;
+      const prefix = status ? `${status}${statusText ? ` ${statusText}` : ''}` : '';
+
+      // supabase-js FunctionsHttpError 会把 Response 放在 error.context
+      if (typeof (ctx as any).text === 'function') {
+        try {
+          const raw = String(await (ctx as any).text()).trim();
+          if (raw) {
+            try {
+              const json = JSON.parse(raw);
+              const jsonMsg =
+                (typeof json?.error === 'string' && json.error) ||
+                (typeof json?.message === 'string' && json.message) ||
+                (typeof json?.msg === 'string' && json.msg) ||
+                raw;
+              return `${prefix ? `${prefix} - ` : ''}${jsonMsg}`;
+            } catch {
+              return `${prefix ? `${prefix} - ` : ''}${raw.slice(0, 200)}`;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 兜底：某些情况下 context.body 可能是字符串
+      const body = (ctx as any).body;
+      if (typeof body === 'string' && body.trim()) {
+        return `${prefix ? `${prefix} - ` : ''}${body.trim().slice(0, 200)}`;
+      }
+    }
+
+    return fallback;
+  };
+
   const saveUnsplashSettings = async () => {
     if (!user || !unsplashAccessKey.trim()) {
       toast.error('请输入 Unsplash Access Key');
@@ -1062,7 +1106,7 @@ const SettingsPage: React.FC = () => {
       });
 
       if (error) {
-        toast.error('连接测试失败: ' + error.message);
+        toast.error('连接测试失败: ' + (await formatEdgeFunctionError(error)));
         return;
       }
 
@@ -1072,7 +1116,7 @@ const SettingsPage: React.FC = () => {
         toast.error(data.error || '连接测试失败');
       }
     } catch (error) {
-      toast.error('连接测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('连接测试失败: ' + (await formatEdgeFunctionError(error)));
     } finally {
       setTestingUnsplash(false);
     }
