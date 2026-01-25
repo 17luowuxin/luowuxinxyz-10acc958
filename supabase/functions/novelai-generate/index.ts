@@ -87,7 +87,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, userId, characterName, negativePrompt } = await req.json();
+    const { prompt, userId, characterName, negativePrompt, referenceImage, referenceStrength } = await req.json();
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "用户未登录" }), {
@@ -95,6 +95,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    // 覆盖config中的referenceImage和referenceStrength（来自请求体）
+    const requestRefImage = referenceImage || null;
+    const requestRefStrength = referenceStrength || 0.6;
 
     const config = await getNovelAIConfig(userId);
 
@@ -160,13 +164,17 @@ serve(async (req) => {
     let actionType = "generate";
     let referenceImageBase64: string | null = null;
     let vibeImageBase64: string | null = null;
+    
+    // 优先使用请求体中的垫图，其次使用config中的
+    const effectiveRefImage = requestRefImage || config.referenceImage;
+    const effectiveRefStrength = requestRefImage ? requestRefStrength : (config.referenceStrength || 0.6);
 
     // Check for img2img reference image
-    if (config.referenceImage) {
-      referenceImageBase64 = await fetchImageAsBase64(config.referenceImage);
+    if (effectiveRefImage) {
+      referenceImageBase64 = await fetchImageAsBase64(effectiveRefImage);
       if (referenceImageBase64) {
         actionType = "img2img";
-        console.log("Using img2img mode with reference image");
+        console.log("Using img2img mode with reference image, strength:", effectiveRefStrength);
       }
     }
 
@@ -195,7 +203,7 @@ serve(async (req) => {
       legacy: false,
       legacy_v3_extend: false,
       negative_prompt: defaultNegative,
-      reference_strength: config.referenceStrength || 0.6,
+      reference_strength: effectiveRefStrength,
       add_original_image: false,
       uncond_scale: 1,
       qualityToggle: true,
@@ -219,7 +227,7 @@ serve(async (req) => {
     // Add img2img parameters
     if (actionType === "img2img" && referenceImageBase64) {
       v4Params.image = referenceImageBase64;
-      v4Params.strength = config.referenceStrength || 0.6;
+      v4Params.strength = effectiveRefStrength;
     }
 
     // Add vibe transfer parameters (V4/V4.5 only)
