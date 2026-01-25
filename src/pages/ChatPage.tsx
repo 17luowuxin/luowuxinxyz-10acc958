@@ -179,9 +179,11 @@ const ChatPage: React.FC = () => {
     vibeImage?: string;
     vibeStrength?: number;
   } | null>(null);
-  // 角色专属NAI提示词
+  // 角色专属NAI提示词和垫图
   const [charNaiPositive, setCharNaiPositive] = useState<string>('');
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
+  const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
+  const [charNaiRefStrength, setCharNaiRefStrength] = useState<number>(0.6);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
@@ -367,21 +369,35 @@ const ChatPage: React.FC = () => {
     }
   }, [user?.id]);
 
-  // 加载角色专属NAI提示词
+  // 加载角色专属NAI提示词和垫图设置
   const fetchCharNaiPrompts = useCallback(async () => {
     if (!user?.id || !characterId) return;
     const { data } = await supabase
       .from('api_keys')
       .select('provider, api_key')
       .eq('user_id', user.id)
-      .in('provider', [`nai_positive_${characterId}`, `nai_negative_${characterId}`]);
+      .in('provider', [
+        `nai_positive_${characterId}`, 
+        `nai_negative_${characterId}`,
+        `nai_ref_image_${characterId}`,
+        `nai_ref_strength_${characterId}`
+      ]);
     
     if (data) {
       const positiveRow = data.find(r => r.provider === `nai_positive_${characterId}`);
       const negativeRow = data.find(r => r.provider === `nai_negative_${characterId}`);
+      const refImageRow = data.find(r => r.provider === `nai_ref_image_${characterId}`);
+      const refStrengthRow = data.find(r => r.provider === `nai_ref_strength_${characterId}`);
       setCharNaiPositive(positiveRow?.api_key || '');
       setCharNaiNegative(negativeRow?.api_key || '');
-      console.log('Loaded char NAI prompts:', positiveRow?.api_key?.slice(0, 30), negativeRow?.api_key?.slice(0, 30));
+      setCharNaiRefImage(refImageRow?.api_key || '');
+      setCharNaiRefStrength(refStrengthRow?.api_key ? parseFloat(refStrengthRow.api_key) : 0.6);
+      console.log('Loaded char NAI config:', {
+        positive: positiveRow?.api_key?.slice(0, 30),
+        negative: negativeRow?.api_key?.slice(0, 30),
+        refImage: refImageRow?.api_key ? 'set' : 'none',
+        refStrength: refStrengthRow?.api_key
+      });
     }
   }, [user?.id, characterId]);
 
@@ -1508,7 +1524,7 @@ const ChatPage: React.FC = () => {
     setGeneratingImage(true);
     
     try {
-      // 构建请求体，包含角色专属负面提示词
+      // 构建请求体，包含角色专属设置
       const requestBody: any = {
         prompt,
         userId: user.id,
@@ -1520,6 +1536,13 @@ const ChatPage: React.FC = () => {
       if (charNaiNegative.trim()) {
         requestBody.negativePrompt = charNaiNegative.trim();
         console.log('Using character-specific negative prompt:', charNaiNegative.slice(0, 50));
+      }
+      
+      // 如果有角色专属垫图，传递给edge function
+      if (charNaiRefImage.trim()) {
+        requestBody.referenceImage = charNaiRefImage.trim();
+        requestBody.referenceStrength = charNaiRefStrength;
+        console.log('Using character-specific reference image, strength:', charNaiRefStrength);
       }
       
       const { data, error } = await supabase.functions.invoke('novelai-generate', {

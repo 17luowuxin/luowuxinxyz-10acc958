@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -80,6 +81,11 @@ const FriendsPage: React.FC = () => {
   const [naiPromptOpen, setNaiPromptOpen] = useState(false);
   const [naiPositivePrompt, setNaiPositivePrompt] = useState('');
   const [naiNegativePrompt, setNaiNegativePrompt] = useState('');
+  // NovelAI 角色专属垫图设置
+  const [naiReferenceImage, setNaiReferenceImage] = useState('');
+  const [naiReferenceStrength, setNaiReferenceStrength] = useState(0.6);
+  const [uploadingRefImage, setUploadingRefImage] = useState(false);
+  const naiRefImageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) fetchCharacters();
@@ -444,9 +450,11 @@ const FriendsPage: React.FC = () => {
     setMemorySummary('');
     setNaiPositivePrompt('');
     setNaiNegativePrompt('');
+    setNaiReferenceImage('');
+    setNaiReferenceStrength(0.6);
     setOpen(true);
     
-    // 并行加载记忆摘要和NAI提示词
+    // 并行加载记忆摘要和NAI提示词（包括垫图设置）
     setMemoryLoading(true);
     try {
       const [memoryRes, naiRes] = await Promise.all([
@@ -460,7 +468,12 @@ const FriendsPage: React.FC = () => {
           .from('api_keys')
           .select('provider, api_key')
           .eq('user_id', user?.id)
-          .in('provider', [`nai_positive_${char.id}`, `nai_negative_${char.id}`])
+          .in('provider', [
+            `nai_positive_${char.id}`, 
+            `nai_negative_${char.id}`,
+            `nai_ref_image_${char.id}`,
+            `nai_ref_strength_${char.id}`
+          ])
       ]);
       
       if (memoryRes.data?.summary) {
@@ -470,8 +483,12 @@ const FriendsPage: React.FC = () => {
       if (naiRes.data) {
         const positiveRow = naiRes.data.find(r => r.provider === `nai_positive_${char.id}`);
         const negativeRow = naiRes.data.find(r => r.provider === `nai_negative_${char.id}`);
+        const refImageRow = naiRes.data.find(r => r.provider === `nai_ref_image_${char.id}`);
+        const refStrengthRow = naiRes.data.find(r => r.provider === `nai_ref_strength_${char.id}`);
         if (positiveRow) setNaiPositivePrompt(positiveRow.api_key);
         if (negativeRow) setNaiNegativePrompt(negativeRow.api_key);
+        if (refImageRow) setNaiReferenceImage(refImageRow.api_key);
+        if (refStrengthRow) setNaiReferenceStrength(parseFloat(refStrengthRow.api_key) || 0.6);
       }
     } catch (err) {
       console.error('Failed to load character data:', err);
@@ -480,12 +497,58 @@ const FriendsPage: React.FC = () => {
     }
   };
 
-  // 保存角色专属NAI提示词
+  // 上传垫图
+  const handleRefImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !editingChar) return;
+    
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      e.target.value = '';
+      return;
+    }
+    
+    setUploadingRefImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/nai-ref/${editingChar.id}-${Date.now()}.${fileExt}`;
+      
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+      
+      if (error) {
+        console.error('Upload ref image error:', error);
+        toast.error('上传失败');
+        return;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+      
+      setNaiReferenceImage(publicUrl);
+      toast.success('垫图已上传');
+    } catch (err) {
+      console.error('Upload ref image error:', err);
+      toast.error('上传失败');
+    } finally {
+      setUploadingRefImage(false);
+      e.target.value = '';
+    }
+  };
+
+  // 保存角色专属NAI设置（提示词+垫图）
   const saveNaiPrompts = async () => {
     if (!editingChar || !user) return;
     
     try {
-      const providers = [`nai_positive_${editingChar.id}`, `nai_negative_${editingChar.id}`];
+      const providers = [
+        `nai_positive_${editingChar.id}`, 
+        `nai_negative_${editingChar.id}`,
+        `nai_ref_image_${editingChar.id}`,
+        `nai_ref_strength_${editingChar.id}`
+      ];
       await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
       
       const rows = [];
@@ -495,31 +558,42 @@ const FriendsPage: React.FC = () => {
       if (naiNegativePrompt.trim()) {
         rows.push({ user_id: user.id, provider: `nai_negative_${editingChar.id}`, api_key: naiNegativePrompt.trim() });
       }
+      if (naiReferenceImage.trim()) {
+        rows.push({ user_id: user.id, provider: `nai_ref_image_${editingChar.id}`, api_key: naiReferenceImage.trim() });
+        rows.push({ user_id: user.id, provider: `nai_ref_strength_${editingChar.id}`, api_key: naiReferenceStrength.toString() });
+      }
       
       if (rows.length > 0) {
         await supabase.from('api_keys').insert(rows);
       }
       
       setNaiPromptOpen(false);
-      toast.success('角色NAI提示词已保存');
+      toast.success('角色NAI设置已保存');
     } catch (err) {
       console.error('Save NAI prompts error:', err);
       toast.error('保存失败');
     }
   };
 
-  // 清空角色专属NAI提示词
+  // 清空角色专属NAI设置
   const clearNaiPrompts = async () => {
     if (!editingChar || !user) return;
     
     try {
-      const providers = [`nai_positive_${editingChar.id}`, `nai_negative_${editingChar.id}`];
+      const providers = [
+        `nai_positive_${editingChar.id}`, 
+        `nai_negative_${editingChar.id}`,
+        `nai_ref_image_${editingChar.id}`,
+        `nai_ref_strength_${editingChar.id}`
+      ];
       await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
       
       setNaiPositivePrompt('');
       setNaiNegativePrompt('');
+      setNaiReferenceImage('');
+      setNaiReferenceStrength(0.6);
       setNaiPromptOpen(false);
-      toast.success('角色NAI提示词已清空');
+      toast.success('角色NAI设置已清空');
     } catch (err) {
       console.error('Clear NAI prompts error:', err);
       toast.error('清空失败');
@@ -943,10 +1017,12 @@ const FriendsPage: React.FC = () => {
                       onClick={() => setNaiPromptOpen(true)}
                     >
                       <Brush className="w-4 h-4 mr-2" />
-                      配置NAI提示词
+                      配置NAI绘图
                     </Button>
-                    {(naiPositivePrompt || naiNegativePrompt) && (
-                      <p className="text-xs text-green-500">✓ 已配置专属提示词</p>
+                    {(naiPositivePrompt || naiNegativePrompt || naiReferenceImage) && (
+                      <p className="text-xs text-green-500">
+                        ✓ 已配置{naiPositivePrompt || naiNegativePrompt ? '提示词' : ''}{(naiPositivePrompt || naiNegativePrompt) && naiReferenceImage ? ' + ' : ''}{naiReferenceImage ? '垫图' : ''}
+                      </p>
                     )}
                   </div>
                   
@@ -1044,6 +1120,85 @@ const FriendsPage: React.FC = () => {
                   style={{ wordBreak: 'break-all' }}
                 />
                 <p className="text-xs text-gray-400">描述你希望避免的元素</p>
+              </div>
+              
+              {/* 垫图设置 */}
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">垫图 (Reference Image)</label>
+                  {naiReferenceImage && (
+                    <button
+                      onClick={() => setNaiReferenceImage('')}
+                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
+                    >
+                      移除
+                    </button>
+                  )}
+                </div>
+                
+                <input
+                  ref={naiRefImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleRefImageUpload}
+                />
+                
+                {naiReferenceImage ? (
+                  <div className="relative">
+                    <img
+                      src={naiReferenceImage}
+                      alt="Reference"
+                      className="w-full max-h-32 object-contain rounded-xl border border-gray-200"
+                    />
+                    <button
+                      onClick={() => naiRefImageInputRef.current?.click()}
+                      disabled={uploadingRefImage}
+                      className="absolute bottom-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-lg text-xs font-medium text-gray-700 hover:bg-white shadow"
+                    >
+                      {uploadingRefImage ? '上传中...' : '更换'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => naiRefImageInputRef.current?.click()}
+                    disabled={uploadingRefImage}
+                    className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {uploadingRefImage ? (
+                      <>上传中...</>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        点击上传垫图
+                      </>
+                    )}
+                  </button>
+                )}
+                
+                <p className="text-xs text-gray-400">
+                  垫图会作为图像生成的参考基础，AI将在此基础上进行重绘
+                </p>
+                
+                {naiReferenceImage && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700">重绘强度</label>
+                      <span className="text-sm text-purple-600 font-medium">{naiReferenceStrength.toFixed(1)}</span>
+                    </div>
+                    <Slider
+                      value={[naiReferenceStrength]}
+                      onValueChange={([v]) => setNaiReferenceStrength(v)}
+                      min={0.1}
+                      max={0.9}
+                      step={0.1}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-400">
+                      越低越接近原图，越高越自由发挥（推荐 0.4-0.7）
+                    </p>
+                  </div>
+                )}
               </div>
               
               <div className="flex gap-3 pt-2">
