@@ -722,6 +722,16 @@ const SettingsPage: React.FC = () => {
         'novelai_smea_dyn',
         'novelai_default_prompt',
         'novelai_default_negative',
+        // 旧版本/残留配置（垫图/风格迁移/其他参数）
+        'novelai_width',
+        'novelai_height',
+        'novelai_negative_prompt',
+        'novelai_nsfw',
+        'novelai_reference_image',
+        'novelai_reference_strength',
+        'novelai_vibe_transfer',
+        'novelai_vibe_image',
+        'novelai_vibe_strength',
       ];
       
       // 删除所有NovelAI配置

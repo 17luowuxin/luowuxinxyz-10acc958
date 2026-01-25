@@ -119,6 +119,10 @@ serve(async (req) => {
     const userSampler = config.sampler || "k_euler_ancestral";
     const userWidth = config.width || (isV4OrNewer ? 832 : 640);
     const userHeight = config.height || (isV4OrNewer ? 1216 : 640);
+
+    // 参考图/风格迁移图片过大会导致 NovelAI 400 “Error decoding request body”
+    // 这里设置一个保守阈值，超过则自动跳过参考图参数并尝试继续生成。
+    const MAX_REFERENCE_BASE64_LEN = 5_000_000; // ~3.5MB binary (rough)
     
     console.log("Generating image with NovelAI:", {
       model: modelId,
@@ -129,7 +133,7 @@ serve(async (req) => {
       width: userWidth,
       height: userHeight,
       promptLength: prompt?.length,
-      hasReferenceImage: !!config.referenceImage,
+      hasReferenceImage: !!requestRefImage,
       vibeTransfer: config.vibeTransfer,
     });
 
@@ -258,13 +262,23 @@ serve(async (req) => {
 
     // Add vibe transfer parameters (V4/V4.5 only)
     // 只有在 vibeImageBase64 确实有效（长度足够）时才添加，防止无效数据导致 400 错误
-    if (vibeImageBase64 && vibeImageBase64.length > 100 && isV4OrNewer) {
+    if (
+      vibeImageBase64 &&
+      vibeImageBase64.length > 100 &&
+      vibeImageBase64.length <= MAX_REFERENCE_BASE64_LEN &&
+      isV4OrNewer
+    ) {
       v4Params.reference_image_multiple = [{
         image: vibeImageBase64,
         strength: config.vibeStrength || 0.6,
         information_extracted: 1.0,
       }];
       console.log("Added vibe transfer to payload, image length:", vibeImageBase64.length);
+    } else if (vibeImageBase64 && vibeImageBase64.length > MAX_REFERENCE_BASE64_LEN) {
+      console.log(
+        "Vibe image too large, skipping reference_image_multiple. length:",
+        vibeImageBase64.length,
+      );
     } else if (config.vibeTransfer) {
       // 配置了 vibeTransfer 但图片无效，记录日志便于排查
       console.log("Vibe transfer enabled but no valid image, skipping reference_image_multiple");
@@ -296,20 +310,43 @@ serve(async (req) => {
       action: actionType,
       parameters: isV4OrNewer ? v4Params : v3Params,
     };
-    
-    console.log("NovelAI payload:", JSON.stringify(novelaiPayload, null, 2));
 
-    let response: Response;
-    try {
-      response = await fetch("https://image.novelai.net/ai/generate-image", {
+    // 避免把超长 base64 打到日志里（会导致日志爆炸/影响性能）
+    const summarizePayloadForLog = (payload: any) => {
+      const p = payload?.parameters || {};
+      const refMulti = Array.isArray(p.reference_image_multiple) ? p.reference_image_multiple : null;
+      return {
+        ...payload,
+        parameters: {
+          ...p,
+          image: p.image ? `[base64:${String(p.image).length}]` : undefined,
+          reference_image_multiple: refMulti
+            ? refMulti.map((x: any) => ({
+                ...x,
+                image: x?.image ? `[base64:${String(x.image).length}]` : undefined,
+              }))
+            : undefined,
+        },
+      };
+    };
+
+    console.log("NovelAI payload (summary):", JSON.stringify(summarizePayloadForLog(novelaiPayload), null, 2));
+
+    const sendNovelAIRequest = async (payload: any) => {
+      return await fetch("https://image.novelai.net/ai/generate-image", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
           "Content-Type": "application/json",
           Accept: "application/zip",
         },
-        body: JSON.stringify(novelaiPayload),
+        body: JSON.stringify(payload),
       });
+    };
+
+    let response: Response;
+    try {
+      response = await sendNovelAIRequest(novelaiPayload);
     } catch (fetchError) {
       console.error("NovelAI fetch error:", fetchError);
       return new Response(
@@ -329,38 +366,102 @@ serve(async (req) => {
       contentType,
     });
 
+    // 400: Error decoding request body
+    // 常见原因：带了过大的参考图 / 风格迁移图（尤其是残留配置）。
+    // 这里做一次自动降级重试：
+    // - 若带了 reference_image_multiple（风格迁移）→ 去掉后重试
+    // - 若是 img2img（带 image）→ 降级为 generate 后重试
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("NovelAI API error:", response.status, errorText);
+      const firstErrorText = await response.text();
+      const isDecodeBodyError =
+        response.status === 400 &&
+        (firstErrorText.includes("Error decoding request body") || firstErrorText.includes("decoding request body"));
 
-      if (response.status === 401) {
-        return new Response(JSON.stringify({ error: "NovelAI API密钥无效" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const hasVibe = isV4OrNewer && !!(v4Params as any).reference_image_multiple;
+      const hasImg2Img = actionType === "img2img" && !!(v4Params as any).image;
+
+      if (isDecodeBodyError && (hasVibe || hasImg2Img)) {
+        console.log("NovelAI 400 decode body detected, trying fallback...", {
+          hasVibe,
+          hasImg2Img,
         });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "NovelAI订阅已过期或额度不足" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "NovelAI请求过于频繁，请稍后再试" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+        // 1) 去掉 vibe 参数再试
+        if (hasVibe) {
+          const v4ParamsNoVibe = { ...(v4Params as any) };
+          delete v4ParamsNoVibe.reference_image_multiple;
+          const payloadNoVibe = {
+            ...novelaiPayload,
+            parameters: v4ParamsNoVibe,
+          };
+          console.log("Retrying without vibe transfer...");
+          response = await sendNovelAIRequest(payloadNoVibe);
+        }
+
+        // 2) 如果还是失败且是 img2img，再降级为纯文生图
+        if (!response.ok && hasImg2Img) {
+          const v4ParamsGen = { ...(v4Params as any) };
+          delete v4ParamsGen.image;
+          delete v4ParamsGen.strength;
+          const payloadGen = {
+            input: isV4OrNewer ? "" : prompt,
+            model: modelId,
+            action: "generate",
+            parameters: v4ParamsGen,
+          };
+          console.log("Retrying as generate (dropping img2img image)...");
+          response = await sendNovelAIRequest(payloadGen);
+        }
+
+        // 如果降级后依然失败，继续走下面的报错分支（读取新的 response.text）
       }
 
-      return new Response(
-        JSON.stringify({
-          error: `NovelAI生成失败: ${response.status} - ${errorText.substring(0, 200)}`,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("NovelAI API error:", response.status, errorText);
+
+        if (response.status === 401) {
+          return new Response(JSON.stringify({ error: "NovelAI API密钥无效" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "NovelAI订阅已过期或额度不足" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "NovelAI请求过于频繁，请稍后再试" }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // 针对 400 decode body 给更清晰的提示
+        if (response.status === 400 && errorText.includes("Error decoding request body")) {
+          return new Response(
+            JSON.stringify({
+              error: "请求体解析失败：可能存在残留的风格迁移/垫图配置或参考图过大。请在设置里清除 NovelAI 数据后重试。",
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: `NovelAI生成失败: ${response.status} - ${errorText.substring(0, 200)}`,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
     }
 
     // NovelAI通常返回zip（里面是png文件），需要解压
