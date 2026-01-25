@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X } from 'lucide-react';
+import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X, Copy, Trash2, Upload, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -87,6 +87,11 @@ const SettingsPage: React.FC = () => {
   const [novelaiTestNegative, setNovelaiTestNegative] = useState('');
   const [novelaiTestDrawing, setNovelaiTestDrawing] = useState(false);
   const [novelaiTestResult, setNovelaiTestResult] = useState<string | null>(null);
+  
+  // NovelAI 垫图(img2img)功能
+  const [novelaiTestRefImage, setNovelaiTestRefImage] = useState<string | null>(null);
+  const [novelaiTestRefStrength, setNovelaiTestRefStrength] = useState(0.6);
+  const novelaiRefInputRef = useRef<HTMLInputElement>(null);
   
   // NovelAI 可用模型列表
   const [novelaiModels, setNovelaiModels] = useState<{ id: string; name: string; description: string }[]>([]);
@@ -637,6 +642,9 @@ const SettingsPage: React.FC = () => {
           qualityTags: novelaiQualityTags,
           smea: novelaiSmea,
           smeaDyn: novelaiSmeaDyn,
+          // 垫图功能
+          referenceImage: novelaiTestRefImage,
+          referenceStrength: novelaiTestRefStrength,
         },
       });
       
@@ -657,6 +665,32 @@ const SettingsPage: React.FC = () => {
     } finally {
       setNovelaiTestDrawing(false);
     }
+  };
+  
+  // NovelAI 垫图上传处理
+  const handleNovelaiRefImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setNovelaiTestRefImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  // 复制提示词
+  const copyPromptToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success('已复制到剪贴板');
+    }).catch(() => {
+      toast.error('复制失败');
+    });
   };
 
   const useCustomApiHandler = () => {
@@ -1627,7 +1661,7 @@ const SettingsPage: React.FC = () => {
 
         {/* NovelAI 测试生成弹窗 */}
         <Dialog open={novelaiTestOpen} onOpenChange={setNovelaiTestOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <span className="text-xl">🖼️</span>
@@ -1637,24 +1671,158 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-4 py-4">
               {/* 正面提示词 */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">正面提示词（此处提示词仅用于该弹窗测试）</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">正面提示词</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => copyPromptToClipboard(novelaiTestPrompt)}
+                      className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
+                      title="复制"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (novelaiTestPrompt) {
+                          const textarea = document.querySelector('textarea[data-prompt="positive"]') as HTMLTextAreaElement;
+                          if (textarea) {
+                            textarea.select();
+                          }
+                        }
+                      }}
+                      className="p-1.5 rounded-lg bg-purple-50 text-purple-500 hover:bg-purple-100 transition-colors"
+                      title="全选"
+                    >
+                      <span className="text-xs font-bold">全</span>
+                    </button>
+                    <button
+                      onClick={() => setNovelaiTestPrompt('')}
+                      className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                      title="清空"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
                 <Textarea
+                  data-prompt="positive"
                   value={novelaiTestPrompt}
                   onChange={(e) => setNovelaiTestPrompt(e.target.value)}
-                  className="rounded-xl min-h-[100px]"
+                  className="rounded-xl min-h-[100px] font-mono text-sm"
+                  style={{ wordBreak: 'break-all' }}
                   placeholder="1girl, solo, long hair, blue eyes, smile, outdoors, cherry blossoms, spring"
                 />
               </div>
 
               {/* 负面提示词 */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">负面提示词（可选，留空使用默认）</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">负面提示词（可选）</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => copyPromptToClipboard(novelaiTestNegative)}
+                      className="p-1.5 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors"
+                      title="复制"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (novelaiTestNegative) {
+                          const textarea = document.querySelector('textarea[data-prompt="negative"]') as HTMLTextAreaElement;
+                          if (textarea) {
+                            textarea.select();
+                          }
+                        }
+                      }}
+                      className="p-1.5 rounded-lg bg-purple-50 text-purple-500 hover:bg-purple-100 transition-colors"
+                      title="全选"
+                    >
+                      <span className="text-xs font-bold">全</span>
+                    </button>
+                    <button
+                      onClick={() => setNovelaiTestNegative('')}
+                      className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                      title="清空"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
                 <Textarea
+                  data-prompt="negative"
                   value={novelaiTestNegative}
                   onChange={(e) => setNovelaiTestNegative(e.target.value)}
-                  className="rounded-xl min-h-[80px]"
+                  className="rounded-xl min-h-[80px] font-mono text-sm"
+                  style={{ wordBreak: 'break-all' }}
                   placeholder="留空将使用设置中的默认负面提示词"
                 />
+              </div>
+
+              {/* 垫图功能 (img2img) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">垫图 (img2img)</label>
+                  {novelaiTestRefImage && (
+                    <button
+                      onClick={() => setNovelaiTestRefImage(null)}
+                      className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                      title="移除垫图"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                
+                <input
+                  ref={novelaiRefInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleNovelaiRefImageUpload}
+                  className="hidden"
+                />
+                
+                {novelaiTestRefImage ? (
+                  <div className="relative">
+                    <img
+                      src={novelaiTestRefImage}
+                      alt="垫图预览"
+                      className="w-full h-32 object-contain rounded-xl border border-gray-200 bg-gray-50"
+                    />
+                    <button
+                      onClick={() => novelaiRefInputRef.current?.click()}
+                      className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-white/90 text-gray-700 text-xs font-medium hover:bg-white transition-colors shadow-sm"
+                    >
+                      更换图片
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => novelaiRefInputRef.current?.click()}
+                    className="w-full h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-purple-400 hover:text-purple-500 transition-colors"
+                  >
+                    <ImagePlus className="w-6 h-6" />
+                    <span className="text-sm">点击上传垫图</span>
+                  </button>
+                )}
+                
+                {/* 垫图强度 */}
+                {novelaiTestRefImage && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <label className="text-xs text-gray-500 whitespace-nowrap">重绘强度:</label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="0.9"
+                      step="0.05"
+                      value={novelaiTestRefStrength}
+                      onChange={(e) => setNovelaiTestRefStrength(parseFloat(e.target.value))}
+                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600 w-8">{novelaiTestRefStrength}</span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">上传图片后将以该图为基础进行重绘，强度越高变化越大</p>
               </div>
 
               {/* 生成按钮 */}
@@ -1668,7 +1836,7 @@ const SettingsPage: React.FC = () => {
                 ) : (
                   <Brush className="w-5 h-5 mr-2" />
                 )}
-                生成图像
+                {novelaiTestRefImage ? '重绘图像' : '生成图像'}
               </Button>
 
               {/* 结果展示 */}
