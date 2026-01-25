@@ -5,12 +5,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Heart, Sparkles, Mail, Lock } from 'lucide-react';
+import { Heart, Sparkles, Mail, Lock, Ticket } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
@@ -47,6 +49,23 @@ const AuthPage: React.FC = () => {
           setLoading(false);
           return;
         }
+        if (!inviteCode.trim()) {
+          toast.error('请输入邀请码');
+          setLoading(false);
+          return;
+        }
+        
+        // 验证邀请码
+        const { data: validateData, error: validateError } = await supabase.functions.invoke('validate-invite-code', {
+          body: { code: inviteCode, email }
+        });
+        
+        if (validateError || !validateData?.valid) {
+          toast.error(validateData?.message || '邀请码验证失败');
+          setLoading(false);
+          return;
+        }
+        
         const { error } = await signUp(email, password);
         if (error) {
           const msg = error.message || '';
@@ -177,6 +196,27 @@ const AuthPage: React.FC = () => {
                   className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary"
                 />
               </div>
+              
+              {mode === 'signup' && (
+                <>
+                  <div className="bg-amber-50/80 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                    <p className="text-xs text-amber-700 dark:text-amber-300 text-center">
+                      🎫 本站采用邀请制注册，请输入有效邀请码
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="邀请码"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                      required
+                      className="pl-12 h-12 rounded-xl border-2 border-border focus:border-primary uppercase tracking-widest"
+                    />
+                  </div>
+                </>
+              )}
 
               <Button
                 type="submit"
