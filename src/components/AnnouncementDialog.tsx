@@ -1,22 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Copy, Check, Moon, Users, Gift, MessageCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 interface AnnouncementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const WECHAT_ID = 'XxyLxs9201314';
+interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  wechat_id: string | null;
+}
 
 const AnnouncementDialog: React.FC<AnnouncementDialogProps> = ({ open, onOpenChange }) => {
   const [copied, setCopied] = useState(false);
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      fetchAnnouncement();
+    }
+  }, [open]);
+
+  const fetchAnnouncement = async () => {
+    const { data } = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    
+    if (data) {
+      setAnnouncement(data);
+    }
+  };
 
   const handleCopyWechat = async () => {
+    if (!announcement?.wechat_id) return;
+    
     try {
-      await navigator.clipboard.writeText(WECHAT_ID);
+      await navigator.clipboard.writeText(announcement.wechat_id);
       setCopied(true);
       toast({
         title: "复制成功",
@@ -32,80 +61,101 @@ const AnnouncementDialog: React.FC<AnnouncementDialogProps> = ({ open, onOpenCha
     }
   };
 
+  const handleClose = () => {
+    // Mark as permanently dismissed
+    localStorage.setItem('announcement_dismissed', 'true');
+    onOpenChange(false);
+  };
+
+  if (!announcement) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 bg-transparent shadow-2xl">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent 
+        className="max-w-[280px] p-0 overflow-hidden border-0 bg-transparent shadow-xl rounded-2xl"
+        aria-describedby="announcement-description"
+      >
+        <VisuallyHidden>
+          <DialogTitle>公告</DialogTitle>
+          <DialogDescription id="announcement-description">
+            {announcement.title}
+          </DialogDescription>
+        </VisuallyHidden>
+        
         <div className="relative">
-          {/* Background with gradient */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 rounded-2xl" />
+          {/* Light gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 rounded-2xl" />
           
           {/* Decorative elements */}
-          <div className="absolute top-4 right-4 w-20 h-20 bg-white/10 rounded-full blur-xl" />
-          <div className="absolute bottom-8 left-4 w-16 h-16 bg-pink-300/20 rounded-full blur-lg" />
-          <div className="absolute top-1/2 right-8 w-12 h-12 bg-yellow-300/20 rounded-full blur-md" />
+          <div className="absolute top-3 right-3 w-12 h-12 bg-pink-200/40 rounded-full blur-lg" />
+          <div className="absolute bottom-6 left-3 w-10 h-10 bg-purple-200/40 rounded-full blur-md" />
           
           {/* Stars decoration */}
-          <div className="absolute top-6 left-6">
-            <Moon className="w-6 h-6 text-yellow-300 animate-pulse" />
+          <div className="absolute top-4 left-4">
+            <Moon className="w-4 h-4 text-purple-400 animate-pulse" />
           </div>
-          <div className="absolute top-12 right-12 text-yellow-200 text-xs">✨</div>
-          <div className="absolute bottom-16 right-6 text-yellow-200 text-sm">⭐</div>
+          <div className="absolute top-8 right-8 text-purple-300 text-xs">✨</div>
+          <div className="absolute bottom-12 right-4 text-pink-300 text-sm">⭐</div>
           
           {/* Content */}
-          <div className="relative z-10 p-6 text-center">
+          <div className="relative z-10 p-4 text-center">
             {/* Title */}
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Moon className="w-5 h-5 text-yellow-300" />
-              <h2 className="text-xl font-bold text-white drop-shadow-lg">
-                梦境小手机交流群
+            <div className="flex items-center justify-center gap-1.5 mb-3">
+              <Moon className="w-4 h-4 text-purple-500" />
+              <h2 className="text-base font-bold text-purple-700">
+                {announcement.title}
               </h2>
             </div>
             
             {/* Features */}
-            <div className="flex justify-center gap-4 mb-6">
-              <div className="flex items-center gap-1 text-white/90 text-sm">
-                <MessageCircle className="w-4 h-4" />
+            <div className="flex justify-center gap-2 mb-4 flex-wrap">
+              <div className="flex items-center gap-1 text-purple-600 text-xs">
+                <MessageCircle className="w-3 h-3" />
                 <span>玩法分享</span>
               </div>
-              <div className="flex items-center gap-1 text-white/90 text-sm">
-                <Users className="w-4 h-4" />
+              <div className="flex items-center gap-1 text-purple-600 text-xs">
+                <Users className="w-3 h-3" />
                 <span>问题求助</span>
               </div>
-              <div className="flex items-center gap-1 text-white/90 text-sm">
-                <Gift className="w-4 h-4" />
+              <div className="flex items-center gap-1 text-purple-600 text-xs">
+                <Gift className="w-3 h-3" />
                 <span>干货领取</span>
               </div>
             </div>
             
-            {/* WeChat info card */}
-            <div className="bg-white/15 backdrop-blur-sm rounded-xl p-4 mb-4 border border-white/20">
-              <p className="text-white/90 text-sm mb-3">
-                🔥 已购宝宝 带付款记录加微信拉你进群！
+            {/* Content card */}
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 mb-3 border border-purple-100">
+              <p className="text-purple-700 text-xs mb-2 whitespace-pre-line">
+                {announcement.content}
               </p>
               
               {/* WeChat ID with copy button */}
-              <button
-                onClick={handleCopyWechat}
-                className="w-full bg-white/20 hover:bg-white/30 transition-all duration-200 rounded-lg p-3 flex items-center justify-center gap-2 group border border-white/30 hover:border-white/50"
-              >
-                <span className="text-white font-mono font-bold text-lg tracking-wide">
-                  {WECHAT_ID}
-                </span>
-                {copied ? (
-                  <Check className="w-5 h-5 text-green-300" />
-                ) : (
-                  <Copy className="w-5 h-5 text-white/80 group-hover:text-white transition-colors" />
-                )}
-              </button>
-              <p className="text-white/60 text-xs mt-2">
-                点击上方复制微信号
-              </p>
+              {announcement.wechat_id && (
+                <>
+                  <button
+                    onClick={handleCopyWechat}
+                    className="w-full bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 transition-all duration-200 rounded-lg p-2 flex items-center justify-center gap-1.5 group border border-purple-200 hover:border-purple-300"
+                  >
+                    <span className="text-purple-700 font-mono font-bold text-sm tracking-wide">
+                      {announcement.wechat_id}
+                    </span>
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-purple-500 group-hover:text-purple-700 transition-colors" />
+                    )}
+                  </button>
+                  <p className="text-purple-400 text-[10px] mt-1.5">
+                    点击上方复制微信号
+                  </p>
+                </>
+              )}
             </div>
             
             {/* Close button */}
             <Button
-              onClick={() => onOpenChange(false)}
-              className="w-full bg-white text-purple-600 hover:bg-white/90 font-semibold rounded-xl py-3 shadow-lg"
+              onClick={handleClose}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold rounded-xl py-2 text-sm shadow-md"
             >
               我知道了
             </Button>
@@ -118,23 +168,24 @@ const AnnouncementDialog: React.FC<AnnouncementDialogProps> = ({ open, onOpenCha
 
 // Utility function to check if announcement should be shown
 export const shouldShowAnnouncement = (): boolean => {
-  const lastShownTime = localStorage.getItem('announcement_last_shown');
-  
-  if (!lastShownTime) {
-    return true;
+  // If user has dismissed it before, never show again
+  const dismissed = localStorage.getItem('announcement_dismissed');
+  if (dismissed === 'true') {
+    return false;
   }
   
-  const lastShown = new Date(lastShownTime);
-  const now = new Date();
+  // Check if already shown this session
+  const shownThisSession = sessionStorage.getItem('announcement_shown_session');
+  if (shownThisSession === 'true') {
+    return false;
+  }
   
-  // Show once every 3 days
-  const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
-  return (now.getTime() - lastShown.getTime()) > threeDaysInMs;
+  return true;
 };
 
-// Utility function to mark announcement as shown
+// Utility function to mark announcement as shown for this session
 export const markAnnouncementShown = () => {
-  localStorage.setItem('announcement_last_shown', new Date().toISOString());
+  sessionStorage.setItem('announcement_shown_session', 'true');
 };
 
 export default AnnouncementDialog;
