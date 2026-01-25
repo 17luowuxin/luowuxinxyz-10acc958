@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -104,13 +104,6 @@ interface ActivityTrendData {
   totalSessions: number;
 }
 
-interface UserProfile {
-  id: string;
-  user_id: string;
-  nickname: string | null;
-  avatar_url: string | null;
-  created_at: string;
-}
 
 interface AdminUser {
   id: string;
@@ -118,6 +111,7 @@ interface AdminUser {
   created_at: string;
   last_sign_in_at: string | null;
   last_activity_at: string | null;
+  message_count: number;
   nickname: string | null;
   avatar_url: string | null;
 }
@@ -152,8 +146,9 @@ const AdminPage: React.FC = () => {
   const [activityTrend, setActivityTrend] = useState<ActivityTrendData[]>([]);
   const [weeklyActiveUsers, setWeeklyActiveUsers] = useState(0);
   const [todayActiveUsers, setTodayActiveUsers] = useState(0);
-  const [userList, setUserList] = useState<UserProfile[]>([]);
-  const [showUserList, setShowUserList] = useState(false);
+  
+  // 用户搜索
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   
   // 新增状态：管理用户
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -205,7 +200,7 @@ const AdminPage: React.FC = () => {
         fetchStats();
         fetchTrendData();
         fetchActivityTrend();
-        fetchUserList();
+        fetchAdminUsers();
         fetchAnnouncement();
       } else {
         setIsAdmin(false);
@@ -303,7 +298,7 @@ const AdminPage: React.FC = () => {
       fetchStats();
       fetchTrendData();
       fetchActivityTrend();
-      fetchUserList();
+      fetchAdminUsers();
       fetchAnnouncement();
       toast.success('管理员登录成功');
     } else {
@@ -435,20 +430,6 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const fetchUserList = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      
-      if (error) throw error;
-      setUserList(data || []);
-    } catch (err) {
-      console.error('Error fetching user list:', err);
-    }
-  };
 
   // 获取所有用户（包含邮箱）
   const fetchAdminUsers = async () => {
@@ -1165,13 +1146,13 @@ const AdminPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* 用户管理（包含邮箱） */}
+        {/* 用户管理（按活跃度排序 + 搜索） */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Mail className="w-5 h-5" />
-                用户管理
+                <TrendingUp className="w-5 h-5 text-primary" />
+                用户活跃度排行
               </div>
               <Button 
                 variant="outline" 
@@ -1180,25 +1161,51 @@ const AdminPage: React.FC = () => {
                 disabled={loadingUsers}
               >
                 {loadingUsers ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                加载用户
+                刷新
               </Button>
             </CardTitle>
             <CardDescription>
-              查看所有用户邮箱、登录时间和使用情况
+              按消息数量排序，显示用户活跃度（自动加载）
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* 搜索框 */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="搜索用户昵称或邮箱..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            
             {adminUsers.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">点击"加载用户"获取用户列表</p>
+              <p className="text-center text-muted-foreground py-8">
+                {loadingUsers ? '加载中...' : '暂无用户数据'}
+              </p>
             ) : (
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2">
-                  {adminUsers.map((user, index) => (
+                  {adminUsers
+                    .filter(user => {
+                      if (!userSearchQuery) return true;
+                      const query = userSearchQuery.toLowerCase();
+                      return (
+                        (user.nickname?.toLowerCase().includes(query)) ||
+                        (user.email?.toLowerCase().includes(query))
+                      );
+                    })
+                    .map((user, index) => (
                     <div 
                       key={user.id}
                       className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
-                      <span className="text-xs text-muted-foreground w-6">{index + 1}</span>
+                      <div className="flex flex-col items-center w-8">
+                        <span className={`text-xs font-bold ${index < 3 ? 'text-primary' : 'text-muted-foreground'}`}>
+                          {index < 3 ? ['🥇', '🥈', '🥉'][index] : `#${index + 1}`}
+                        </span>
+                      </div>
                       {user.avatar_url ? (
                         <img 
                           src={user.avatar_url} 
@@ -1219,18 +1226,16 @@ const AdminPage: React.FC = () => {
                           {user.email || '无邮箱'}
                         </p>
                       </div>
-                      <div className="text-right text-xs text-muted-foreground space-y-1">
-                        <p className="flex items-center gap-1 justify-end">
-                          <Calendar className="w-3 h-3" />
-                          注册: {new Date(user.created_at).toLocaleDateString('zh-CN')}
+                      <div className="text-right space-y-1">
+                        <p className="text-sm font-bold text-primary flex items-center gap-1 justify-end">
+                          <MessageCircle className="w-3 h-3" />
+                          {user.message_count.toLocaleString()}
                         </p>
-                        <p className="flex items-center gap-1 justify-end">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
                           <Clock className="w-3 h-3" />
-                          活跃: {user.last_activity_at 
+                          {user.last_activity_at 
                             ? new Date(user.last_activity_at).toLocaleDateString('zh-CN')
-                            : user.last_sign_in_at 
-                              ? new Date(user.last_sign_in_at).toLocaleDateString('zh-CN')
-                              : '从未'
+                            : '从未'
                           }
                         </p>
                       </div>
@@ -1362,66 +1367,6 @@ const AdminPage: React.FC = () => {
               </>
             )}
           </CardContent>
-        </Card>
-
-        {/* 用户列表（简化版，保留兼容） */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                用户列表（快速查看）
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowUserList(!showUserList)}
-              >
-                {showUserList ? '收起' : '展开'}
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          {showUserList && (
-            <CardContent>
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-2">
-                  {userList.map((profile, index) => (
-                    <div 
-                      key={profile.id}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                    >
-                      <span className="text-xs text-muted-foreground w-6">{index + 1}</span>
-                      {profile.avatar_url ? (
-                        <img 
-                          src={profile.avatar_url} 
-                          alt="" 
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                          <User className="w-5 h-5 text-primary" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {profile.nickname || '未设置昵称'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          ID: {profile.user_id.slice(0, 8)}...
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(profile.created_at).toLocaleDateString('zh-CN')}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          )}
         </Card>
 
         {/* 新建/编辑主题 */}
