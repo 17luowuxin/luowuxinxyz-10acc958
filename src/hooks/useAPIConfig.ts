@@ -21,11 +21,19 @@ export interface VNConfig {
   model?: string;
 }
 
+export interface ImageConfig {
+  enabled?: boolean;
+  apiKey?: string;
+  apiUrl?: string;
+  model?: string;
+}
+
 export const useAPIConfig = () => {
   const { user } = useAuth();
   const [apiConfig, setApiConfig] = useState<APIConfig>({});
   const [ttsConfig, setTTSConfig] = useState<TTSConfig | null>(null);
   const [vnConfig, setVNConfig] = useState<VNConfig | null>(null);
+  const [imageConfig, setImageConfig] = useState<ImageConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAPIConfig = useCallback(async () => {
@@ -84,6 +92,23 @@ export const useAPIConfig = () => {
           setVNConfig(null);
         }
 
+        // 图片生成配置 (统一用于聊天和空间)
+        const imageEnabled = data.find(k => k.provider === 'space_image_enabled');
+        const imageKey = data.find(k => k.provider === 'space_image_api_key');
+        const imageUrl = data.find(k => k.provider === 'space_image_api_url');
+        const imageModel = data.find(k => k.provider === 'space_image_model');
+
+        if (imageKey || imageUrl) {
+          setImageConfig({
+            enabled: imageEnabled?.api_key === 'true',
+            apiKey: imageKey?.api_key,
+            apiUrl: imageUrl?.api_key,
+            model: imageModel?.api_key,
+          });
+        } else {
+          setImageConfig(null);
+        }
+
         if (customKey) {
           setApiConfig({
             provider: 'custom',
@@ -108,6 +133,7 @@ export const useAPIConfig = () => {
         setApiConfig({});
         setTTSConfig(null);
         setVNConfig(null);
+        setImageConfig(null);
       }
     } catch (error) {
       console.error('Error fetching API config:', error);
@@ -123,5 +149,5 @@ export const useAPIConfig = () => {
 
   const isConfigured = Boolean(apiConfig.apiKey && apiConfig.provider);
 
-  return { apiConfig, ttsConfig, vnConfig, loading, isConfigured, refetch: fetchAPIConfig };
+  return { apiConfig, ttsConfig, vnConfig, imageConfig, loading, isConfigured, refetch: fetchAPIConfig };
 };
