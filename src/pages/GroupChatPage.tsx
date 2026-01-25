@@ -493,28 +493,20 @@ const GroupChatPage: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      // 角色回角色功能：连续多轮互动（根据设置调整）
+      // 角色回角色功能：连续多轮互动（保证执行设置的轮数）
       if (lastCharacterResponse && members.length > 1) {
-        // 获取实际设置（热闹模式下提高概率和轮数）
-        const effectiveSettings = livelyMode ? {
-          maxRounds: Math.min(interactionSettings.maxRounds + 2, 8),
-          firstTriggerChance: Math.min(interactionSettings.firstTriggerChance + 30, 95),
-          continueChanceBase: Math.min(interactionSettings.continueChanceBase + 20, 80),
-          continueChanceDecay: Math.max(interactionSettings.continueChanceDecay - 5, 5)
-        } : { ...interactionSettings };
+        // 获取实际设置（热闹模式下增加轮数）
+        const effectiveRounds = livelyMode 
+          ? Math.min(interactionSettings.maxRounds + 2, 8)
+          : interactionSettings.maxRounds;
         
-        console.log('Interaction settings:', effectiveSettings, 'Lively mode:', livelyMode);
+        console.log('Interaction rounds:', effectiveRounds, 'Lively mode:', livelyMode);
         
-        let currentRound = 0;
-        const firstRoll = Math.random() * 100;
-        let continueInteraction = firstRoll < effectiveSettings.firstTriggerChance;
         let currentTrigger = lastCharacterResponse;
-        
-        console.log(`First trigger roll: ${firstRoll.toFixed(1)} < ${effectiveSettings.firstTriggerChance}? ${continueInteraction}`);
 
-        while (continueInteraction && currentRound < effectiveSettings.maxRounds) {
-          currentRound++;
-          console.log(`Character-to-character round ${currentRound}/${effectiveSettings.maxRounds}...`);
+        // 保证执行设置的轮数
+        for (let currentRound = 1; currentRound <= effectiveRounds; currentRound++) {
+          console.log(`Character-to-character round ${currentRound}/${effectiveRounds}...`);
           await new Promise(resolve => setTimeout(resolve, livelyMode ? 800 : 1200));
           
           const c2cBody: any = {
@@ -541,7 +533,10 @@ const GroupChatPage: React.FC = () => {
               const c2cResponse = c2cData.responses[0];
               // 清理内容
               const cleanedC2cContent = sanitizeMessageContent(c2cResponse.content);
-              if (!cleanedC2cContent) continue; // 跳过空内容
+              if (!cleanedC2cContent) {
+                console.log(`Round ${currentRound} got empty content, retrying...`);
+                continue; // 跳过空内容但继续下一轮
+              }
               
               const { data: c2cMsg } = await supabase
                 .from('group_messages')
@@ -568,21 +563,13 @@ const GroupChatPage: React.FC = () => {
                   characterName: c2cResponse.characterName
                 });
                 currentTrigger = { ...c2cResponse, content: cleanedC2cContent };
-                
-                // 递减概率决定是否继续
-                const continueChance = effectiveSettings.continueChanceBase - (currentRound * effectiveSettings.continueChanceDecay);
-                const continueRoll = Math.random() * 100;
-                continueInteraction = continueRoll < Math.max(continueChance, 5);
-                console.log(`Continue roll: ${continueRoll.toFixed(1)} < ${Math.max(continueChance, 5)}? ${continueInteraction}`);
-              } else {
-                continueInteraction = false;
+                console.log(`Round ${currentRound} completed: ${c2cResponse.characterName}`);
               }
             } else {
-              continueInteraction = false;
+              console.error(`Round ${currentRound} failed:`, c2cError);
             }
           } catch (c2cErr) {
             console.error('Character-to-character error:', c2cErr);
-            continueInteraction = false;
           }
         }
       }
@@ -850,59 +837,23 @@ const GroupChatPage: React.FC = () => {
               
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">最大互动轮数: {interactionSettings.maxRounds}轮</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">互动轮数: {interactionSettings.maxRounds}轮</label>
                   <input
                     type="range"
-                    min="1"
+                    min="0"
                     max="8"
                     value={interactionSettings.maxRounds}
                     onChange={(e) => updateInteractionSetting('maxRounds', parseInt(e.target.value))}
                     className="w-full accent-primary"
                   />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">首次触发概率: {interactionSettings.firstTriggerChance}%</label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="100"
-                    step="5"
-                    value={interactionSettings.firstTriggerChance}
-                    onChange={(e) => updateInteractionSetting('firstTriggerChance', parseInt(e.target.value))}
-                    className="w-full accent-primary"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">继续互动基础概率: {interactionSettings.continueChanceBase}%</label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="80"
-                    step="5"
-                    value={interactionSettings.continueChanceBase}
-                    onChange={(e) => updateInteractionSetting('continueChanceBase', parseInt(e.target.value))}
-                    className="w-full accent-primary"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">每轮递减: {interactionSettings.continueChanceDecay}%</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    step="5"
-                    value={interactionSettings.continueChanceDecay}
-                    onChange={(e) => updateInteractionSetting('continueChanceDecay', parseInt(e.target.value))}
-                    className="w-full accent-primary"
-                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    设为0则角色之间不会互动
+                  </p>
                 </div>
               </div>
               
               <p className="text-xs text-muted-foreground">
-                💡 开启「热闹模式」后，轮数+2、首次触发+30%、继续概率+20%
+                💡 开启「热闹模式」后轮数+2
               </p>
             </div>
           </motion.div>
