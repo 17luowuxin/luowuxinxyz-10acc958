@@ -2643,15 +2643,7 @@ const SettingsPage: React.FC = () => {
         {/* Push Notification Settings */}
         <PushNotificationCard />
 
-        {/* Admin Button */}
-        <Button 
-          variant="outline" 
-          className="w-full rounded-2xl py-5 bg-white/60 backdrop-blur-sm border-purple-200 text-purple-600 hover:bg-purple-50" 
-          onClick={() => navigate('/admin')}
-        >
-          <Shield className="w-4 h-4 mr-2" />
-          管理员后台
-        </Button>
+        {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 
         {/* Logout Button */}
         <Button 
