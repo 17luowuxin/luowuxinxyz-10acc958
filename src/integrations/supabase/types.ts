@@ -866,6 +866,39 @@ export type Database = {
           },
         ]
       }
+      invite_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_used: boolean
+          note: string | null
+          used_at: string | null
+          used_by_email: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_used?: boolean
+          note?: string | null
+          used_at?: string | null
+          used_by_email?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_used?: boolean
+          note?: string | null
+          used_at?: string | null
+          used_by_email?: string | null
+        }
+        Relationships: []
+      }
       moments: {
         Row: {
           character_id: string

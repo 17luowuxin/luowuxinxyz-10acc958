@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import InviteCodeManager from '@/components/admin/InviteCodeManager';
 
 interface Theme {
   id: string;
@@ -1007,6 +1008,9 @@ const AdminPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* 邀请码管理 */}
+        <InviteCodeManager />
 
         {/* 数据趋势图表 */}
         <Card>
