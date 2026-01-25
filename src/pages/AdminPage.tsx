@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 interface Theme {
   id: string;
@@ -104,6 +106,24 @@ interface UserProfile {
   created_at: string;
 }
 
+interface AdminUser {
+  id: string;
+  email: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  last_activity_at: string | null;
+  nickname: string | null;
+  avatar_url: string | null;
+}
+
+interface InactiveUser {
+  id: string;
+  email: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  last_activity_at: string | null;
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -117,6 +137,13 @@ const AdminPage: React.FC = () => {
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [userList, setUserList] = useState<UserProfile[]>([]);
   const [showUserList, setShowUserList] = useState(false);
+  
+  // 新增状态：管理用户
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [inactiveUsers, setInactiveUsers] = useState<InactiveUser[]>([]);
+  const [inactiveMonths, setInactiveMonths] = useState<string>('6');
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
   
   // 编辑状态
   const [editingTheme, setEditingTheme] = useState<Theme | null>(null);
@@ -305,6 +332,105 @@ const AdminPage: React.FC = () => {
       setUserList(data || []);
     } catch (err) {
       console.error('Error fetching user list:', err);
+    }
+  };
+
+  // 获取所有用户（包含邮箱）
+  const fetchAdminUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'get_users' }
+      });
+      
+      if (error) {
+        console.error('Error fetching admin users:', error);
+        toast.error('获取用户列表失败');
+        return;
+      }
+      
+      setAdminUsers(data?.users || []);
+    } catch (err) {
+      console.error('Error fetching admin users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // 获取不活跃用户
+  const fetchInactiveUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'get_inactive_users', inactiveMonths: parseInt(inactiveMonths) }
+      });
+      
+      if (error) {
+        console.error('Error fetching inactive users:', error);
+        toast.error('获取不活跃用户失败');
+        return;
+      }
+      
+      setInactiveUsers(data?.users || []);
+      toast.success(`找到 ${data?.users?.length || 0} 个超过 ${inactiveMonths} 个月未活跃的用户`);
+    } catch (err) {
+      console.error('Error fetching inactive users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // 清理单个用户数据
+  const cleanupUserData = async (userId: string) => {
+    setCleaningUp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'cleanup_user_data', userId }
+      });
+      
+      if (error) {
+        console.error('Error cleaning up user:', error);
+        toast.error('清理用户数据失败');
+        return;
+      }
+      
+      toast.success('用户数据已清理');
+      fetchAdminUsers();
+      fetchInactiveUsers();
+    } catch (err) {
+      console.error('Error cleaning up user:', err);
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
+  // 批量清理不活跃用户
+  const batchCleanupInactiveUsers = async () => {
+    if (inactiveUsers.length === 0) {
+      toast.error('没有需要清理的用户');
+      return;
+    }
+    
+    setCleaningUp(true);
+    try {
+      const userIds = inactiveUsers.map(u => u.id);
+      const { data, error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'batch_cleanup', userIds }
+      });
+      
+      if (error) {
+        console.error('Error batch cleanup:', error);
+        toast.error('批量清理失败');
+        return;
+      }
+      
+      toast.success(`已清理 ${data?.cleanedCount || 0} 个用户的数据`);
+      setInactiveUsers([]);
+      fetchAdminUsers();
+    } catch (err) {
+      console.error('Error batch cleanup:', err);
+    } finally {
+      setCleaningUp(false);
     }
   };
 
@@ -741,13 +867,232 @@ const AdminPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* 用户列表 */}
+        {/* 数据清理政策说明 */}
+        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="w-5 h-5" />
+              数据管理政策
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-amber-800 dark:text-amber-300 space-y-2">
+            <p>📌 <strong>数据保留政策：</strong></p>
+            <ul className="list-disc list-inside space-y-1 ml-4">
+              <li>超过 <strong>6个月</strong> 未使用的账号数据将被清理</li>
+              <li>清理后，用户仍可使用相同邮箱重新注册</li>
+              <li>清理的数据包括：聊天记录、角色、照片、音乐等</li>
+              <li>账号本身不会被删除，仅清理用户数据</li>
+            </ul>
+            <p className="mt-3 text-xs opacity-80">💡 此政策类似 Telegram 的账号不活跃清理机制，旨在节省存储空间和保护用户隐私。</p>
+          </CardContent>
+        </Card>
+
+        {/* 用户管理（包含邮箱） */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                用户管理
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={fetchAdminUsers}
+                disabled={loadingUsers}
+              >
+                {loadingUsers ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                加载用户
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              查看所有用户邮箱、登录时间和使用情况
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {adminUsers.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">点击"加载用户"获取用户列表</p>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2">
+                  {adminUsers.map((user, index) => (
+                    <div 
+                      key={user.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <span className="text-xs text-muted-foreground w-6">{index + 1}</span>
+                      {user.avatar_url ? (
+                        <img 
+                          src={user.avatar_url} 
+                          alt="" 
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                          <User className="w-5 h-5 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {user.nickname || user.email || '未知用户'}
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {user.email || '无邮箱'}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground space-y-1">
+                        <p className="flex items-center gap-1 justify-end">
+                          <Calendar className="w-3 h-3" />
+                          注册: {new Date(user.created_at).toLocaleDateString('zh-CN')}
+                        </p>
+                        <p className="flex items-center gap-1 justify-end">
+                          <Clock className="w-3 h-3" />
+                          活跃: {user.last_activity_at 
+                            ? new Date(user.last_activity_at).toLocaleDateString('zh-CN')
+                            : user.last_sign_in_at 
+                              ? new Date(user.last_sign_in_at).toLocaleDateString('zh-CN')
+                              : '从未'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 不活跃用户清理 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              不活跃用户数据清理
+            </CardTitle>
+            <CardDescription>
+              查找并清理长期未使用的用户数据（账号保留，仅清理数据）
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Label>不活跃时间：</Label>
+              <Select value={inactiveMonths} onValueChange={setInactiveMonths}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 个月</SelectItem>
+                  <SelectItem value="6">6 个月</SelectItem>
+                  <SelectItem value="12">12 个月</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button 
+                variant="outline" 
+                onClick={fetchInactiveUsers}
+                disabled={loadingUsers}
+              >
+                {loadingUsers ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                查找不活跃用户
+              </Button>
+            </div>
+
+            {inactiveUsers.length > 0 && (
+              <>
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-sm text-destructive font-medium">
+                    找到 {inactiveUsers.length} 个超过 {inactiveMonths} 个月未活跃的用户
+                  </p>
+                </div>
+
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2">
+                    {inactiveUsers.map((user) => (
+                      <div 
+                        key={user.id}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-destructive/20 flex items-center justify-center">
+                          <User className="w-4 h-4 text-destructive" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{user.email || '无邮箱'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            最后活跃: {user.last_activity_at 
+                              ? new Date(user.last_activity_at).toLocaleDateString('zh-CN')
+                              : user.last_sign_in_at 
+                                ? new Date(user.last_sign_in_at).toLocaleDateString('zh-CN')
+                                : '从未'
+                            }
+                          </p>
+                        </div>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-destructive">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认清理用户数据</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                将清理该用户的所有数据（聊天记录、角色、照片等），但保留账号。用户仍可重新登录使用。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => cleanupUserData(user.id)}
+                                className="bg-destructive text-destructive-foreground"
+                              >
+                                确认清理
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full" disabled={cleaningUp}>
+                      {cleaningUp ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      批量清理所有 {inactiveUsers.length} 个不活跃用户数据
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认批量清理</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        将清理 {inactiveUsers.length} 个用户的所有数据。此操作不可撤销，但用户账号会保留，仍可重新登录使用。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={batchCleanupInactiveUsers}
+                        className="bg-destructive text-destructive-foreground"
+                      >
+                        确认批量清理
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 用户列表（简化版，保留兼容） */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                用户列表
+                用户列表（快速查看）
               </div>
               <Button 
                 variant="outline" 
