@@ -75,33 +75,39 @@ serve(async (req) => {
         .from('profiles')
         .select('user_id, nickname, avatar_url');
 
-      // Get last activity (last message time) for each user
-      const { data: lastMessages } = await adminClient
+      // Get all messages to calculate activity
+      const { data: allMessages } = await adminClient
         .from('chat_messages')
         .select('user_id, created_at')
         .order('created_at', { ascending: false });
 
-      // Build user activity map
-      const lastActivityMap: Record<string, string> = {};
-      (lastMessages || []).forEach(msg => {
-        if (!lastActivityMap[msg.user_id]) {
-          lastActivityMap[msg.user_id] = msg.created_at;
+      // Build user activity map with message count and last activity
+      const activityMap: Record<string, { lastActivity: string; messageCount: number }> = {};
+      (allMessages || []).forEach(msg => {
+        if (!activityMap[msg.user_id]) {
+          activityMap[msg.user_id] = { lastActivity: msg.created_at, messageCount: 0 };
         }
+        activityMap[msg.user_id].messageCount++;
       });
 
       // Merge data
       const users = authUsers.users.map(authUser => {
         const profile = profiles?.find(p => p.user_id === authUser.id);
+        const activity = activityMap[authUser.id];
         return {
           id: authUser.id,
           email: authUser.email,
           created_at: authUser.created_at,
           last_sign_in_at: authUser.last_sign_in_at,
-          last_activity_at: lastActivityMap[authUser.id] || null,
+          last_activity_at: activity?.lastActivity || null,
+          message_count: activity?.messageCount || 0,
           nickname: profile?.nickname || null,
           avatar_url: profile?.avatar_url || null,
         };
       });
+
+      // Sort by message count (most active first)
+      users.sort((a, b) => b.message_count - a.message_count);
 
       return new Response(
         JSON.stringify({ users }),
