@@ -54,7 +54,7 @@ serve(async (req) => {
 
     // Use service role client for admin operations
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, inactiveMonths } = await req.json();
+    const { action, inactiveMonths, userId, userIds, newPassword } = await req.json();
 
     if (action === 'get_users') {
       // Get all users from auth.users with profiles data
@@ -160,8 +160,8 @@ serve(async (req) => {
       );
     }
 
+
     if (action === 'cleanup_user_data') {
-      const { userId } = await req.json();
       if (!userId) {
         return new Response(
           JSON.stringify({ error: 'userId required' }),
@@ -193,8 +193,8 @@ serve(async (req) => {
       );
     }
 
+
     if (action === 'batch_cleanup') {
-      const { userIds } = await req.json();
       if (!userIds || !Array.isArray(userIds)) {
         return new Response(
           JSON.stringify({ error: 'userIds array required' }),
@@ -223,6 +223,41 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, cleanedCount }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 重置用户密码
+    if (action === 'reset_password') {
+      if (!userId || !newPassword) {
+        return new Response(
+          JSON.stringify({ error: 'userId and newPassword required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (newPassword.length < 6) {
+        return new Response(
+          JSON.stringify({ error: 'Password must be at least 6 characters' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(
+        userId,
+        { password: newPassword }
+      );
+
+      if (updateError) {
+        console.error('Error resetting password:', updateError);
+        return new Response(
+          JSON.stringify({ error: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
