@@ -1590,6 +1590,14 @@ const SettingsPage: React.FC = () => {
                   保存设置
                 </button>
               </div>
+              
+              {/* 关闭按钮 */}
+              <button
+                onClick={() => setNovelaiSettingsOpen(false)}
+                className="w-full py-3 rounded-xl bg-gray-100 text-gray-600 font-medium hover:bg-gray-200 transition-colors"
+              >
+                关闭
+              </button>
             </div>
           </DialogContent>
         </Dialog>
