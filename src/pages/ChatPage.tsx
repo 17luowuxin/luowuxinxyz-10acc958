@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
+import ChatMessageBubble from '@/components/chat/ChatMessageBubble';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -45,6 +46,18 @@ const VOICE_REQUEST_KEYWORDS = [
 const isVoiceRequestedByUser = (text: string) => {
   const t = (text ?? "").replace(/\s+/g, "");
   return VOICE_REQUEST_KEYWORDS.some((kw) => t.includes(kw));
+};
+
+// 格式化时间 - 放在组件外避免每条消息都重新创建
+const formatMessageTime = (date: Date) => {
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  if (isToday) {
+    return `${hours}:${minutes}`;
+  }
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
 };
 
 // Emoji categories with comprehensive emoji list
@@ -3875,18 +3888,7 @@ const ChatPage: React.FC = () => {
             const currentTime = new Date(msg.created_at);
             const prevMsg = index > 0 ? messages[index - 1] : null;
             const prevTime = prevMsg ? new Date(prevMsg.created_at) : null;
-            const showTimeDivider = prevTime && (currentTime.getTime() - prevTime.getTime() > 60000); // 超过1分钟
-            
-            const formatTime = (date: Date) => {
-              const now = new Date();
-              const isToday = date.toDateString() === now.toDateString();
-              const hours = date.getHours().toString().padStart(2, '0');
-              const minutes = date.getMinutes().toString().padStart(2, '0');
-              if (isToday) {
-                return `${hours}:${minutes}`;
-              }
-              return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
-            };
+            const showTimeDivider = prevTime && (currentTime.getTime() - prevTime.getTime() > 60000);
             
             // 处理转账消息
             if (msg.role === 'transfer') {
@@ -3961,7 +3963,7 @@ const ChatPage: React.FC = () => {
                 {showTimeDivider && (
                   <div className="flex justify-center py-2">
                     <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
-                      {formatTime(currentTime)}
+                      {formatMessageTime(currentTime)}
                     </span>
                   </div>
                 )}
