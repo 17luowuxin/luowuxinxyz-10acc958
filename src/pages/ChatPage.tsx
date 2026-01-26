@@ -134,6 +134,87 @@ const EMOJI_CATEGORIES = {
 // Keep a simple flat list for backward compatibility
 const EMOJI_LIST = EMOJI_CATEGORIES.smileys.emojis.slice(0, 48);
 
+// Sticker grid item with image error fallback
+const StickerGridItem = memo(({ 
+  sticker, 
+  onEdit, 
+  onDelete 
+}: { 
+  sticker: { id: string; imageUrl: string; text: string; keywords: string[] }; 
+  onEdit: () => void; 
+  onDelete: () => void;
+}) => {
+  const [imgError, setImgError] = useState(false);
+  
+  return (
+    <div className="relative group">
+      <div 
+        className="w-full aspect-square rounded-lg border cursor-pointer hover:ring-2 hover:ring-primary overflow-hidden bg-muted/30 flex items-center justify-center"
+        onClick={onEdit}
+      >
+        {!imgError ? (
+          <img 
+            src={sticker.imageUrl} 
+            alt={sticker.text}
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <span className="text-muted-foreground text-sm font-medium p-1 text-center break-all leading-tight">
+            {sticker.text.slice(0, 6)}
+          </span>
+        )}
+      </div>
+      <Button
+        variant="destructive"
+        size="icon"
+        className="absolute -top-1 -right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+      >
+        <X className="w-3 h-3" />
+      </Button>
+      <div 
+        className="text-[10px] text-center text-muted-foreground truncate mt-1 cursor-pointer hover:text-primary" 
+        title={`点击编辑: ${sticker.keywords.join(', ')}`}
+        onClick={onEdit}
+      >
+        {sticker.text}
+      </div>
+    </div>
+  );
+});
+
+// Sticker picker item with image error fallback (simpler version for picker)
+const StickerPickerItem = memo(({ 
+  sticker, 
+  onClick 
+}: { 
+  sticker: { id: string; imageUrl: string; text: string }; 
+  onClick: () => void;
+}) => {
+  const [imgError, setImgError] = useState(false);
+  
+  return (
+    <button
+      onClick={onClick}
+      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all bg-muted/50 flex items-center justify-center"
+    >
+      {!imgError ? (
+        <img 
+          src={sticker.imageUrl} 
+          alt={sticker.text} 
+          className="w-full h-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span className="text-muted-foreground text-[10px] font-medium p-0.5 text-center break-all leading-tight">
+          {sticker.text.slice(0, 4)}
+        </span>
+      )}
+    </button>
+  );
+});
+
 const ChatPage: React.FC = () => {
   const { characterId } = useParams();
   const navigate = useNavigate();
@@ -4335,13 +4416,11 @@ const ChatPage: React.FC = () => {
                   <div className="text-[10px] text-muted-foreground mb-1 px-1">我的表情包</div>
                   <div className="grid grid-cols-4 gap-1">
                     {userStickers.map(sticker => (
-                      <button
+                      <StickerPickerItem 
                         key={sticker.id}
+                        sticker={sticker}
                         onClick={() => sendStickerDirectly(sticker)}
-                        className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-                      >
-                        <img src={sticker.imageUrl} alt={sticker.text} className="w-full h-full object-cover" />
-                      </button>
+                      />
                     ))}
                   </div>
                 </div>
@@ -4543,31 +4622,14 @@ const ChatPage: React.FC = () => {
               </label>
               {userStickers.length > 0 ? (
                 <div className="grid grid-cols-4 gap-2">
-                  {userStickers.map(sticker => (
-                    <div key={sticker.id} className="relative group">
-                      <img 
-                        src={sticker.imageUrl} 
-                        alt={sticker.text}
-                        className="w-full aspect-square object-cover rounded-lg border cursor-pointer hover:ring-2 hover:ring-primary"
-                        onClick={() => setEditingStickerKeywords({ id: sticker.id, keywords: sticker.keywords.join(', ') })}
+                    {userStickers.map(sticker => (
+                      <StickerGridItem 
+                        key={sticker.id}
+                        sticker={sticker}
+                        onEdit={() => setEditingStickerKeywords({ id: sticker.id, keywords: sticker.keywords.join(', ') })}
+                        onDelete={() => handleDeleteSticker(sticker.id)}
                       />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSticker(sticker.id); }}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                      <div 
-                        className="text-[10px] text-center text-muted-foreground truncate mt-1 cursor-pointer hover:text-primary" 
-                        title={`点击编辑: ${sticker.keywords.join(', ')}`}
-                        onClick={() => setEditingStickerKeywords({ id: sticker.id, keywords: sticker.keywords.join(', ') })}
-                      >
-                        {sticker.text}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground text-sm">
