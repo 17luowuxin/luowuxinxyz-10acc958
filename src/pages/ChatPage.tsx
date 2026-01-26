@@ -144,23 +144,25 @@ const StickerGridItem = memo(({
   onEdit: () => void; 
   onDelete: () => void;
 }) => {
-  const [imgError, setImgError] = useState(false);
+  const [imgStatus, setImgStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   
   return (
     <div className="relative group">
       <div 
-        className="w-full aspect-square rounded-lg border cursor-pointer hover:ring-2 hover:ring-primary overflow-hidden bg-muted/30 flex items-center justify-center"
+        className="w-full aspect-square rounded-lg border cursor-pointer hover:ring-2 hover:ring-primary overflow-hidden bg-muted/30 flex items-center justify-center relative"
         onClick={onEdit}
       >
-        {!imgError ? (
+        {imgStatus !== 'error' && (
           <img 
             src={sticker.imageUrl} 
             alt={sticker.text}
-            className="w-full h-full object-cover"
-            onError={() => setImgError(true)}
+            className={`w-full h-full object-cover transition-opacity ${imgStatus === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setImgStatus('loaded')}
+            onError={() => setImgStatus('error')}
           />
-        ) : (
-          <span className="text-muted-foreground text-sm font-medium p-1 text-center break-all leading-tight">
+        )}
+        {imgStatus !== 'loaded' && (
+          <span className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm font-medium p-1 text-center break-all leading-tight">
             {sticker.text.slice(0, 6)}
           </span>
         )}
@@ -192,22 +194,24 @@ const StickerPickerItem = memo(({
   sticker: { id: string; imageUrl: string; text: string }; 
   onClick: () => void;
 }) => {
-  const [imgError, setImgError] = useState(false);
+  const [imgStatus, setImgStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   
   return (
     <button
       onClick={onClick}
-      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all bg-muted/50 flex items-center justify-center"
+      className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all bg-muted/50 flex items-center justify-center relative"
     >
-      {!imgError ? (
+      {imgStatus !== 'error' && (
         <img 
           src={sticker.imageUrl} 
           alt={sticker.text} 
-          className="w-full h-full object-cover"
-          onError={() => setImgError(true)}
+          className={`w-full h-full object-cover transition-opacity ${imgStatus === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImgStatus('loaded')}
+          onError={() => setImgStatus('error')}
         />
-      ) : (
-        <span className="text-muted-foreground text-[10px] font-medium p-0.5 text-center break-all leading-tight">
+      )}
+      {imgStatus !== 'loaded' && (
+        <span className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[10px] font-medium p-0.5 text-center break-all leading-tight">
           {sticker.text.slice(0, 4)}
         </span>
       )}
