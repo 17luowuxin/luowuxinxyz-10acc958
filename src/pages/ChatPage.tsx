@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
-import ChatMessageBubble from '@/components/chat/ChatMessageBubble';
+import { MessageItem } from '@/components/chat/ChatMessageList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -1034,7 +1034,7 @@ const ChatPage: React.FC = () => {
   };
 
   // 从指定消息开始删除（回溯删除）
-  const deleteFromMessage = async (msg: any) => {
+  const deleteFromMessage = useCallback(async (msg: any) => {
     try {
       const msgIndex = messages.findIndex(m => m.id === msg.id);
       if (msgIndex === -1) return;
@@ -1049,63 +1049,58 @@ const ChatPage: React.FC = () => {
     } catch (err) {
       toast.error('删除失败');
     }
-  };
+  }, [messages]);
 
   // 引用消息
-  const quoteMessage = (msg: any) => {
+  const quoteMessage = useCallback((msg: any) => {
     setQuotedMessage(msg);
     setLongPressedMsg(null);
-  };
+  }, []);
 
   // 长按消息显示菜单
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
   
-  const handleMessageTouchStart = (msg: any) => {
+  const handleMessageTouchStart = useCallback((msg: any) => {
     if (msg.role === 'transfer') return;
     isLongPressRef.current = false;
     longPressTimerRef.current = setTimeout(() => {
       isLongPressRef.current = true;
       setLongPressedMsg(msg);
-      // 触发轻微震动反馈（如果支持）
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-    }, 500); // 500ms 长按触发
-  };
+    }, 500);
+  }, []);
   
-  const handleMessageTouchEnd = () => {
+  const handleMessageTouchEnd = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-  };
+  }, []);
   
-  const handleMessageTouchMove = () => {
-    // 移动时取消长按
+  const handleMessageTouchMove = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-  };
+  }, []);
   
-  const handleMessageClick = (msg: any, e: React.MouseEvent) => {
-    // 只在桌面端点击时触发（移动端用长按）
+  const handleMessageClick = useCallback((msg: any, e: React.MouseEvent) => {
     e.stopPropagation();
     if (msg.role === 'transfer') return;
-    // 如果是长按触发的，不处理点击
     if (isLongPressRef.current) {
       isLongPressRef.current = false;
       return;
     }
-    // 桌面端可以点击切换菜单
     if (window.matchMedia('(hover: hover)').matches) {
-      setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
+      setLongPressedMsg(prev => prev?.id === msg.id ? null : msg);
     }
-  };
+  }, []);
   
   // 复制消息
-  const copyMessage = async (msg: any) => {
+  const copyMessage = useCallback(async (msg: any) => {
     try {
       await navigator.clipboard.writeText(msg.content);
       toast.success('已复制');
@@ -1113,27 +1108,25 @@ const ChatPage: React.FC = () => {
     } catch (err) {
       toast.error('复制失败');
     }
-  };
+  }, []);
 
   // 转账相关函数 - 解析 AI 返回的转账指令
-  const parseTransferCommand = (content: string): { amount: number; message: string } | null => {
-    // 匹配格式: [转账:金额:留言] 或 [TRANSFER:金额:留言] 或 (转账:金额:留言)
+  const parseTransferCommand = useCallback((content: string): { amount: number; message: string } | null => {
     const transferMatch = content.match(/[\[\(](?:转账|TRANSFER):(\d+(?:\.\d{1,2})?):([^\]\)]*?)[\]\)]/i);
     if (transferMatch) {
       const amount = parseFloat(transferMatch[1]);
       const message = transferMatch[2].trim() || '给你的~';
-      // 只要金额大于 0 就允许，具体合理性由上游提示控制
       if (amount > 0) {
         return { amount, message };
       }
     }
     return null;
-  };
+  }, []);
   
   // 从内容中移除转账指令标记
-  const removeTransferCommand = (content: string): string => {
+  const removeTransferCommand = useCallback((content: string): string => {
     return content.replace(/[\[\(](?:转账|TRANSFER):\d+(?:\.\d{1,2})?:[^\]\)]*?[\]\)]/gi, '').trim();
-  };
+  }, []);
   
   const createTransfer = async (amount: number, message?: string) => {
     if (!user?.id || !character) return null;
@@ -2689,22 +2682,20 @@ const ChatPage: React.FC = () => {
     return fallback;
   };
 
-  const getBubbleBackgroundStyle = (isUser: boolean): React.CSSProperties => {
+  const getBubbleBackgroundStyle = useCallback((isUser: boolean): React.CSSProperties => {
     const frameId = isUser ? userBubbleFrame : friendBubbleFrame;
     const frame = bubbleFramePresets[frameId];
     
     if (frame) {
       if (frame.type === 'image' && frame.imageUrl) {
-        // 图片气泡框 - 使用背景图片，自适应内容大小
         return { 
           backgroundImage: `url(${frame.imageUrl})`,
-          backgroundSize: '100% 100%', // 拉伸适应气泡大小
+          backgroundSize: '100% 100%',
           backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
           backgroundColor: 'transparent',
         };
       }
-      // CSS 渐变气泡框
       const style: React.CSSProperties = { 
         background: frame.highlight 
           ? `${frame.highlight}, ${frame.gradient}`
@@ -2726,12 +2717,12 @@ const ChatPage: React.FC = () => {
     const fallback = 'hsl(var(--muted))';
     const hex = normalizeHex(isUser ? userBubbleColor : friendBubbleColor, fallback);
     return { backgroundColor: hex };
-  };
+  }, [userBubbleFrame, friendBubbleFrame, userBubbleColor, friendBubbleColor]);
 
-  const getUserBubbleDecor = () => bubbleFramePresets[userBubbleFrame]?.decorIcon;
-  const getFriendBubbleDecor = () => bubbleFramePresets[friendBubbleFrame]?.decorIcon;
-  const getUserBubbleDecorImage = () => bubbleFramePresets[userBubbleFrame]?.decorImage;
-  const getFriendBubbleDecorImage = () => bubbleFramePresets[friendBubbleFrame]?.decorImage;
+  const userBubbleDecor = useMemo(() => bubbleFramePresets[userBubbleFrame]?.decorIcon || null, [userBubbleFrame]);
+  const friendBubbleDecor = useMemo(() => bubbleFramePresets[friendBubbleFrame]?.decorIcon || null, [friendBubbleFrame]);
+  const userBubbleDecorImage = useMemo(() => bubbleFramePresets[userBubbleFrame]?.decorImage || null, [userBubbleFrame]);
+  const friendBubbleDecorImage = useMemo(() => bubbleFramePresets[friendBubbleFrame]?.decorImage || null, [friendBubbleFrame]);
 
   // 选择表情包图片（先预览，不立即上传）
   const handleStickerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3884,353 +3875,50 @@ const ChatPage: React.FC = () => {
       <main className="flex-1 overflow-y-auto overscroll-none touch-pan-y">
         <div className="p-3 space-y-3 pb-4">
           {messages.map((msg, index) => {
-            // 计算是否需要显示时间分隔
-            const currentTime = new Date(msg.created_at);
             const prevMsg = index > 0 ? messages[index - 1] : null;
-            const prevTime = prevMsg ? new Date(prevMsg.created_at) : null;
-            const showTimeDivider = prevTime && (currentTime.getTime() - prevTime.getTime() > 60000);
-            
-            // 处理转账消息
-            if (msg.role === 'transfer') {
-              const transfer = msg.transferData || pendingTransfers.find(t => msg.content.includes(t.id));
-              if (transfer) {
-                // 判断是用户转账（礼物）还是角色转账
-                const isUserGift = (transfer as any).is_user_transfer === true;
-                
-                if (isUserGift) {
-                  // 用户赠送礼物 - 显示在右侧，角色已收款
-                  return (
-                    <div key={msg.id} className="flex items-end gap-2 flex-row-reverse">
-                      {/* 用户头像 */}
-                      <div className="relative w-10 h-10 flex-shrink-0">
-                        {userAvatarFrame && (
-                          <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                        )}
-                        <div className={`absolute rounded-full overflow-hidden ${userAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
-                          {profile?.avatar_url ? (
-                            <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-pink-200 to-purple-200 flex items-center justify-center text-[10px] text-gray-500">
-                              {profile?.nickname?.charAt(0) || '我'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <UserTransferCard
-                        amount={Math.abs(Number(transfer.amount))}
-                        giftName={transfer.message?.replace('赠送了', '') || ''}
-                        characterName={character?.name || '角色'}
-                        message=""
-                      />
-                    </div>
-                  );
-                }
-                
-                // 角色转账 - 显示在左侧
-                return (
-                  <div key={msg.id} className="flex items-end gap-2 flex-row">
-                    {/* 角色头像 */}
-                    <div className="relative w-10 h-10 flex-shrink-0">
-                      {friendAvatarFrame && (
-                        <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                      )}
-                      <div className={`absolute rounded-full overflow-hidden ${friendAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
-                        {character?.avatar_url ? (
-                          <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
-                            {character?.name?.charAt(0) || '?'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <TransferCard
-                      amount={Number(transfer.amount)}
-                      characterName={transfer.character_name || character?.name || '角色'}
-                      message={transfer.message}
-                      isReceived={transfer.is_received}
-                      onReceive={() => handleReceiveTransfer(transfer.id)}
-                      onDelete={() => handleDeleteTransfer(transfer.id)}
-                    />
-                  </div>
-                );
-              }
-              return null;
-            }
+            const isUser = msg.role === 'user';
             
             return (
-              <React.Fragment key={msg.id}>
-                {showTimeDivider && (
-                  <div className="flex justify-center py-2">
-                    <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
-                      {formatMessageTime(currentTime)}
-                    </span>
-                  </div>
-                )}
-                <div 
-                  className={`relative overflow-visible flex items-start gap-2 cursor-pointer select-none ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-                  onTouchStart={() => handleMessageTouchStart(msg)}
-                  onTouchEnd={handleMessageTouchEnd}
-                  onTouchMove={handleMessageTouchMove}
-                  onClick={(e) => handleMessageClick(msg, e)}
-                >
-                  {/* Avatar with Frame - QQ风格顶部对齐 */}
-                  <div className="relative w-9 h-9 flex-shrink-0 mt-0.5">
-                    {msg.role === 'user' && userAvatarFrame && (
-                      <img src={userAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                    )}
-                    {msg.role !== 'user' && friendAvatarFrame && (
-                      <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                    )}
-                    <div className={`absolute rounded-full overflow-hidden ${(msg.role === 'user' ? userAvatarFrame : friendAvatarFrame) ? 'inset-[15%]' : 'inset-0'}`}>
-                      {msg.role === 'user' ? (
-                        profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-pink-200 to-rose-200 flex items-center justify-center text-[10px] text-gray-600">
-                            {profile?.nickname?.charAt(0) || '我'}
-                          </div>
-                        )
-                      ) : (
-                        character?.avatar_url ? (
-                          <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
-                            {character?.name?.charAt(0) || '?'}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                  
-              {/* Bubble with Sanrio Decoration */}
-              <div className={`flex flex-col flex-1 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                {/* 图片/表情包消息 - 独立容器，不透明，缩小尺寸 */}
-                {msg.image_url && (
-                  <div className="mb-1.5 rounded-lg overflow-hidden bg-background shadow-sm max-w-[140px]">
-                    <img 
-                      src={msg.image_url} 
-                      alt="图片" 
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full rounded-lg object-cover cursor-pointer hover:brightness-95 transition-all"
-                      style={{ maxHeight: '140px' }}
-                      onClick={() => window.open(msg.image_url, '_blank')}
-                    />
-                  </div>
-                )}
-                
-                {/* 文本气泡 - 横排（禁用竖排），气泡大小/透明度同步美化设置 */}
-                {/* 如果是纯图片/表情包消息，不显示文字（包括 [STICKER:xxx] 和 [图片] xxx） */}
-                {(() => {
-                  // 检查是否有内联转账指令
-                  const transferData = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
-                  // 对显示内容进行最终清理，移除所有残留的 ||| 分隔符
-                  const rawContent = transferData ? removeTransferCommand(msg.content) : msg.content;
-                  const displayContent = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
-                  const showBubble = displayContent && !displayContent.startsWith('[STICKER:') && !(msg.image_url && displayContent.startsWith('[图片]'));
-                  
-                  // 检测是否是通话记录消息
-                  const callRecordMatch = displayContent?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
-                  const isCallRecord = !!callRecordMatch;
-                  const callType = callRecordMatch?.[1];
-                  const callDurationStr = callRecordMatch?.[3];
-                  
-                  return (
-                    <>
-                      {/* 通话记录特殊样式 */}
-                      {isCallRecord && (
-                        <div 
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-green-100 to-emerald-100 border border-green-200/50 shadow-sm"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                            {callType === '视频通话' ? (
-                              <Video className="w-4 h-4 text-white" />
-                            ) : (
-                              <Phone className="w-4 h-4 text-white" />
-                            )}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-green-800">{callType}</span>
-                            <span className="text-xs text-green-600">{callDurationStr}</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* 语音消息气泡 - 如果有 audioBase64 则显示语音气泡 */}
-                      {msg.audioBase64 && showBubble && !isCallRecord && (
-                        <VoiceMessageBubble
-                          audioBase64={msg.audioBase64}
-                          transcript={displayContent}
-                          isUser={msg.role === 'user'}
-                          bubbleColor={msg.role === 'user' ? userBubbleColor : friendBubbleColor}
-                          fontColor={msg.role === 'user' ? fontColor : friendFontColor}
-                          bubbleStyle={{
-                            ...getBubbleBackgroundStyle(msg.role === 'user'),
-                            opacity: bubbleOpacity,
-                          }}
-                        />
-                      )}
-                      
-                      {/* 普通文本气泡 - 没有语音时显示（排除通话记录） */}
-                      {showBubble && !msg.audioBase64 && !isCallRecord && (
-                        <div
-                          className={getBubbleStyle(msg.role === 'user')}
-                          style={{
-                            // 气泡样式（背景/边框）+ 透明度：同时作用于文字与气泡背景
-                            ...getBubbleBackgroundStyle(msg.role === 'user'),
-                            opacity: bubbleOpacity,
-
-                            color: msg.role === 'user' ? fontColor : friendFontColor,
-                            fontSize: `${bubbleSize}px`,
-
-                            // 强制横向排版：禁用任何竖排/列排模式
-                            writingMode: 'horizontal-tb',
-                            textOrientation: 'mixed',
-                            direction: 'ltr',
-                            textAlign: 'left',
-                            wordBreak: 'break-word',
-                            overflowWrap: 'anywhere',
-                            whiteSpace: 'pre-wrap',
-                            lineHeight: 1.5,
-
-                            // 气泡自适应内容宽度，不设置强制最小宽度
-                            width: 'fit-content',
-
-                            // 气泡大小（内边距）随 bubble_size 同步
-                            padding: getBubblePadding(bubbleSize),
-                          }}
-                        >
-                          {/* 装饰图标 或 头像装饰图片 */}
-                          {msg.role === 'user' && getUserBubbleDecorImage() && (
-                            <img src={getUserBubbleDecorImage()} alt="" className="absolute -top-2 -right-2 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
-                          )}
-                          {msg.role === 'user' && !getUserBubbleDecorImage() && getUserBubbleDecor() && (
-                            <span className="absolute -top-2 -right-2 text-sm drop-shadow-sm z-20">{getUserBubbleDecor()}</span>
-                          )}
-                          {msg.role !== 'user' && getFriendBubbleDecorImage() && (
-                            <img src={getFriendBubbleDecorImage()} alt="" className="absolute -top-2 -left-2 w-5 h-5 object-contain z-20 pointer-events-none drop-shadow-sm" />
-                          )}
-                          {msg.role !== 'user' && !getFriendBubbleDecorImage() && getFriendBubbleDecor() && (
-                            <span className="absolute -top-2 -left-2 text-sm drop-shadow-sm z-20">{getFriendBubbleDecor()}</span>
-                          )}
-
-                          {/* 引用内容显示 - 类似QQ样式 */}
-                          {msg.quotedMessage && (
-                            <div 
-                              className="mb-1.5 pb-1.5 border-b border-current/20 text-xs opacity-70"
-                              style={{ fontSize: `${Math.max(bubbleSize - 2, 10)}px` }}
-                            >
-                              <span className="text-pink-500 font-medium">
-                                回复 {msg.quotedMessage.role === 'user' ? (profile?.nickname || '我') : character?.name}：
-                              </span>
-                              <span className="ml-1">
-                                {msg.quotedMessage.content?.slice(0, 30)}{(msg.quotedMessage.content?.length || 0) > 30 ? '...' : ''}
-                              </span>
-                            </div>
-                          )}
-
-                          <span className="relative z-10" style={{ display: 'inline' }}>
-                            {/* 移除消息内容中的引用标记 */}
-                            {msg.role === 'assistant' && replyMode === 'novel' ? (
-                              <NovelModeText
-                                content={displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')}
-                                baseColor={friendFontColor}
-                                dialogueColor={(customization as any)?.novel_dialogue_color || '#e91e63'}
-                                narrationColor={(customization as any)?.novel_narration_color || '#666666'}
-                                actionColor={(customization as any)?.novel_action_color || '#9c27b0'}
-                                thoughtColor={(customization as any)?.novel_thought_color || '#607d8b'}
-                                fontSize={bubbleSize}
-                              />
-                            ) : (
-                              displayContent.replace(/^\[引用: ".*?"\]\n?/s, '')
-                            )}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* 内联转账卡片 - AI消息中检测到转账指令时显示 */}
-                      {transferData && (
-                        <div className="mt-2">
-                          <TransferCard
-                            amount={transferData.amount}
-                            characterName={character?.name || '角色'}
-                            message={transferData.message}
-                            isReceived={false}
-                            onReceive={() => {
-                              toast.success(`收到 ${transferData.amount} 梦币！`);
-                            }}
-                          />
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-                
-                {/* 已读状态 / 发送失败标记 */}
-                {msg.role === 'user' && (
-                  <span className="text-[10px] text-muted-foreground/70 mt-0.5">已读</span>
-                )}
-                {/* 拉黑期间AI发送的消息显示红色感叹号 */}
-                {msg.role === 'assistant' && blockedAt && new Date(msg.created_at) >= new Date(blockedAt) && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground/50">发送失败</span>
-                    <span className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">!</span>
-                  </div>
-                )}
-              </div>
-              
-              {/* 长按菜单 */}
-              {longPressedMsg?.id === msg.id && (
-                <div
-                  className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${msg.role === 'user' ? 'right-0' : 'left-0'}`}
-                  onClick={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                >
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-                    onClick={() => quoteMessage(msg)}
-                  >
-                    <Quote className="w-4 h-4" />
-                    引用
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-                    onClick={() => copyMessage(msg)}
-                  >
-                    <Copy className="w-4 h-4" />
-                    复制
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
-                        <RotateCcw className="w-4 h-4" />
-                        回溯
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>回溯删除？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          这将删除该消息及之后的所有消息，以便重新开始对话。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setLongPressedMsg(null)}>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteFromMessage(msg)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                          确认删除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              )}
-            </div>
-              </React.Fragment>
+              <MessageItem
+                key={msg.id}
+                msg={msg}
+                prevMsg={prevMsg}
+                isUser={isUser}
+                character={character}
+                profile={profile}
+                customization={customization}
+                replyMode={replyMode}
+                pendingTransfers={pendingTransfers}
+                blockedAt={blockedAt}
+                userAvatarFrame={userAvatarFrame}
+                friendAvatarFrame={friendAvatarFrame}
+                userBubbleColor={userBubbleColor}
+                friendBubbleColor={friendBubbleColor}
+                fontColor={fontColor}
+                friendFontColor={friendFontColor}
+                bubbleOpacity={bubbleOpacity}
+                bubbleSize={bubbleSize}
+                userBubbleDecor={userBubbleDecor}
+                userBubbleDecorImage={userBubbleDecorImage}
+                friendBubbleDecor={friendBubbleDecor}
+                friendBubbleDecorImage={friendBubbleDecorImage}
+                isLongPressed={longPressedMsg?.id === msg.id}
+                onTouchStart={() => handleMessageTouchStart(msg)}
+                onTouchEnd={handleMessageTouchEnd}
+                onTouchMove={handleMessageTouchMove}
+                onClick={(e) => handleMessageClick(msg, e)}
+                onReceiveTransfer={handleReceiveTransfer}
+                onDeleteTransfer={handleDeleteTransfer}
+                onQuoteMessage={() => quoteMessage(msg)}
+                onCopyMessage={() => copyMessage(msg)}
+                onDeleteFromMessage={() => deleteFromMessage(msg)}
+                onClearLongPress={() => setLongPressedMsg(null)}
+                parseTransferCommand={parseTransferCommand}
+                removeTransferCommand={removeTransferCommand}
+                getBubbleStyle={getBubbleStyle}
+                getBubbleBackgroundStyle={getBubbleBackgroundStyle}
+                getBubblePadding={getBubblePadding}
+              />
             );
           })}
           

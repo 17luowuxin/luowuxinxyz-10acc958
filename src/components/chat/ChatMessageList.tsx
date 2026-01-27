@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef } from 'react';
 import { Phone, Video, Quote, Copy, RotateCcw, X } from 'lucide-react';
 import VoiceMessageBubble from './VoiceMessageBubble';
 import TransferCard from './TransferCard';
@@ -8,52 +8,8 @@ import { sanitizeMessageContent } from '@/utils/messageParser';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-interface ChatMessageBubbleProps {
-  msg: any;
-  prevMsg: any | null;
-  isUser: boolean;
-  character: any;
-  profile: any;
-  customization: any;
-  replyMode: 'novel' | 'online';
-  pendingTransfers: any[];
-  blockedAt: string | null;
-  // Styles
-  userAvatarFrame: string | null;
-  friendAvatarFrame: string | null;
-  userBubbleColor: string;
-  friendBubbleColor: string;
-  fontColor: string;
-  friendFontColor: string;
-  bubbleOpacity: number;
-  bubbleSize: number;
-  // Bubble decorations
-  userBubbleDecor: string | null;
-  userBubbleDecorImage: string | null;
-  friendBubbleDecor: string | null;
-  friendBubbleDecorImage: string | null;
-  // Long press state
-  isLongPressed: boolean;
-  // Handlers
-  onMessageTouchStart: () => void;
-  onMessageTouchEnd: () => void;
-  onMessageTouchMove: () => void;
-  onMessageClick: (e: React.MouseEvent) => void;
-  onReceiveTransfer: (id: string) => void;
-  onDeleteTransfer: (id: string) => void;
-  onQuoteMessage: () => void;
-  onCopyMessage: () => void;
-  onDeleteFromMessage: () => void;
-  onClearLongPress: () => void;
-  parseTransferCommand: (content: string) => { amount: number; message: string } | null;
-  removeTransferCommand: (content: string) => string;
-  getBubbleStyle: (isUser: boolean) => string;
-  getBubbleBackgroundStyle: (isUser: boolean) => React.CSSProperties;
-  getBubblePadding: (size: number) => string;
-}
-
-// 格式化时间 - 放在组件外避免重复创建
-const formatTime = (date: Date) => {
+// 格式化时间
+const formatMessageTime = (date: Date) => {
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   const hours = date.getHours().toString().padStart(2, '0');
@@ -64,7 +20,7 @@ const formatTime = (date: Date) => {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
 };
 
-// Avatar 组件 - 单独 memo
+// Avatar 组件
 const MessageAvatar = memo(({ 
   isUser, 
   avatarUrl, 
@@ -84,8 +40,8 @@ const MessageAvatar = memo(({
       {avatarUrl ? (
         <img src={avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
       ) : (
-        <div className={`w-full h-full flex items-center justify-center text-[10px] text-gray-${isUser ? '600' : '500'} ${
-          isUser ? 'bg-gradient-to-br from-pink-200 to-rose-200' : 'bg-gradient-to-br from-pink-100 to-purple-100'
+        <div className={`w-full h-full flex items-center justify-center text-[10px] ${
+          isUser ? 'text-gray-600 bg-gradient-to-br from-pink-200 to-rose-200' : 'text-gray-500 bg-gradient-to-br from-pink-100 to-purple-100'
         }`}>
           {fallbackText}
         </div>
@@ -115,72 +71,48 @@ const CallRecordBubble = memo(({ callType, duration }: { callType: string; durat
 
 CallRecordBubble.displayName = 'CallRecordBubble';
 
-// 长按菜单组件
-const LongPressMenu = memo(({ 
-  isUser, 
-  onQuote, 
-  onCopy, 
-  onDelete, 
-  onClose 
-}: { 
-  isUser: boolean; 
-  onQuote: () => void; 
-  onCopy: () => void; 
-  onDelete: () => void; 
-  onClose: () => void;
-}) => (
-  <div
-    className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
-    onClick={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-  >
-    <Button 
-      variant="ghost" 
-      size="sm" 
-      className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-      onClick={onQuote}
-    >
-      <Quote className="w-4 h-4" />
-      引用
-    </Button>
-    <Button 
-      variant="ghost" 
-      size="sm" 
-      className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-      onClick={onCopy}
-    >
-      <Copy className="w-4 h-4" />
-      复制
-    </Button>
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
-          <RotateCcw className="w-4 h-4" />
-          回溯
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>回溯删除？</AlertDialogTitle>
-          <AlertDialogDescription>
-            这将删除该消息及之后的所有消息，以便重新开始对话。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            确认删除
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  </div>
-));
+// 单条消息组件
+interface MessageItemProps {
+  msg: any;
+  prevMsg: any | null;
+  isUser: boolean;
+  character: any;
+  profile: any;
+  customization: any;
+  replyMode: 'novel' | 'online';
+  pendingTransfers: any[];
+  blockedAt: string | null;
+  userAvatarFrame: string | null;
+  friendAvatarFrame: string | null;
+  userBubbleColor: string;
+  friendBubbleColor: string;
+  fontColor: string;
+  friendFontColor: string;
+  bubbleOpacity: number;
+  bubbleSize: number;
+  userBubbleDecor: string | null;
+  userBubbleDecorImage: string | null;
+  friendBubbleDecor: string | null;
+  friendBubbleDecorImage: string | null;
+  isLongPressed: boolean;
+  onTouchStart: () => void;
+  onTouchEnd: () => void;
+  onTouchMove: () => void;
+  onClick: (e: React.MouseEvent) => void;
+  onReceiveTransfer: (id: string) => void;
+  onDeleteTransfer: (id: string) => void;
+  onQuoteMessage: () => void;
+  onCopyMessage: () => void;
+  onDeleteFromMessage: () => void;
+  onClearLongPress: () => void;
+  parseTransferCommand: (content: string) => { amount: number; message: string } | null;
+  removeTransferCommand: (content: string) => string;
+  getBubbleStyle: (isUser: boolean) => string;
+  getBubbleBackgroundStyle: (isUser: boolean) => React.CSSProperties;
+  getBubblePadding: (size: number) => string;
+}
 
-LongPressMenu.displayName = 'LongPressMenu';
-
-// 主消息气泡组件
-const ChatMessageBubble = memo(({
+const MessageItem = memo(({
   msg,
   prevMsg,
   isUser,
@@ -203,10 +135,10 @@ const ChatMessageBubble = memo(({
   friendBubbleDecor,
   friendBubbleDecorImage,
   isLongPressed,
-  onMessageTouchStart,
-  onMessageTouchEnd,
-  onMessageTouchMove,
-  onMessageClick,
+  onTouchStart,
+  onTouchEnd,
+  onTouchMove,
+  onClick,
   onReceiveTransfer,
   onDeleteTransfer,
   onQuoteMessage,
@@ -218,7 +150,7 @@ const ChatMessageBubble = memo(({
   getBubbleStyle,
   getBubbleBackgroundStyle,
   getBubblePadding,
-}: ChatMessageBubbleProps) => {
+}: MessageItemProps) => {
   // 计算时间分隔
   const { showTimeDivider, formattedTime } = useMemo(() => {
     const currentTime = new Date(msg.created_at);
@@ -226,7 +158,7 @@ const ChatMessageBubble = memo(({
     const shouldShow = prevTime && (currentTime.getTime() - prevTime.getTime() > 60000);
     return {
       showTimeDivider: shouldShow,
-      formattedTime: shouldShow ? formatTime(currentTime) : '',
+      formattedTime: shouldShow ? formatMessageTime(currentTime) : '',
     };
   }, [msg.created_at, prevMsg?.created_at]);
 
@@ -241,7 +173,7 @@ const ChatMessageBubble = memo(({
     const fallbackText = isUserGift ? (profile?.nickname?.charAt(0) || '我') : (character?.name?.charAt(0) || '?');
     
     return (
-      <div key={msg.id} className={`flex items-end gap-2 ${isUserGift ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex items-end gap-2 ${isUserGift ? 'flex-row-reverse' : 'flex-row'}`}>
         <MessageAvatar 
           isUser={isUserGift}
           avatarUrl={avatarUrl}
@@ -293,7 +225,7 @@ const ChatMessageBubble = memo(({
   const fallbackText = isUser ? (profile?.nickname?.charAt(0) || '我') : (character?.name?.charAt(0) || '?');
 
   return (
-    <React.Fragment key={msg.id}>
+    <>
       {showTimeDivider && (
         <div className="flex justify-center py-2">
           <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
@@ -303,10 +235,10 @@ const ChatMessageBubble = memo(({
       )}
       <div 
         className={`relative overflow-visible flex items-start gap-2 cursor-pointer select-none ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-        onTouchStart={onMessageTouchStart}
-        onTouchEnd={onMessageTouchEnd}
-        onTouchMove={onMessageTouchMove}
-        onClick={onMessageClick}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
+        onClick={onClick}
       >
         <MessageAvatar 
           isUser={isUser}
@@ -448,19 +380,58 @@ const ChatMessageBubble = memo(({
         
         {/* 长按菜单 */}
         {isLongPressed && (
-          <LongPressMenu
-            isUser={isUser}
-            onQuote={onQuoteMessage}
-            onCopy={onCopyMessage}
-            onDelete={onDeleteFromMessage}
-            onClose={onClearLongPress}
-          />
+          <div
+            className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+              onClick={onQuoteMessage}
+            >
+              <Quote className="w-4 h-4" />
+              引用
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+              onClick={onCopyMessage}
+            >
+              <Copy className="w-4 h-4" />
+              复制
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
+                  <RotateCcw className="w-4 h-4" />
+                  回溯
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>回溯删除？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    这将删除该消息及之后的所有消息，以便重新开始对话。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={onClearLongPress}>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={onDeleteFromMessage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    确认删除
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         )}
       </div>
-    </React.Fragment>
+    </>
   );
 });
 
-ChatMessageBubble.displayName = 'ChatMessageBubble';
+MessageItem.displayName = 'MessageItem';
 
-export default ChatMessageBubble;
+export { MessageItem, MessageAvatar, CallRecordBubble, formatMessageTime };
