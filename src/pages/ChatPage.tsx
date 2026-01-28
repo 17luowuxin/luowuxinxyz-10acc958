@@ -1097,6 +1097,7 @@ const ChatPage: React.FC = () => {
     try {
       await supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id);
       setMessages([]);
+      setPendingTransfers([]); // 同时清除转账卡片
       toast.success('已清空全部聊天记录');
     } catch (err) {
       toast.error('清空失败');
@@ -1839,17 +1840,23 @@ const ChatPage: React.FC = () => {
     setPendingImage({ url, file });
   };
 
-  // 上传图片到存储
+  // 上传图片到存储（带压缩）
   const uploadImageToStorage = async (file: File): Promise<string | null> => {
     if (!user?.id) return null;
     
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      // 动态导入压缩工具
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      
+      // 压缩图片（最大宽度1080px，质量0.8）
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
-        .upload(fileName, file);
+        .upload(fileName, compressedFile);
 
       if (uploadError) {
         console.error('Upload error:', uploadError);

@@ -257,12 +257,16 @@ const SpacePage: React.FC = () => {
 
     setUploadingBg(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/space-bg-${Date.now()}.${fileExt}`;
+      // 压缩背景图（最大宽度1080px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/space-bg-${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
         .from('backgrounds')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -289,10 +293,15 @@ const SpacePage: React.FC = () => {
     if (!file || !user) return;
 
     try {
-      const filePath = `${user.id}/avatar-${Date.now()}`;
+      // 压缩头像（512px，质量0.85）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 512, 0.85);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -332,13 +341,19 @@ const SpacePage: React.FC = () => {
 
     setUploadingImage(true);
     try {
+      // 动态导入压缩工具
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      
       for (const file of Array.from(files)) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}/moment-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        // 压缩图片（最大宽度1080px，质量0.8）
+        const compressedBlob = await compressImage(file, 1080, 0.8);
+        const compressedFile = blobToFile(compressedBlob, file.name);
+        
+        const fileName = `${user.id}/moment-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
         
         const { error: uploadError } = await supabase.storage
           .from('photos')
-          .upload(fileName, file);
+          .upload(fileName, compressedFile);
 
         if (uploadError) throw uploadError;
 

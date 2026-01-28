@@ -358,7 +358,7 @@ const GroupChatPage: React.FC = () => {
     setLongPressedMsg(longPressedMsg?.id === msg.id ? null : msg);
   };
 
-  // 上传群聊背景
+  // 上传群聊背景（带压缩）
   const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -368,23 +368,33 @@ const GroupChatPage: React.FC = () => {
       return;
     }
 
-    const fileName = `${user.id}/group-bg-${Date.now()}.${file.name.split('.').pop()}`;
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file);
-    
-    if (uploadError) {
-      toast.error('上传失败');
-      return;
-    }
+    try {
+      // 压缩背景图（最大宽度1080px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/group-bg-${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile);
+      
+      if (uploadError) {
+        toast.error('上传失败');
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    
-    await supabase.from('customization').upsert({
-      user_id: user.id,
-      group_chat_background_url: publicUrl
-    } as any, { onConflict: 'user_id' });
-    
-    setCustomization((prev: any) => ({ ...prev, group_chat_background_url: publicUrl }));
-    toast.success('群聊背景已更新');
+      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      
+      await supabase.from('customization').upsert({
+        user_id: user.id,
+        group_chat_background_url: publicUrl
+      } as any, { onConflict: 'user_id' });
+      
+      setCustomization((prev: any) => ({ ...prev, group_chat_background_url: publicUrl }));
+      toast.success('群聊背景已更新');
+    } catch (error) {
+      console.error('Background upload error:', error);
+      toast.error('上传失败');
+    }
   };
 
   const sendMessage = async () => {
