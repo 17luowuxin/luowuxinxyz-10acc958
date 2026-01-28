@@ -138,6 +138,9 @@ const AdminPage: React.FC = () => {
   const { user } = useAuth();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [needsPasswordVerification, setNeedsPasswordVerification] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<AppStats>({ totalUsers: 0, totalCharacters: 0, totalMessages: 0, todayUsers: 0 });
@@ -199,13 +202,8 @@ const AdminPage: React.FC = () => {
       
       if (data) {
         setIsAdmin(true);
-        setIsAuthenticated(true);
-        fetchThemes();
-        fetchStats();
-        fetchTrendData();
-        fetchActivityTrend();
-        fetchAdminUsers();
-        fetchAnnouncement();
+        // 需要密码验证才能访问
+        setNeedsPasswordVerification(true);
       } else {
         setIsAdmin(false);
       }
@@ -213,6 +211,48 @@ const AdminPage: React.FC = () => {
       console.error('Error checking admin role:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 验证管理员密码
+  const verifyAdminPassword = async () => {
+    if (!adminPassword.trim()) {
+      toast.error('请输入管理员密码');
+      return;
+    }
+    
+    setVerifyingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-admin-password', {
+        body: { password: adminPassword }
+      });
+      
+      if (error) {
+        console.error('Error verifying password:', error);
+        toast.error('验证失败，请重试');
+        return;
+      }
+      
+      if (data?.valid) {
+        setIsAuthenticated(true);
+        setNeedsPasswordVerification(false);
+        // 加载管理数据
+        fetchThemes();
+        fetchStats();
+        fetchTrendData();
+        fetchActivityTrend();
+        fetchAdminUsers();
+        fetchAnnouncement();
+        toast.success('验证成功');
+      } else {
+        toast.error('密码错误');
+        setAdminPassword('');
+      }
+    } catch (err) {
+      console.error('Error verifying password:', err);
+      toast.error('验证失败');
+    } finally {
+      setVerifyingPassword(false);
     }
   };
 
@@ -770,7 +810,60 @@ const AdminPage: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated) {
+  // 需要密码验证
+  if (needsPasswordVerification && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-sm"
+        >
+          <div className="text-center mb-6">
+            <Shield className="w-16 h-16 text-primary mx-auto mb-4" />
+            <h1 className="text-2xl font-bold">管理员验证</h1>
+            <p className="text-muted-foreground mt-2">
+              请输入管理员密码以继续访问
+            </p>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-password">管理员密码</Label>
+              <Input
+                id="admin-password"
+                type="password"
+                placeholder="请输入密码"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    verifyAdminPassword();
+                  }
+                }}
+                disabled={verifyingPassword}
+              />
+            </div>
+            
+            <Button 
+              className="w-full" 
+              onClick={verifyAdminPassword}
+              disabled={verifyingPassword || !adminPassword.trim()}
+            >
+              {verifyingPassword ? '验证中...' : '验证'}
+            </Button>
+            
+            <Button variant="ghost" className="w-full" onClick={() => navigate(-1)}>
+              返回
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // 没有管理员权限
+  if (!isAuthenticated && !needsPasswordVerification) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
         <motion.div
