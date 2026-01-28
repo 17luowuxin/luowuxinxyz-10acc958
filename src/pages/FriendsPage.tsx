@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
+import { useCharactersCache } from '@/hooks/useLocalCache';
 
 
 // 格式化消息时间
@@ -88,8 +89,21 @@ const FriendsPage: React.FC = () => {
   const [uploadingRefImage, setUploadingRefImage] = useState(false);
   const naiRefImageInputRef = useRef<HTMLInputElement>(null);
 
+  // 本地缓存 Hook
+  const { getCache: getCachedCharacters, setCache: cacheCharacters } = useCharactersCache(user?.id);
+
+  // 初始化：先读取缓存，再从服务器更新
   useEffect(() => {
-    if (user) fetchCharacters();
+    if (user) {
+      // 1. 先从缓存快速显示
+      const cached = getCachedCharacters();
+      if (cached && cached.length > 0) {
+        console.log('[Cache] 从缓存加载好友列表，秒开界面');
+        setCharacters(cached);
+      }
+      // 2. 然后从服务器获取最新数据
+      fetchCharacters();
+    }
   }, [user]);
 
   const fetchCharacters = async () => {
@@ -167,6 +181,9 @@ const FriendsPage: React.FC = () => {
     });
     
     setCharacters(sortedChars);
+    // 缓存到 LocalStorage
+    cacheCharacters(sortedChars);
+    console.log('[Cache] 好友列表已更新并缓存');
   };
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
