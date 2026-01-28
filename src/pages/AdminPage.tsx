@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, Trash2, Plus, Save, Eye, EyeOff, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound, Ticket } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, Plus, Save, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,7 +49,7 @@ interface ThemeForm {
   desktop_widgets: string[];
 }
 
-const ADMIN_PASSWORD = '13160616007lxs'; // 管理员密码
+// Admin authentication is now handled server-side via user_roles table
 
 // 所有APP图标配置 (16个)
 const allAppIcons = [
@@ -137,11 +137,9 @@ const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
   const [stats, setStats] = useState<AppStats>({ totalUsers: 0, totalCharacters: 0, totalMessages: 0, todayUsers: 0 });
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [activityTrend, setActivityTrend] = useState<ActivityTrendData[]>([]);
@@ -280,37 +278,8 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const handlePasswordLogin = async () => {
-    if (password === ADMIN_PASSWORD) {
-      if (!user) {
-        toast.error('请先登录账号');
-        return;
-      }
-      
-      // 添加管理员角色
-      const { error } = await supabase
-        .from('user_roles')
-        .upsert({ user_id: user.id, role: 'admin' }, { onConflict: 'user_id,role' });
-      
-      if (error) {
-        console.error('Error adding admin role:', error);
-        toast.error('设置管理员权限失败: ' + error.message);
-        return;
-      }
-      
-      setIsAdmin(true);
-      setIsAuthenticated(true);
-      fetchThemes();
-      fetchStats();
-      fetchTrendData();
-      fetchActivityTrend();
-      fetchAdminUsers();
-      fetchAnnouncement();
-      toast.success('管理员登录成功');
-    } else {
-      toast.error('密码错误');
-    }
-  };
+  // Admin authentication is now handled entirely server-side
+  // The checkAdminRole function verifies admin status via user_roles table on page load
 
   const fetchStats = async () => {
     try {
@@ -807,42 +776,16 @@ const AdminPage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm"
+          className="w-full max-w-sm text-center"
         >
-          <div className="text-center mb-8">
-            <Shield className="w-16 h-16 text-primary mx-auto mb-4" />
-            <h1 className="text-2xl font-bold">管理员后台</h1>
-            <p className="text-muted-foreground mt-2">请输入管理员密码</p>
-          </div>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <div className="relative">
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="输入管理员密码"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <Button className="w-full" onClick={handlePasswordLogin}>
-                  登录
-                </Button>
-                <Button variant="ghost" className="w-full" onClick={() => navigate(-1)}>
-                  返回
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <Shield className="w-16 h-16 text-destructive mx-auto mb-4" />
+          <h1 className="text-2xl font-bold">访问被拒绝</h1>
+          <p className="text-muted-foreground mt-2 mb-6">
+            您没有管理员权限。如需管理员访问权限，请联系现有管理员。
+          </p>
+          <Button variant="ghost" className="w-full" onClick={() => navigate(-1)}>
+            返回
+          </Button>
         </motion.div>
       </div>
     );
