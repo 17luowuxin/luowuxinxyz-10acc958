@@ -2770,8 +2770,9 @@ const ChatPage: React.FC = () => {
       silenceTimerRef.current = null;
     }
     
-    // 仅在线上模式开启时启动计时器
+    // 仅在线上模式且角色开启了自动回复时启动计时器
     if (replyMode !== 'online') return;
+    if (!character?.auto_reply_enabled) return;
     if (!user?.id || !characterId || !character || !apiConfig?.apiKey) return;
     
     silenceTimerRef.current = setTimeout(() => {
@@ -2784,6 +2785,7 @@ const ChatPage: React.FC = () => {
     if (isAutoReplyingRef.current) return;
     if (loading) return; // 正在发送中不触发
     if (replyMode !== 'online') return; // 非线上模式不触发
+    if (!character?.auto_reply_enabled) return; // 角色未开启自动回复
     if (!user?.id || !characterId || !character || !apiConfig?.apiKey) return;
     
     isAutoReplyingRef.current = true;
@@ -2959,8 +2961,8 @@ const ChatPage: React.FC = () => {
   
   // 页面加载和replyMode变化时管理沉默计时器
   useEffect(() => {
-    // 当进入聊天页面且为线上模式时，启动沉默计时器
-    if (replyMode === 'online' && user?.id && characterId && character && apiConfig?.apiKey && !loading) {
+    // 当进入聊天页面且为线上模式且角色开启自动回复时，启动沉默计时器
+    if (replyMode === 'online' && character?.auto_reply_enabled && user?.id && characterId && character && apiConfig?.apiKey && !loading) {
       resetSilenceTimer();
     }
     

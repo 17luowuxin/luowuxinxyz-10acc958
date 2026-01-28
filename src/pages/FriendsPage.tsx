@@ -68,6 +68,7 @@ const FriendsPage: React.FC = () => {
   const [useNovelFormat, setUseNovelFormat] = useState(false);
   const [voiceId, setVoiceId] = useState('');
   const [ringtoneUrl, setRingtoneUrl] = useState('');
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [uploadingRingtone, setUploadingRingtone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ringtoneInputRef = useRef<HTMLInputElement>(null);
@@ -416,7 +417,8 @@ const FriendsPage: React.FC = () => {
         reply_mode: replyMode,
         use_novel_format: useNovelFormat,
         voice_id: voiceId || null,
-        ringtone_url: ringtoneUrl || null
+        ringtone_url: ringtoneUrl || null,
+        auto_reply_enabled: autoReplyEnabled
       })
       .eq('id', editingChar.id);
     
@@ -451,6 +453,7 @@ const FriendsPage: React.FC = () => {
     setUseNovelFormat(false);
     setVoiceId('');
     setRingtoneUrl('');
+    setAutoReplyEnabled(false);
   };
 
   const openEditDialog = async (char: any) => {
@@ -465,6 +468,7 @@ const FriendsPage: React.FC = () => {
     setUseNovelFormat(char.use_novel_format ?? false);
     setVoiceId(char.voice_id || '');
     setRingtoneUrl(char.ringtone_url || '');
+    setAutoReplyEnabled(char.auto_reply_enabled ?? false);
     setMemorySummary('');
     setNaiPositivePrompt('');
     setNaiNegativePrompt('');
@@ -931,6 +935,29 @@ const FriendsPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  
+                  {/* Auto Reply Toggle - only show in online mode */}
+                  {replyMode === 'online' && (
+                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-2xl border border-blue-200">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">💬</span>
+                        <div>
+                          <p className="font-medium text-blue-700 text-sm">沉默自动回复</p>
+                          <p className="text-xs text-blue-500">你2分钟不说话时，角色会主动找你聊天</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setAutoReplyEnabled(!autoReplyEnabled)}
+                        className={`w-12 h-6 rounded-full transition-all ${
+                          autoReplyEnabled ? 'bg-blue-400' : 'bg-gray-300'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                          autoReplyEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                  )}
                   
                   {/* Transfer Toggle */}
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
