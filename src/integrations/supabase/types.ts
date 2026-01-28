@@ -247,6 +247,7 @@ export type Database = {
       }
       characters: {
         Row: {
+          auto_reply_enabled: boolean | null
           avatar_url: string | null
           call_video_url: string | null
           created_at: string
@@ -268,6 +269,7 @@ export type Database = {
           voice_mode: string | null
         }
         Insert: {
+          auto_reply_enabled?: boolean | null
           avatar_url?: string | null
           call_video_url?: string | null
           created_at?: string
@@ -289,6 +291,7 @@ export type Database = {
           voice_mode?: string | null
         }
         Update: {
+          auto_reply_enabled?: boolean | null
           avatar_url?: string | null
           call_video_url?: string | null
           created_at?: string
