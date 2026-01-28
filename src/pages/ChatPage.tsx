@@ -332,7 +332,7 @@ const ChatPage: React.FC = () => {
   const isAutoReplyingRef = useRef(false); // 防止重复触发
   
   // 本地缓存 Hooks（秒开界面）
-  const { getCache: getCachedMessages, setCache: cacheMessages } = useMessagesCache(user?.id, characterId);
+  const { getCache: getCachedMessages, setCache: cacheMessages, clearCache: clearMessagesCache } = useMessagesCache(user?.id, characterId);
   const { getCache: getCachedCustomization, setCache: cacheCustomization } = useCustomizationCache(user?.id);
   const { getCache: getCachedProfile, setCache: cacheProfile } = useProfileCache(user?.id);
   
@@ -554,6 +554,15 @@ const ChatPage: React.FC = () => {
       setCurrentChat(null);
     };
   }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, setCurrentChat]);
+
+  // 消息变化时自动同步缓存（解决发送新消息后退出重进缓存不同步的问题）
+  useEffect(() => {
+    // 只有当消息列表不为空且有实际数据时才更新缓存
+    // 避免初始化时空数组覆盖缓存
+    if (messages.length > 0 && user?.id && characterId) {
+      cacheMessages(messages);
+    }
+  }, [messages, user?.id, characterId, cacheMessages]);
 
   // 自动滚动现在由 VirtualMessageList 组件内部处理
 
@@ -1138,6 +1147,7 @@ const ChatPage: React.FC = () => {
       ]);
       setMessages([]);
       setPendingTransfers([]); // 同时清除本地转账卡片状态
+      clearMessagesCache(); // 同时清除本地缓存，避免重进时显示旧数据
       toast.success('已清空全部聊天记录');
     } catch (err) {
       toast.error('清空失败');
