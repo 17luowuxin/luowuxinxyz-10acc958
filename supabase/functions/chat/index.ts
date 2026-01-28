@@ -39,6 +39,7 @@ serve(async (req) => {
       hasImageInHistory,
       returnJson,
       clientTime,
+      isAutoReply, // 自动回复标记：用户沉默2分钟后触发
     } = body ?? {};
 
     // Backward-compat: normalize legacy params
@@ -428,15 +429,38 @@ ${holiday}
     }
 
     let replyModePrompt = '';
+    let autoReplyPrompt = '';
+    
+    // 自动回复模式：用户沉默2分钟后触发
+    if (isAutoReply) {
+      autoReplyPrompt = `
+
+【主动关心模式 - 重要！】
+用户已经有一段时间没有说话了（约2分钟）。现在请你主动发起对话：
+1. 根据你的人设和当前聊天氛围，主动给用户发一条简短的追问或关心的消息
+2. 可以是追问用户在干嘛、关心用户的状态、分享你正在做的事、或者撒娇求关注等
+3. 语气要自然，像真正的朋友/恋人一样主动找话题
+4. 不要提到"你怎么不说话""你去哪了"这种让人有压力的话
+5. 保持你的角色人设风格
+
+示例风格（根据你的人设选择合适的）：
+- 甜系："在想你呢~你在干嘛呀"
+- 傲娇："哼，不理我是吧"
+- 温柔："突然想问问你今天顺利吗"
+- 活泼："诶诶！！给你分享个好玩的"`;
+    }
+    
     if (replyMode === 'online') {
       // 解析消息条数：1-2固定2条，3-5固定5条
-      const messageCount = reqMessageCount || '3-5';
+      // 自动回复模式固定3-5条
+      const messageCount = isAutoReply ? '3-5' : (reqMessageCount || '3-5');
       const fixedCount = messageCount === '1-2' ? 2 : 5;
       
       replyModePrompt = `
 
 【线上聊天模式 - 严格固定${fixedCount}条消息！】
 你在用手机微信聊天，必须把回复拆成恰好${fixedCount}条短消息。
+${autoReplyPrompt}
 
 【铁律 - 必须100%遵守！】
 1. 必须恰好${fixedCount}条消息，用 "|||" 分隔，多一条少一条都不行！
