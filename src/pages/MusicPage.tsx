@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Music, Play, Pause, Upload, Repeat, Repeat1, SkipBack, SkipForward, Edit2, Image, Check, X, Trash2, Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
@@ -89,7 +90,7 @@ const MusicPage: React.FC = () => {
         
         xhr.addEventListener('error', () => reject(new Error('Upload failed')));
         
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseUrl = getSupabaseUrl();
         xhr.open('POST', `${supabaseUrl}/storage/v1/object/music/${fileName}`);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.setRequestHeader('x-upsert', 'false');
