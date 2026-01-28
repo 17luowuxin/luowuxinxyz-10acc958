@@ -6,6 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Validate UUID format
+function isValidUUID(id: string): boolean {
+  return typeof id === 'string' && UUID_REGEX.test(id);
+}
+
+// Max batch size for cleanup operations
+const MAX_BATCH_SIZE = 100;
+
+// Min password length
+const MIN_PASSWORD_LENGTH = 8;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -162,9 +176,26 @@ serve(async (req) => {
 
 
     if (action === 'cleanup_user_data') {
+      // Validate userId is provided
       if (!userId) {
         return new Response(
           JSON.stringify({ error: 'userId required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate UUID format
+      if (!isValidUUID(userId)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid user ID format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Prevent self-deletion
+      if (userId === user.id) {
+        return new Response(
+          JSON.stringify({ error: 'Cannot delete your own account data' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -195,11 +226,43 @@ serve(async (req) => {
 
 
     if (action === 'batch_cleanup') {
+      // Validate userIds is provided and is an array
       if (!userIds || !Array.isArray(userIds)) {
         return new Response(
           JSON.stringify({ error: 'userIds array required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // Validate array is not empty
+      if (userIds.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'userIds array cannot be empty' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate batch size limit
+      if (userIds.length > MAX_BATCH_SIZE) {
+        return new Response(
+          JSON.stringify({ error: `Maximum ${MAX_BATCH_SIZE} users per batch` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate all UUIDs in array
+      const invalidIds = userIds.filter(id => !isValidUUID(id));
+      if (invalidIds.length > 0) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid UUID format in userIds array' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Filter out admin's own ID from batch
+      const safeUserIds = userIds.filter(id => id !== user.id);
+      if (safeUserIds.length < userIds.length) {
+        console.log('Removed admin\'s own ID from batch cleanup');
       }
 
       const tables = [
@@ -214,9 +277,9 @@ serve(async (req) => {
       ];
 
       let cleanedCount = 0;
-      for (const userId of userIds) {
+      for (const targetUserId of safeUserIds) {
         for (const table of tables) {
-          await adminClient.from(table).delete().eq('user_id', userId);
+          await adminClient.from(table).delete().eq('user_id', targetUserId);
         }
         cleanedCount++;
       }
@@ -229,16 +292,34 @@ serve(async (req) => {
 
     // 重置用户密码
     if (action === 'reset_password') {
-      if (!userId || !newPassword) {
+      // Validate userId is provided
+      if (!userId) {
         return new Response(
-          JSON.stringify({ error: 'userId and newPassword required' }),
+          JSON.stringify({ error: 'userId required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      if (newPassword.length < 6) {
+      // Validate UUID format
+      if (!isValidUUID(userId)) {
         return new Response(
-          JSON.stringify({ error: 'Password must be at least 6 characters' }),
+          JSON.stringify({ error: 'Invalid user ID format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate password is provided
+      if (!newPassword) {
+        return new Response(
+          JSON.stringify({ error: 'newPassword required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate password length (min 8 characters)
+      if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+        return new Response(
+          JSON.stringify({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
