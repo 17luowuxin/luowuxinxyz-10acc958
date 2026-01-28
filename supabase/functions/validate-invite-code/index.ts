@@ -33,17 +33,21 @@ Deno.serve(async (req) => {
       .eq('code', code.toUpperCase().trim())
       .single()
 
+    // 使用统一的错误消息防止邀请码枚举攻击
+    // Return generic error to prevent invite code enumeration attacks
     if (findError || !inviteCode) {
+      console.log('Invite code validation failed: code not found')
       return new Response(
-        JSON.stringify({ valid: false, message: '邀请码不存在' }),
+        JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 检查是否已使用
+    // 检查是否已使用 - 使用相同的通用错误消息
     if (inviteCode.is_used) {
+      console.log('Invite code validation failed: code already used')
       return new Response(
-        JSON.stringify({ valid: false, message: '该邀请码已被使用' }),
+        JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
