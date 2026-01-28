@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
@@ -727,7 +728,7 @@ const ChatPage: React.FC = () => {
       const chatController = new AbortController();
       const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -946,7 +947,7 @@ const ChatPage: React.FC = () => {
     
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+        const response = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1005,7 +1006,7 @@ const ChatPage: React.FC = () => {
     
     try {
       setTtsPlaying(true);
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+      const response = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1951,7 +1952,7 @@ const ChatPage: React.FC = () => {
       const chatController = new AbortController();
       const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2186,7 +2187,7 @@ const ChatPage: React.FC = () => {
       const chatController = new AbortController();
       const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2679,7 +2680,7 @@ const ChatPage: React.FC = () => {
       if (totalMessages > 0 && totalMessages % 20 === 0) {
         console.log('Triggering memory summary generation at message count:', totalMessages);
         // 后台生成摘要，不阻塞UI
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-memory-summary`, {
+        fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3078,7 +3079,7 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
       
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3276,7 +3277,7 @@ const ChatPage: React.FC = () => {
         const controller = new AbortController();
         const ttsTimeout = window.setTimeout(() => controller.abort(), 8000);
 
-        const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+        const ttsResp = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
           method: 'POST',
           signal: controller.signal,
           headers: {
@@ -3570,7 +3571,7 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3671,7 +3672,7 @@ const ChatPage: React.FC = () => {
           const ttsTimeout = setTimeout(() => ttsController.abort(), 8000);
           
           try {
-            const ttsResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+            const ttsResp = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

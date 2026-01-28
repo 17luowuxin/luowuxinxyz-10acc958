@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Waves, Sparkles, RefreshCw, Trash2, X } from 'lucide-react';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -102,7 +103,7 @@ const BottlePage: React.FC = () => {
       setInput('');
       setShowCompose(false);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bottle-reply`, {
+      const response = await fetch(`${getSupabaseUrl()}/functions/v1/bottle-reply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

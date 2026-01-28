@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -635,7 +636,7 @@ const FriendsPage: React.FC = () => {
     
     setRegeneratingMemory(true);
     try {
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-memory-summary`, {
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
