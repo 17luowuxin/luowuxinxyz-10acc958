@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, S
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
+import VirtualMessageList from '@/components/chat/VirtualMessageList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -236,7 +237,11 @@ const ChatPage: React.FC = () => {
   const { characterId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // 使用分页消息 - 初始加载20条，向上滚动加载更多
   const [messages, setMessages] = useState<any[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
+  const oldestMessageTimeRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [character, setCharacter] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -323,7 +328,6 @@ const ChatPage: React.FC = () => {
   const callVideoRef = useRef<HTMLVideoElement>(null);
   const callVideoInputRef = useRef<HTMLInputElement>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const callMessagesEndRef = useRef<HTMLDivElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null); // 当前播放的音频
@@ -520,41 +524,44 @@ const ChatPage: React.FC = () => {
     };
   }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, setCurrentChat]);
 
-  // 优化滚动性能 - 使用防抖
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  useEffect(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-    scrollTimeoutRef.current = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, [messages.length]); // 只在消息数量变化时滚动
+  // 自动滚动现在由 VirtualMessageList 组件内部处理
 
 
   const fetchMessagesWithTransfers = async () => {
-    // 并行获取聊天消息和转账记录
-    const [chatResult, transferResult] = await Promise.all([
+    // 并行获取最新20条消息、转账记录和消息总数
+    const [chatResult, transferResult, countResult] = await Promise.all([
       supabase
         .from('chat_messages')
         .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
         .eq('character_id', characterId)
-        .order('created_at'),
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(20), // 只加载最新的20条
       supabase
         .from('dream_transactions')
         .select('*')
         .eq('character_id', characterId)
         .eq('user_id', user?.id)
-        .order('created_at')
+        .order('created_at'),
+      supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('character_id', characterId)
+        .eq('user_id', user?.id)
     ]);
     
-    const chatData = chatResult.data;
+    // 翻转回正序（因为我们是按降序获取的）
+    const chatData = (chatResult.data || []).reverse();
     const transferData = transferResult.data;
+    const totalCount = countResult.count || 0;
+    
+    // 记录最老的消息时间戳，用于加载更多
+    if (chatData.length > 0) {
+      oldestMessageTimeRef.current = chatData[0].created_at;
+    }
+    
+    // 判断是否还有更多消息
+    setHasMoreMessages(chatData.length < totalCount);
     
     // 合并消息和转账记录
     const allItems: any[] = [];
@@ -624,6 +631,68 @@ const ChatPage: React.FC = () => {
       }
     }
   };
+  
+  // 加载更多历史消息（向上滚动时触发）
+  const loadMoreMessages = useCallback(async () => {
+    if (!user?.id || !characterId || !hasMoreMessages || isLoadingMoreMessages || !oldestMessageTimeRef.current) {
+      return;
+    }
+    
+    setIsLoadingMoreMessages(true);
+    
+    try {
+      const { data: olderMessages, error } = await supabase
+        .from('chat_messages')
+        .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
+        .eq('character_id', characterId)
+        .eq('user_id', user.id)
+        .lt('created_at', oldestMessageTimeRef.current)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (error) {
+        console.error('Failed to load more messages:', error);
+        setIsLoadingMoreMessages(false);
+        return;
+      }
+      
+      if (!olderMessages || olderMessages.length === 0) {
+        setHasMoreMessages(false);
+        setIsLoadingMoreMessages(false);
+        return;
+      }
+      
+      // 翻转回正序
+      const orderedMessages = olderMessages.reverse();
+      
+      // 更新最老的时间戳
+      oldestMessageTimeRef.current = orderedMessages[0].created_at;
+      
+      // 如果返回的消息少于20条，说明没有更多了
+      if (olderMessages.length < 20) {
+        setHasMoreMessages(false);
+      }
+      
+      // 处理新加载的消息
+      const newMessages = orderedMessages.map(msg => ({
+        ...msg,
+        audioBase64: (msg as any).audio_url || undefined,
+        timestamp: new Date(msg.created_at).getTime(),
+        quotedMessage: null // 历史消息的引用暂不处理
+      }));
+      
+      // 合并到现有消息前面
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const filteredNew = newMessages.filter(m => !existingIds.has(m.id));
+        return [...filteredNew, ...prev];
+      });
+    } catch (error) {
+      console.error('Failed to load more messages:', error);
+    } finally {
+      setIsLoadingMoreMessages(false);
+    }
+  }, [user?.id, characterId, hasMoreMessages, isLoadingMoreMessages]);
   
   // 重新请求AI回复
   const retryLastMessage = async (chatData: any[]) => {
@@ -3871,87 +3940,48 @@ const ChatPage: React.FC = () => {
         </Popover>
       </header>
 
-      {/* Scrollable Messages Area - 只有这个区域可以滚动，背景透明 */}
-      <main className="flex-1 overflow-y-auto overscroll-none touch-pan-y">
-        <div className="p-3 space-y-3 pb-4">
-          {messages.map((msg, index) => {
-            const prevMsg = index > 0 ? messages[index - 1] : null;
-            const isUser = msg.role === 'user';
-            
-            return (
-              <MessageItem
-                key={msg.id}
-                msg={msg}
-                prevMsg={prevMsg}
-                isUser={isUser}
-                character={character}
-                profile={profile}
-                customization={customization}
-                replyMode={replyMode}
-                pendingTransfers={pendingTransfers}
-                blockedAt={blockedAt}
-                userAvatarFrame={userAvatarFrame}
-                friendAvatarFrame={friendAvatarFrame}
-                userBubbleColor={userBubbleColor}
-                friendBubbleColor={friendBubbleColor}
-                fontColor={fontColor}
-                friendFontColor={friendFontColor}
-                bubbleOpacity={bubbleOpacity}
-                bubbleSize={bubbleSize}
-                userBubbleDecor={userBubbleDecor}
-                userBubbleDecorImage={userBubbleDecorImage}
-                friendBubbleDecor={friendBubbleDecor}
-                friendBubbleDecorImage={friendBubbleDecorImage}
-                isLongPressed={longPressedMsg?.id === msg.id}
-                onTouchStart={() => handleMessageTouchStart(msg)}
-                onTouchEnd={handleMessageTouchEnd}
-                onTouchMove={handleMessageTouchMove}
-                onClick={(e) => handleMessageClick(msg, e)}
-                onReceiveTransfer={handleReceiveTransfer}
-                onDeleteTransfer={handleDeleteTransfer}
-                onQuoteMessage={() => quoteMessage(msg)}
-                onCopyMessage={() => copyMessage(msg)}
-                onDeleteFromMessage={() => deleteFromMessage(msg)}
-                onClearLongPress={() => setLongPressedMsg(null)}
-                parseTransferCommand={parseTransferCommand}
-                removeTransferCommand={removeTransferCommand}
-                getBubbleStyle={getBubbleStyle}
-                getBubbleBackgroundStyle={getBubbleBackgroundStyle}
-                getBubblePadding={getBubblePadding}
-              />
-            );
-          })}
-          
-          {loading && (
-            <div className="flex items-end gap-2">
-              {/* AI头像 */}
-              <div className="relative w-10 h-10 flex-shrink-0">
-                {friendAvatarFrame && (
-                  <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
-                )}
-                <div className={`absolute rounded-full overflow-hidden ${friendAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
-                  {character?.avatar_url ? (
-                    <img src={character.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 flex items-center justify-center text-[10px] text-gray-500">
-                      {character?.name?.charAt(0) || '?'}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* 输入中气泡 */}
-              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-muted/80 text-muted-foreground text-sm">
-                <span className="inline-flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </main>
+      {/* Virtual Message List - 虚拟滚动优化，只渲染可见消息 */}
+      <VirtualMessageList
+        messages={messages}
+        character={character}
+        profile={profile}
+        customization={customization}
+        replyMode={replyMode}
+        pendingTransfers={pendingTransfers}
+        blockedAt={blockedAt}
+        userAvatarFrame={userAvatarFrame}
+        friendAvatarFrame={friendAvatarFrame}
+        userBubbleColor={userBubbleColor}
+        friendBubbleColor={friendBubbleColor}
+        fontColor={fontColor}
+        friendFontColor={friendFontColor}
+        bubbleOpacity={bubbleOpacity}
+        bubbleSize={bubbleSize}
+        userBubbleDecor={userBubbleDecor}
+        userBubbleDecorImage={userBubbleDecorImage}
+        friendBubbleDecor={friendBubbleDecor}
+        friendBubbleDecorImage={friendBubbleDecorImage}
+        longPressedMsg={longPressedMsg}
+        loading={loading}
+        hasMore={hasMoreMessages}
+        isLoadingMore={isLoadingMoreMessages}
+        onLoadMore={loadMoreMessages}
+        onMessageTouchStart={handleMessageTouchStart}
+        onMessageTouchEnd={handleMessageTouchEnd}
+        onMessageTouchMove={handleMessageTouchMove}
+        onMessageClick={handleMessageClick}
+        onReceiveTransfer={handleReceiveTransfer}
+        onDeleteTransfer={handleDeleteTransfer}
+        onQuoteMessage={quoteMessage}
+        onCopyMessage={copyMessage}
+        onDeleteFromMessage={deleteFromMessage}
+        onClearLongPress={() => setLongPressedMsg(null)}
+        parseTransferCommand={parseTransferCommand}
+        removeTransferCommand={removeTransferCommand}
+        getBubbleStyle={getBubbleStyle}
+        getBubbleBackgroundStyle={getBubbleBackgroundStyle}
+        getBubblePadding={getBubblePadding}
+      />
 
       {/* 待发送图片预览 */}
       {pendingImage && (
