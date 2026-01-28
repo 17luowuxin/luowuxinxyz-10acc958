@@ -222,29 +222,39 @@ const CustomizePage: React.FC = () => {
       return;
     }
 
-    // 压缩大图片
-    if (file.size > 2 * 1024 * 1024) {
-      toast.loading('正在压缩图片...');
-    }
-
     setUploading(true);
-    const fileName = `${user.id}/chat-bg-${Date.now()}.${file.name.split('.').pop()}`;
+    toast.loading('正在压缩图片...');
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: true
-    });
-    
-    if (uploadError) {
-      toast.error('上传失败');
-      setUploading(false);
-      return;
-    }
+    try {
+      // 压缩背景图（最大宽度1920px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1920, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/chat-bg-${Date.now()}.jpg`;
+      
+      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile, {
+        cacheControl: '3600',
+        upsert: true
+      });
+      
+      if (uploadError) {
+        toast.dismiss();
+        toast.error('上传失败');
+        setUploading(false);
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    setChatBackgroundUrl(publicUrl + '?t=' + Date.now());
+      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      setChatBackgroundUrl(publicUrl + '?t=' + Date.now());
+      toast.dismiss();
+      toast.success('背景图上传成功');
+    } catch (error) {
+      console.error('Background upload error:', error);
+      toast.dismiss();
+      toast.error('上传失败');
+    }
     setUploading(false);
-    toast.success('背景图上传成功');
   };
 
   const handleGlobalBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -257,23 +267,38 @@ const CustomizePage: React.FC = () => {
     }
 
     setGlobalUploading(true);
-    const fileName = `${user.id}/global-bg-${Date.now()}.${file.name.split('.').pop()}`;
+    toast.loading('正在压缩图片...');
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: true
-    });
-    
-    if (uploadError) {
-      toast.error('上传失败');
-      setGlobalUploading(false);
-      return;
-    }
+    try {
+      // 压缩全局背景（最大宽度1920px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1920, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/global-bg-${Date.now()}.jpg`;
+      
+      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile, {
+        cacheControl: '3600',
+        upsert: true
+      });
+      
+      if (uploadError) {
+        toast.dismiss();
+        toast.error('上传失败');
+        setGlobalUploading(false);
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
-    setGlobalBackgroundUrl(publicUrl + '?t=' + Date.now());
+      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      setGlobalBackgroundUrl(publicUrl + '?t=' + Date.now());
+      toast.dismiss();
+      toast.success('全局背景图上传成功');
+    } catch (error) {
+      console.error('Global background upload error:', error);
+      toast.dismiss();
+      toast.error('上传失败');
+    }
     setGlobalUploading(false);
-    toast.success('全局背景图上传成功');
   };
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

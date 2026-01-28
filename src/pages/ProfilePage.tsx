@@ -31,12 +31,23 @@ const ProfilePage: React.FC = () => {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    const filePath = `${user.id}/avatar-${Date.now()}`;
-    await supabase.storage.from('avatars').upload(filePath, file, { upsert: true });
-    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    setAvatarUrl(publicUrl);
-    await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('user_id', user.id);
-    toast.success('头像已更新');
+    
+    try {
+      // 压缩头像（512px，质量0.85）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 512, 0.85);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
+      await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      setAvatarUrl(publicUrl);
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('user_id', user.id);
+      toast.success('头像已更新');
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      toast.error('头像上传失败');
+    }
   };
 
   const handleSave = async () => {

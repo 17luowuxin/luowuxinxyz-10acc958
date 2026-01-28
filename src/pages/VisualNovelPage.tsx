@@ -127,7 +127,7 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
     }
   };
 
-  // 上传用户立绘
+  // 上传用户立绘（带压缩）
   const handleUserSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -136,8 +136,13 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
     toast.loading('上传中...');
 
     try {
-      const fileName = `${user.id}/user-sprite/main-${Date.now()}.png`;
-      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
+      // 压缩立绘（最大宽度1080px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/user-sprite/main-${Date.now()}.jpg`;
+      await supabase.storage.from('backgrounds').upload(fileName, compressedFile, { upsert: true });
       const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
       
       const spriteUrl = `${publicUrl}?t=${Date.now()}`;
@@ -169,7 +174,7 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
     }
   };
 
-  // 上传角色立绘
+  // 上传角色立绘（带压缩）
   const handleCharSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>, charId: string) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -178,8 +183,13 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
     toast.loading('上传中...');
 
     try {
-      const fileName = `${user.id}/sprites/${charId}/main-${Date.now()}.png`;
-      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
+      // 压缩立绘（最大宽度1080px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const fileName = `${user.id}/sprites/${charId}/main-${Date.now()}.jpg`;
+      await supabase.storage.from('backgrounds').upload(fileName, compressedFile, { upsert: true });
       const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
       
       const spriteUrl = `${publicUrl}?t=${Date.now()}`;

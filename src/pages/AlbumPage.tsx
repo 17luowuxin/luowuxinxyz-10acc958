@@ -72,22 +72,32 @@ const AlbumPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    const filePath = `${user.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('photos').upload(filePath, file);
-    
-    if (uploadError) {
-      toast.error('上传失败');
-      return;
-    }
+    try {
+      // 压缩图片（最大宽度1080px，质量0.8）
+      const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
+      const compressedBlob = await compressImage(file, 1080, 0.8);
+      const compressedFile = blobToFile(compressedBlob, file.name);
+      
+      const filePath = `${user.id}/${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('photos').upload(filePath, compressedFile);
+      
+      if (uploadError) {
+        toast.error('上传失败');
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(filePath);
-    await supabase.from('photos').insert({ 
-      user_id: user.id, 
-      url: publicUrl,
-      album_id: currentAlbum?.id || null
-    });
-    toast.success('上传成功!');
-    fetchPhotos(currentAlbum?.id);
+      const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(filePath);
+      await supabase.from('photos').insert({ 
+        user_id: user.id, 
+        url: publicUrl,
+        album_id: currentAlbum?.id || null
+      });
+      toast.success('上传成功!');
+      fetchPhotos(currentAlbum?.id);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('上传失败');
+    }
   };
 
   const handleCreateAlbum = async () => {
