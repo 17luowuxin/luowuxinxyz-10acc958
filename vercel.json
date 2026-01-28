@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/supabase/rest/:path*",
+      "destination": "https://emvolhvffoqsfmhbcadk.supabase.co/rest/:path*"
+    },
+    {
+      "source": "/supabase/auth/:path*",
+      "destination": "https://emvolhvffoqsfmhbcadk.supabase.co/auth/:path*"
+    },
+    {
+      "source": "/supabase/storage/:path*",
+      "destination": "https://emvolhvffoqsfmhbcadk.supabase.co/storage/:path*"
+    },
+    {
+      "source": "/supabase/functions/:path*",
+      "destination": "https://emvolhvffoqsfmhbcadk.supabase.co/functions/:path*"
+    },
+    {
+      "source": "/((?!supabase/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
