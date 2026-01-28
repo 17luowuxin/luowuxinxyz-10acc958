@@ -1099,9 +1099,13 @@ const ChatPage: React.FC = () => {
   // 清空全部聊天记录
   const clearAllMessages = async () => {
     try {
-      await supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id);
+      // 同时删除聊天记录和转账记录
+      await Promise.all([
+        supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id),
+        supabase.from('dream_transactions').delete().eq('character_id', characterId).eq('user_id', user?.id)
+      ]);
       setMessages([]);
-      setPendingTransfers([]); // 同时清除转账卡片
+      setPendingTransfers([]); // 同时清除本地转账卡片状态
       toast.success('已清空全部聊天记录');
     } catch (err) {
       toast.error('清空失败');
