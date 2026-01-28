@@ -25,6 +25,7 @@ import { usePushTrigger } from '@/hooks/usePushTrigger';
 import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
+import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hooks/useLocalCache';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -330,6 +331,11 @@ const ChatPage: React.FC = () => {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoReplyingRef = useRef(false); // 防止重复触发
   
+  // 本地缓存 Hooks（秒开界面）
+  const { getCache: getCachedMessages, setCache: cacheMessages } = useMessagesCache(user?.id, characterId);
+  const { getCache: getCachedCustomization, setCache: cacheCustomization } = useCustomizationCache(user?.id);
+  const { getCache: getCachedProfile, setCache: cacheProfile } = useProfileCache(user?.id);
+  
   const callVideoRef = useRef<HTMLVideoElement>(null);
   const callVideoInputRef = useRef<HTMLInputElement>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
@@ -431,8 +437,9 @@ const ChatPage: React.FC = () => {
     if (data) {
       console.log('Profile loaded:', data.nickname, 'avatar:', data.avatar_url?.slice(0, 50));
       setProfile(data);
+      cacheProfile(data); // 缓存用户资料
     }
-  }, [user?.id]);
+  }, [user?.id, cacheProfile]);
 
   const fetchCharacter = useCallback(async () => {
     if (!characterId) return;
@@ -511,6 +518,25 @@ const ChatPage: React.FC = () => {
 
   useEffect(() => {
     if (user && characterId) {
+      // 1. 先从缓存快速加载，实现秒开
+      const cachedMsgs = getCachedMessages();
+      const cachedCust = getCachedCustomization();
+      const cachedProf = getCachedProfile();
+      
+      if (cachedMsgs && cachedMsgs.length > 0) {
+        console.log('[Cache] 从缓存加载消息列表，秒开界面');
+        setMessages(cachedMsgs);
+      }
+      if (cachedCust) {
+        console.log('[Cache] 从缓存加载个性化设置');
+        setCustomization(cachedCust);
+      }
+      if (cachedProf) {
+        console.log('[Cache] 从缓存加载用户资料');
+        setProfile(cachedProf);
+      }
+      
+      // 2. 然后从服务器获取最新数据
       fetchCharacter();
       fetchMessagesWithTransfers();
       fetchCustomization();
@@ -621,6 +647,9 @@ const ChatPage: React.FC = () => {
     // 按时间排序
     allItems.sort((a, b) => a.timestamp - b.timestamp);
     setMessages(allItems);
+    // 缓存消息列表到 LocalStorage
+    cacheMessages(allItems);
+    console.log('[Cache] 消息列表已更新并缓存');
     
     // 仅在“仍在当前聊天且页面可见”时标记已读
     await markCurrentChatRead();
@@ -838,7 +867,10 @@ const ChatPage: React.FC = () => {
 
   const fetchCustomization = async () => {
     const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).single();
-    if (data) setCustomization(data);
+    if (data) {
+      setCustomization(data);
+      cacheCustomization(data); // 缓存个性化设置
+    }
   };
 
   const fetchApiConfig = async () => {
