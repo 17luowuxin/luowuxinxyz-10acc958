@@ -5,7 +5,7 @@ import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
 
-interface AuthContextType {
+interface DualAuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
@@ -16,9 +16,9 @@ interface AuthContextType {
   getActiveClient: () => typeof supabase;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const DualAuthContext = createContext<DualAuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const DualAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAuthSource('lovable-cloud');
           setLoading(false);
         } else if (authSource === 'lovable-cloud') {
+          // 只有当当前来源是 cloud 时才清除
           setSession(null);
           setUser(null);
           setAuthSource(null);
@@ -49,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAuthSource('external');
           setLoading(false);
         } else if (authSource === 'external') {
+          // 只有当当前来源是 external 时才清除
           setSession(null);
           setUser(null);
           setAuthSource(null);
@@ -63,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         externalSupabase.auth.getSession()
       ]);
 
+      // 优先使用 Cloud 会话（现有用户）
       if (cloudResult.data.session) {
         setSession(cloudResult.data.session);
         setUser(cloudResult.data.session.user);
@@ -110,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null };
     }
 
-    // 如果 Cloud 登录失败，尝试外部 Supabase（新用户）
+    // 如果 Cloud 登录失败（用户不存在），尝试外部 Supabase
     const externalResult = await externalSupabase.auth.signInWithPassword({
       email,
       password,
@@ -121,17 +124,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null };
     }
 
-    // 两边都失败，返回错误
+    // 两边都失败，返回更友好的错误
+    // 如果两边都是 "Invalid login credentials"，说明用户不存在或密码错误
     return { error: cloudResult.error as Error };
   };
 
-  // 登出
+  // 登出 - 根据来源登出对应客户端
   const signOut = async () => {
     if (authSource === 'lovable-cloud') {
       await supabase.auth.signOut();
     } else if (authSource === 'external') {
       await externalSupabase.auth.signOut();
     } else {
+      // 两边都登出以确保清理干净
       await Promise.all([
         supabase.auth.signOut(),
         externalSupabase.auth.signOut()
@@ -148,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ 
+    <DualAuthContext.Provider value={{ 
       user, 
       session, 
       loading, 
@@ -159,14 +164,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       getActiveClient 
     }}>
       {children}
-    </AuthContext.Provider>
+    </DualAuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
+export const useDualAuth = () => {
+  const context = useContext(DualAuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useDualAuth must be used within a DualAuthProvider');
   }
   return context;
 };
