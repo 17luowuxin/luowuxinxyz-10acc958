@@ -17,7 +17,23 @@
       "destination": "https://emvolhvffoqsfmhbcadk.supabase.co/functions/:path*"
     },
     {
-      "source": "/((?!supabase/).*)",
+      "source": "/external-supabase/rest/:path*",
+      "destination": "https://lxbusdoqghkcajlctbqg.supabase.co/rest/:path*"
+    },
+    {
+      "source": "/external-supabase/auth/:path*",
+      "destination": "https://lxbusdoqghkcajlctbqg.supabase.co/auth/:path*"
+    },
+    {
+      "source": "/external-supabase/storage/:path*",
+      "destination": "https://lxbusdoqghkcajlctbqg.supabase.co/storage/:path*"
+    },
+    {
+      "source": "/external-supabase/functions/:path*",
+      "destination": "https://lxbusdoqghkcajlctbqg.supabase.co/functions/:path*"
+    },
+    {
+      "source": "/((?!supabase/|external-supabase/).*)",
       "destination": "/index.html"
     }
   ]
