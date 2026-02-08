@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface PhoneFrameProps {

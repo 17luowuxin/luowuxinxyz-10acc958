@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { setActiveAuthSource } from '@/lib/supabase';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
 
@@ -24,6 +25,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [authSource, setAuthSource] = useState<AuthSource>(null);
 
+  // 同步认证来源到全局代理
+  useEffect(() => {
+    setActiveAuthSource(authSource);
+  }, [authSource]);
   useEffect(() => {
     // 监听两个客户端的认证状态变化
     const { data: { subscription: cloudSub } } = supabase.auth.onAuthStateChange(

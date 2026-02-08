@@ -5,7 +5,7 @@ import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusicPlayer } from '@/contexts/MusicContext';
 import { toast } from 'sonner';

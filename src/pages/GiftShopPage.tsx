@@ -7,7 +7,7 @@ import {
   Sparkle, Camera, Cookie, Shirt, Flower, Coffee, Smartphone, Car
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
