@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X, Type, User, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';

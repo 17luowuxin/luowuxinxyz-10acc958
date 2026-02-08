@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Heart, Sparkles, Mail, Lock, Ticket } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 
 const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
