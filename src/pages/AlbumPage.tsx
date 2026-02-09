@@ -79,14 +79,14 @@ const AlbumPage: React.FC = () => {
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const filePath = `${user.id}/${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage.from('photos').upload(filePath, compressedFile);
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile);
       
       if (uploadError) {
         toast.error('上传失败');
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       await supabase.from('photos').insert({ 
         user_id: user.id, 
         url: publicUrl,

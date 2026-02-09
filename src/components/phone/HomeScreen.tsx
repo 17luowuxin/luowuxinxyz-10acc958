@@ -167,7 +167,7 @@ const HomeScreen: React.FC = () => {
       const fileName = `${user.id}/${uploadTarget.type}/${uploadTarget.key}-${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, compressedBlob, { 
           upsert: true,
           contentType: 'image/jpeg'
@@ -180,7 +180,7 @@ const HomeScreen: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       if (uploadTarget.type === 'app') {

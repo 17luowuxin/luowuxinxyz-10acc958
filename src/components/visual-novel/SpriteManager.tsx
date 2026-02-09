@@ -79,13 +79,13 @@ const SpriteManager: React.FC = () => {
       const fileName = `${user.id}/sprites/${selectedCharacter.id}/main-${Date.now()}.png`;
 
       const { error: uploadError } = await supabase.storage
-        .from("backgrounds")
+        .from("avatars")
         .upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
 
       const {
         data: { publicUrl },
-      } = supabase.storage.from("backgrounds").getPublicUrl(fileName);
+      } = supabase.storage.from("avatars").getPublicUrl(fileName);
 
       const spriteUrl = `${publicUrl}?t=${Date.now()}`;
 

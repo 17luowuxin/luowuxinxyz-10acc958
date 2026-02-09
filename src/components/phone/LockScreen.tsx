@@ -88,7 +88,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       const fileName = `${user.id}/lockscreen-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, file, {
           cacheControl: '0',
           upsert: true,
@@ -98,7 +98,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       const nextUrl = publicUrl + '?t=' + Date.now();
@@ -153,7 +153,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       const fileName = `${user.id}/lockscreen-video-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, file, {
           cacheControl: '0',
           upsert: true,
@@ -163,7 +163,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       const nextUrl = publicUrl + '?t=' + Date.now();

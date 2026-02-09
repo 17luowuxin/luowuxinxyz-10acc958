@@ -618,7 +618,7 @@ const AdminPage: React.FC = () => {
     const fileName = `${folder}/${Date.now()}.${fileExt}`;
     
     const { error } = await supabase.storage
-      .from('themes')
+      .from('avatars')
       .upload(fileName, file, {
         cacheControl: '3600',
         upsert: true
@@ -630,7 +630,7 @@ const AdminPage: React.FC = () => {
       return null;
     }
     
-    const { data } = supabase.storage.from('themes').getPublicUrl(fileName);
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
     return data.publicUrl;
   };
 

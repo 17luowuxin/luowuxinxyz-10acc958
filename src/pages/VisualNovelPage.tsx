@@ -142,8 +142,8 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const fileName = `${user.id}/user-sprite/main-${Date.now()}.jpg`;
-      await supabase.storage.from('backgrounds').upload(fileName, compressedFile, { upsert: true });
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      await supabase.storage.from('avatars').upload(fileName, compressedFile, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       const spriteUrl = `${publicUrl}?t=${Date.now()}`;
       setUserSprite({ url: spriteUrl });
@@ -189,8 +189,8 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const fileName = `${user.id}/sprites/${charId}/main-${Date.now()}.jpg`;
-      await supabase.storage.from('backgrounds').upload(fileName, compressedFile, { upsert: true });
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      await supabase.storage.from('avatars').upload(fileName, compressedFile, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       const spriteUrl = `${publicUrl}?t=${Date.now()}`;
       
@@ -765,8 +765,8 @@ const VisualNovelChatPage: React.FC<{
       toast.loading('上传中...');
       const fileName = `${user.id}/vn-bg/${characterId}-${Date.now()}.jpg`;
       
-      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       setBackgroundUrl(publicUrl);
       
@@ -801,8 +801,8 @@ const VisualNovelChatPage: React.FC<{
       toast.loading('上传中...');
       const fileName = `${user.id}/sprites/${characterId}/main-${Date.now()}.png`;
       
-      await supabase.storage.from('backgrounds').upload(fileName, file, { upsert: true });
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       setCharacter(prev => prev ? { ...prev, sprite_url: publicUrl } : null);
       

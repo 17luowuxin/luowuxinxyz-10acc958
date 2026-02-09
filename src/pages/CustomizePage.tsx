@@ -233,7 +233,7 @@ const CustomizePage: React.FC = () => {
       
       const fileName = `${user.id}/chat-bg-${Date.now()}.jpg`;
       
-      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile, {
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedFile, {
         cacheControl: '3600',
         upsert: true
       });
@@ -245,7 +245,7 @@ const CustomizePage: React.FC = () => {
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       setChatBackgroundUrl(publicUrl + '?t=' + Date.now());
       toast.dismiss();
       toast.success('背景图上传成功');
@@ -277,7 +277,7 @@ const CustomizePage: React.FC = () => {
       
       const fileName = `${user.id}/global-bg-${Date.now()}.jpg`;
       
-      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile, {
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedFile, {
         cacheControl: '3600',
         upsert: true
       });
@@ -289,7 +289,7 @@ const CustomizePage: React.FC = () => {
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       setGlobalBackgroundUrl(publicUrl + '?t=' + Date.now());
       toast.dismiss();
       toast.success('全局背景图上传成功');
@@ -321,7 +321,7 @@ const CustomizePage: React.FC = () => {
     
     const fileName = `${user.id}/video-bg-${Date.now()}.${file.name.split('.').pop()}`;
     
-    const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, file, {
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, {
       cacheControl: '3600',
       upsert: true
     });
@@ -333,7 +333,7 @@ const CustomizePage: React.FC = () => {
       return;
     }
 
-    const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
     setVideoBackgroundUrl(publicUrl + '?t=' + Date.now());
     setVideoUploading(false);
     toast.dismiss();
