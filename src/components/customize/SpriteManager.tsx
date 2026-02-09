@@ -90,13 +90,13 @@ const SpriteManager: React.FC = () => {
       const fileName = `${user.id}/sprites/${selectedCharacter.id}/main-${Date.now()}.png`;
       
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       // 更新角色主立绘
@@ -134,13 +134,13 @@ const SpriteManager: React.FC = () => {
       const fileName = `${user.id}/sprites/${selectedCharacter.id}/${selectedEmotion}-${Date.now()}.png`;
       
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       // 检查是否已有该表情

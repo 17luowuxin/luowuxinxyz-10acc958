@@ -91,13 +91,13 @@ const MusicPage: React.FC = () => {
         xhr.addEventListener('error', () => reject(new Error('Upload failed')));
         
         const supabaseUrl = getSupabaseUrl();
-        xhr.open('POST', `${supabaseUrl}/storage/v1/object/music/${fileName}`);
+        xhr.open('POST', `${supabaseUrl}/storage/v1/object/avatars/${fileName}`);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.setRequestHeader('x-upsert', 'false');
         xhr.send(file);
       });
       
-      const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       const title = file.name.replace(/\.[^/.]+$/, '');
       const { error: insertError } = await supabase
@@ -165,12 +165,12 @@ const MusicPage: React.FC = () => {
       
       const fileName = `${user.id}/covers/${Date.now()}_${compressedFile.name}`;
       const { error: uploadError } = await supabase.storage
-        .from('music')
+        .from('avatars')
         .upload(fileName, compressedFile);
       
       if (uploadError) throw uploadError;
       
-      const { data: urlData } = supabase.storage.from('music').getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       const publicUrl = urlData.publicUrl;
       
       if (trackId) {

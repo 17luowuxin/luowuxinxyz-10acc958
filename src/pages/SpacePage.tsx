@@ -265,13 +265,13 @@ const SpacePage: React.FC = () => {
       const fileName = `${user.id}/space-bg-${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .upload(fileName, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('backgrounds')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       await supabase
@@ -352,13 +352,13 @@ const SpacePage: React.FC = () => {
         const fileName = `${user.id}/moment-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
         
         const { error: uploadError } = await supabase.storage
-          .from('photos')
+          .from('avatars')
           .upload(fileName, compressedFile);
 
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('photos')
+          .from('avatars')
           .getPublicUrl(fileName);
 
         setPostImages(prev => [...prev, publicUrl]);

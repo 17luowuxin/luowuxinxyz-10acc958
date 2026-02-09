@@ -284,13 +284,13 @@ const GiftShopPage: React.FC = () => {
       const fileName = `${user.id}/gift-${editingGiftId}-${Date.now()}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
-        .from('photos')
+        .from('avatars')
         .upload(fileName, file, { upsert: true });
       
       if (uploadError) throw uploadError;
       
       const { data: { publicUrl } } = supabase.storage
-        .from('photos')
+        .from('avatars')
         .getPublicUrl(fileName);
       
       // 保存到数据库

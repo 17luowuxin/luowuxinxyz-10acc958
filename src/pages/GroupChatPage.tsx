@@ -375,14 +375,14 @@ const GroupChatPage: React.FC = () => {
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const fileName = `${user.id}/group-bg-${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage.from('backgrounds').upload(fileName, compressedFile);
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedFile);
       
       if (uploadError) {
         toast.error('上传失败');
         return;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('backgrounds').getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
       await supabase.from('customization').upsert({
         user_id: user.id,

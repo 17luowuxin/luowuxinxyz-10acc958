@@ -518,7 +518,7 @@ serve(async (req) => {
     
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('chat-images')
+      .from('avatars')
       .upload(fileName, pngData, {
         contentType: 'image/png',
         cacheControl: '31536000',
@@ -535,7 +535,7 @@ serve(async (req) => {
       imageUrl = `data:image/png;base64,${base64}`;
     } else {
       // 获取公开URL
-      const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       imageUrl = urlData.publicUrl;
     }
 

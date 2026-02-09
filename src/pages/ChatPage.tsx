@@ -1905,7 +1905,7 @@ const ChatPage: React.FC = () => {
       const fileName = `${user.id}/${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
-        .from('chat-images')
+        .from('avatars')
         .upload(fileName, compressedFile);
 
       if (uploadError) {
@@ -1914,7 +1914,7 @@ const ChatPage: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('chat-images')
+        .from('avatars')
         .getPublicUrl(fileName);
 
       return publicUrl;
@@ -3117,7 +3117,7 @@ const ChatPage: React.FC = () => {
       const fileName = `${user.id}/stickers/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('photos')
+        .from('avatars')
         .upload(fileName, file);
       
       if (uploadError) {
@@ -3127,7 +3127,7 @@ const ChatPage: React.FC = () => {
       }
       
       const { data: { publicUrl } } = supabase.storage
-        .from('photos')
+        .from('avatars')
         .getPublicUrl(fileName);
       
       // 保存到数据库
@@ -3736,7 +3736,7 @@ const ChatPage: React.FC = () => {
         const fileName = `${user.id}/call-videos/${Date.now()}.${fileExt}`;
         
         const { error: uploadError } = await supabase.storage
-          .from('photos')
+          .from('avatars')
           .upload(fileName, file);
         
         if (uploadError) {
@@ -3747,7 +3747,7 @@ const ChatPage: React.FC = () => {
         }
         
         const { data: { publicUrl } } = supabase.storage
-          .from('photos')
+          .from('avatars')
           .getPublicUrl(fileName);
         
         setCallVideoUrl(publicUrl);
