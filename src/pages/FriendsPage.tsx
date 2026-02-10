@@ -206,7 +206,8 @@ const FriendsPage: React.FC = () => {
       .upload(fileName, avatarFile, { upsert: true });
     
     if (error) {
-      console.error('Upload error:', error);
+      console.error('Avatar upload error:', error);
+      toast.error('头像上传失败: ' + error.message);
       return null;
     }
     
@@ -377,7 +378,8 @@ const FriendsPage: React.FC = () => {
     });
     
     if (error) {
-      toast.error('创建失败');
+      console.error('Character creation error:', error);
+      toast.error('创建失败: ' + error.message);
       return;
     }
     
@@ -715,7 +717,8 @@ const FriendsPage: React.FC = () => {
       });
       
       if (error) {
-        toast.error('创建角色失败');
+        console.error('Import character error:', error);
+        toast.error('导入角色失败: ' + error.message);
         return;
       }
       
