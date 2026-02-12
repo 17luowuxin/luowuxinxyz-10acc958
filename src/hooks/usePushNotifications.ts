@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Extend ServiceWorkerRegistration to include pushManager
+declare global {
+  interface ServiceWorkerRegistration {
+    pushManager: PushManager;
+  }
+}
+
 // VAPID Public Key from environment
 const VAPID_PUBLIC_KEY = 'BFDTxuoGeTumP82SBYbrCgnXcerSXuBRacS0ZpKIiWxL-ipkf3nYpBIcDWU1tCDhWP4c2IeRZwD3gYxa1sXTgJ4';
 
