@@ -22,6 +22,10 @@ export const setActiveAuthSource = (source: AuthSource) => {
 
 /**
  * 获取当前活动的 Supabase 客户端（用于数据操作）
+ * 
+ * 根据认证来源路由：
+ * - external 用户 → 仍然使用 external（因为 RLS 依赖 auth.uid()）
+ * - cloud 用户 → 使用 cloud
  */
 const getActiveClient = () => {
   return _authSource === 'external' ? externalSupabase : cloudClient;
