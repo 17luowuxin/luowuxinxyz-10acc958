@@ -346,42 +346,55 @@ const CustomizePage: React.FC = () => {
   };
 
   const handleSave = async () => {
-    // Clear session cache to force reload
-    if (user) {
-      sessionStorage.removeItem(`bg_${user.id}`);
+    if (!user) {
+      toast.error('未登录，无法保存');
+      return;
     }
-    
-    const { error } = await supabase.from('customization').upsert({
-      user_id: user?.id,
+
+    // Clear session cache to force reload
+    sessionStorage.removeItem(`bg_${user.id}`);
+
+    const payload = {
+      user_id: user.id,
       bubble_color: bubbleColor,
       friend_bubble_color: friendBubbleColor,
       bubble_style: bubbleStyle,
       bubble_opacity: opacity[0],
       bubble_size: bubbleSize[0],
-      chat_background_url: chatBackgroundUrl,
-      global_background_url: globalBackgroundUrl,
-      video_background_url: videoBackgroundUrl,
+      chat_background_url: chatBackgroundUrl || null,
+      global_background_url: globalBackgroundUrl || null,
+      video_background_url: videoBackgroundUrl || null,
       theme: currentTheme,
       font_family: currentFont,
       font_color: fontColor,
       friend_font_color: friendFontColor,
-      avatar_frame_url: avatarFrame,
-      friend_avatar_frame_url: friendAvatarFrame,
-      bubble_frame_url: bubbleFrame,
-      friend_bubble_frame_url: friendBubbleFrame,
+      avatar_frame_url: avatarFrame || null,
+      friend_avatar_frame_url: friendAvatarFrame || null,
+      bubble_frame_url: bubbleFrame || null,
+      friend_bubble_frame_url: friendBubbleFrame || null,
       global_text_color: globalTextColor,
       global_text_size: globalTextSize,
       novel_dialogue_color: novelDialogueColor,
       novel_narration_color: novelNarrationColor,
       novel_action_color: novelActionColor,
       novel_thought_color: novelThoughtColor,
-    } as any, { onConflict: 'user_id' });
-    
+    };
+
+    console.log('[Save] Attempting upsert with payload:', JSON.stringify(payload, null, 2));
+
+    const { data, error } = await supabase
+      .from('customization')
+      .upsert(payload as any, { onConflict: 'user_id' })
+      .select();
+
     if (error) {
-      console.error('Save error:', error);
-      toast.error('保存失败');
+      console.error('[Save] Full error object:', JSON.stringify(error, null, 2));
+      toast.error(`保存失败 [${error.code}]: ${error.message}${error.details ? ' | ' + error.details : ''}${error.hint ? ' | hint: ' + error.hint : ''}`, {
+        duration: 10000,
+      });
     } else {
-      // 立即同步到全局样式（桌面APP标签、锁屏文字等）
+      console.log('[Save] Success, returned data:', data);
+      // 立即同步到全局样式
       applyGlobalTextColor(globalTextColor);
       applyGlobalTextSize(globalTextSize);
       toast.success('美化设置已保存！返回桌面查看效果');
