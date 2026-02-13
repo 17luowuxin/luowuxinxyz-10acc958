@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -24,58 +24,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [authSource, setAuthSource] = useState<AuthSource>(null);
+  const authSourceRef = useRef<AuthSource>(null);
 
-  // 同步认证来源到全局代理
-  useEffect(() => {
-    setActiveAuthSource(authSource);
-  }, [authSource]);
+  // 同步认证来源到全局代理 + ref
+  const updateAuthSource = (source: AuthSource) => {
+    console.log('[Auth] Setting authSource:', source);
+    authSourceRef.current = source;
+    setAuthSource(source);
+    setActiveAuthSource(source);
+  };
+
   useEffect(() => {
     // 监听两个客户端的认证状态变化
     const { data: { subscription: cloudSub } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('[Auth] Cloud onAuthStateChange:', event, 'session:', !!session, 'current source:', authSourceRef.current);
         if (session) {
-          setSession(session);
-          setUser(session.user);
-          setAuthSource('lovable-cloud');
-          setLoading(false);
-        } else if (authSource === 'lovable-cloud') {
+          // 只在没有外部认证时才设置为 cloud
+          // 防止 Cloud 的 INITIAL_SESSION 覆盖已有的 external 认证
+          if (authSourceRef.current !== 'external') {
+            setSession(session);
+            setUser(session.user);
+            updateAuthSource('lovable-cloud');
+            setLoading(false);
+          }
+        } else if (authSourceRef.current === 'lovable-cloud') {
           setSession(null);
           setUser(null);
-          setAuthSource(null);
+          updateAuthSource(null);
         }
       }
     );
 
     const { data: { subscription: externalSub } } = externalSupabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('[Auth] External onAuthStateChange:', event, 'session:', !!session, 'current source:', authSourceRef.current);
         if (session) {
+          // 外部认证始终优先（因为新用户都在外部）
           setSession(session);
           setUser(session.user);
-          setAuthSource('external');
+          updateAuthSource('external');
           setLoading(false);
-        } else if (authSource === 'external') {
+        } else if (authSourceRef.current === 'external') {
           setSession(null);
           setUser(null);
-          setAuthSource(null);
+          updateAuthSource(null);
         }
       }
     );
 
     // 检查两个客户端的现有会话
     const checkSessions = async () => {
+      console.log('[Auth] Checking existing sessions...');
       const [cloudResult, externalResult] = await Promise.all([
         supabase.auth.getSession(),
         externalSupabase.auth.getSession()
       ]);
 
-      if (cloudResult.data.session) {
-        setSession(cloudResult.data.session);
-        setUser(cloudResult.data.session.user);
-        setAuthSource('lovable-cloud');
-      } else if (externalResult.data.session) {
+      const hasCloud = !!cloudResult.data.session;
+      const hasExternal = !!externalResult.data.session;
+      console.log('[Auth] Session check - Cloud:', hasCloud, 'External:', hasExternal);
+
+      // 优先外部认证（新用户注册在外部）
+      if (hasExternal) {
         setSession(externalResult.data.session);
-        setUser(externalResult.data.session.user);
-        setAuthSource('external');
+        setUser(externalResult.data.session!.user);
+        updateAuthSource('external');
+        console.log('[Auth] Using EXTERNAL session, user:', externalResult.data.session!.user.id);
+      } else if (hasCloud) {
+        setSession(cloudResult.data.session);
+        setUser(cloudResult.data.session!.user);
+        updateAuthSource('lovable-cloud');
+        console.log('[Auth] Using CLOUD session, user:', cloudResult.data.session!.user.id);
       }
       
       setLoading(false);
@@ -104,6 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 登录 - 先尝试 Cloud，失败后尝试外部
   const signIn = async (email: string, password: string) => {
+    console.log('[Auth] Attempting sign in for:', email);
+    
     // 首先尝试 Lovable Cloud（现有用户）
     const cloudResult = await supabase.auth.signInWithPassword({
       email,
@@ -111,10 +133,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!cloudResult.error) {
-      setAuthSource('lovable-cloud');
+      updateAuthSource('lovable-cloud');
+      console.log('[Auth] Signed in via CLOUD');
       return { error: null };
     }
 
+    console.log('[Auth] Cloud login failed, trying external...');
+    
     // 如果 Cloud 登录失败，尝试外部 Supabase（新用户）
     const externalResult = await externalSupabase.auth.signInWithPassword({
       email,
@@ -122,7 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!externalResult.error) {
-      setAuthSource('external');
+      updateAuthSource('external');
+      console.log('[Auth] Signed in via EXTERNAL');
       return { error: null };
     }
 
@@ -132,9 +158,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 登出
   const signOut = async () => {
-    if (authSource === 'lovable-cloud') {
+    console.log('[Auth] Signing out, current source:', authSourceRef.current);
+    if (authSourceRef.current === 'lovable-cloud') {
       await supabase.auth.signOut();
-    } else if (authSource === 'external') {
+    } else if (authSourceRef.current === 'external') {
       await externalSupabase.auth.signOut();
     } else {
       await Promise.all([
@@ -144,12 +171,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setUser(null);
     setSession(null);
-    setAuthSource(null);
+    updateAuthSource(null);
   };
 
   // 获取当前活动的 Supabase 客户端
   const getActiveClient = () => {
-    return authSource === 'external' ? externalSupabase : supabase;
+    return authSourceRef.current === 'external' ? externalSupabase : supabase;
   };
 
   return (

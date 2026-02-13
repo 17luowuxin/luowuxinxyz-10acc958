@@ -28,7 +28,8 @@ export const setActiveAuthSource = (source: AuthSource) => {
  * - cloud 用户 → 使用 cloud
  */
 const getActiveClient = () => {
-  return _authSource === 'external' ? externalSupabase : cloudClient;
+  const client = _authSource === 'external' ? externalSupabase : cloudClient;
+  return client;
 };
 
 /**
@@ -47,6 +48,12 @@ export const supabase = new Proxy({} as typeof cloudClient, {
     }
     
     const client = getActiveClient();
+    
+    // Log routing for data operations (only first time per prop to avoid spam)
+    if (prop === 'from' || prop === 'storage') {
+      console.log(`[Proxy] ${String(prop)} → ${_authSource === 'external' ? 'EXTERNAL' : 'CLOUD'} (authSource=${_authSource})`);
+    }
+    
     const value = (client as any)[prop];
     if (typeof value === 'function') {
       return value.bind(client);
