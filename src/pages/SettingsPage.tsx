@@ -146,7 +146,14 @@ const SettingsPage: React.FC = () => {
   }, [user]);
 
   const fetchApiKeys = async () => {
-    const { data } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+    console.log('[Settings] Fetching api_keys for user:', user?.id);
+    const { data, error } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+    if (error) {
+      console.error('[Settings] Failed to fetch api_keys:', JSON.stringify(error, null, 2));
+      toast.error(`加载设置失败: [${error.code}] ${error.message}`, { duration: 10000 });
+      return;
+    }
+    console.log('[Settings] Loaded', data?.length || 0, 'api_keys rows');
     if (data) {
       const customKey = data.find(k => k.provider === 'custom');
       const baseUrl = data.find(k => k.provider === 'custom_base_url');
@@ -316,59 +323,47 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const upsertApiKey = async (userId: string, provider: string, value: string) => {
+    // Delete then insert pattern (reliable across external/cloud DB)
+    await supabase.from('api_keys').delete().eq('user_id', userId).eq('provider', provider);
+    const { error } = await supabase.from('api_keys').insert({ user_id: userId, provider, api_key: value });
+    if (error) {
+      console.error(`[Settings] upsert api_keys failed for provider="${provider}":`, JSON.stringify(error, null, 2));
+    }
+    return error;
+  };
+
   const saveSettings = async () => {
     if (!user || !apiKey.trim()) {
       toast.error('请输入API密钥');
       return;
     }
 
+    console.log('[Settings] Saving custom API config for user:', user.id);
+
     // Clear default API flag when saving custom
     await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'use_default_api');
 
-    // Save API key
-    const { data: existing } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'custom')
-      .single();
+    const errors: any[] = [];
+    let err: any;
     
-    if (existing) {
-      await supabase.from('api_keys').update({ api_key: apiKey }).eq('id', existing.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'custom', api_key: apiKey });
-    }
+    err = await upsertApiKey(user.id, 'custom', apiKey);
+    if (err) errors.push(err);
+    
+    err = await upsertApiKey(user.id, 'custom_base_url', customBaseUrl);
+    if (err) errors.push(err);
+    
+    err = await upsertApiKey(user.id, 'custom_model', customModel);
+    if (err) errors.push(err);
 
-    // Save base URL
-    const { data: existingUrl } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'custom_base_url')
-      .single();
-    
-    if (existingUrl) {
-      await supabase.from('api_keys').update({ api_key: customBaseUrl }).eq('id', existingUrl.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'custom_base_url', api_key: customBaseUrl });
-    }
-
-    // Save model
-    const { data: existingModel } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'custom_model')
-      .single();
-    
-    if (existingModel) {
-      await supabase.from('api_keys').update({ api_key: customModel }).eq('id', existingModel.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'custom_model', api_key: customModel });
+    if (errors.length > 0) {
+      toast.error(`保存部分失败: ${errors.map(e => `[${e.code}] ${e.message}`).join('; ')}`, { duration: 10000 });
+      return;
     }
 
     setUsingDefaultApi(false);
     setIsConfigured(true);
+    console.log('[Settings] Custom API config saved successfully');
     toast.success('API配置已保存');
   };
 
@@ -419,18 +414,10 @@ const SettingsPage: React.FC = () => {
   const useDefaultApiHandler = async () => {
     if (!user) return;
     
-    // Save the use_default_api flag
-    const { data: existing } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'use_default_api')
-      .single();
-    
-    if (existing) {
-      await supabase.from('api_keys').update({ api_key: 'true' }).eq('id', existing.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'use_default_api', api_key: 'true' });
+    const err = await upsertApiKey(user.id, 'use_default_api', 'true');
+    if (err) {
+      toast.error(`切换失败: [${err.code}] ${err.message}`, { duration: 10000 });
+      return;
     }
     
     // Clear custom API settings
@@ -447,17 +434,10 @@ const SettingsPage: React.FC = () => {
     
     setDefaultModel(modelId);
     
-    const { data: existing } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('provider', 'default_model')
-      .single();
-    
-    if (existing) {
-      await supabase.from('api_keys').update({ api_key: modelId }).eq('id', existing.id);
-    } else {
-      await supabase.from('api_keys').insert({ user_id: user.id, provider: 'default_model', api_key: modelId });
+    const err = await upsertApiKey(user.id, 'default_model', modelId);
+    if (err) {
+      toast.error(`保存失败: [${err.code}] ${err.message}`, { duration: 10000 });
+      return;
     }
     
     const modelName = DEFAULT_MODELS.find(m => m.id === modelId)?.name || modelId;
