@@ -164,26 +164,29 @@ serve(async (req) => {
     // Get user's API config
     const apiConfig = await checkDefaultApiSetting(supabase, userId);
 
-    // Get recent messages for this character
-    const { data: messages, error: messagesError } = await supabase
+    // Get recent messages for this character (descending to get latest, then reverse)
+    const { data: rawMessages, error: messagesError } = await supabase
       .from('chat_messages')
       .select('role, content, created_at')
       .eq('character_id', characterId)
       .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-      .limit(50);
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (messagesError) {
       console.error('Error fetching messages:', messagesError);
       throw messagesError;
     }
 
-    if (!messages || messages.length < 10) {
+    if (!rawMessages || rawMessages.length < 5) {
       return new Response(
         JSON.stringify({ success: true, message: 'Not enough messages for summary' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Reverse to chronological order for summary
+    const messages = rawMessages.reverse();
 
     // Get existing memory
     const { data: existingMemory } = await supabase
@@ -200,14 +203,16 @@ serve(async (req) => {
 
     // Create summary prompt
     const systemPrompt = `你是一个对话记忆助手。你的任务是总结对话内容，提取关键信息，包括：
-1. 用户提到的重要个人信息（名字、喜好、习惯等）
-2. 对话中建立的关系和情感连接
-3. 重要的话题和讨论内容
-4. 任何承诺或约定
+1. 用户提到的重要个人信息（名字、喜好、习惯、生日、工作等）
+2. 对话中建立的关系和情感连接（称呼、亲密度变化）
+3. 重要的话题和讨论内容（最近聊了什么、讨论了什么问题）
+4. 任何承诺或约定（约好要做的事、答应的事情）
+5. 最近的情绪状态和重要事件
+6. 用户的偏好和习惯（喜欢什么、不喜欢什么）
 
-${existingMemory?.summary ? `之前的记忆摘要：\n${existingMemory.summary}\n\n请在此基础上更新记忆。` : ''}
+${existingMemory?.summary ? `之前的记忆摘要：\n${existingMemory.summary}\n\n请在此基础上更新和补充记忆，保留重要的旧信息，加入新的关键内容。如有矛盾以最新对话为准。` : ''}
 
-请用简洁的中文总结，保持在300字以内。`;
+请用简洁的中文总结，保持在800字以内。重点关注最近的对话内容。`;
 
     const userPrompt = `以下是${characterName || '角色'}与用户的最近对话，请总结关键记忆：
 
