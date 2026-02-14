@@ -106,8 +106,8 @@ const SpacePage: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      fetchCharacters();
-      fetchMoments();
+      // 先加载角色，再加载说说（说说需要角色信息做 fallback）
+      fetchCharacters().then(() => fetchMoments());
       fetchUserProfile();
       fetchSpaceBackground();
       fetchGuestbook();
@@ -140,7 +140,11 @@ const SpacePage: React.FC = () => {
       .from('characters')
       .select('*')
       .eq('user_id', user?.id);
-    if (data) setCharacters(data);
+    if (data) {
+      setCharacters(data);
+      return data;
+    }
+    return [];
   };
 
   const fetchMoments = async () => {
