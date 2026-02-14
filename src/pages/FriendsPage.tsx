@@ -99,15 +99,24 @@ const FriendsPage: React.FC = () => {
     const hasUnread = characters.some(c => c.unreadCount > 0);
     if (!hasUnread) return;
     
-    const upserts = characters
-      .filter(c => c.unreadCount > 0)
-      .map(c => ({
-        user_id: user.id,
-        character_id: c.id,
-        last_read_at: new Date().toISOString(),
-      }));
+    const unreadChars = characters.filter(c => c.unreadCount > 0);
+    const now = new Date().toISOString();
     
-    await supabase.from('chat_read_status').upsert(upserts, { onConflict: 'user_id,character_id' });
+    // 逐个处理，先尝试 update，失败则 insert，避免 upsert 在无唯一约束时静默失败
+    for (const c of unreadChars) {
+      const { data: existing } = await supabase
+        .from('chat_read_status')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('character_id', c.id)
+        .maybeSingle();
+      
+      if (existing) {
+        await supabase.from('chat_read_status').update({ last_read_at: now }).eq('user_id', user.id).eq('character_id', c.id);
+      } else {
+        await supabase.from('chat_read_status').insert({ user_id: user.id, character_id: c.id, last_read_at: now });
+      }
+    }
     
     setCharacters(prev => prev.map(c => ({ ...c, unreadCount: 0 })));
     cacheCharacters(characters.map(c => ({ ...c, unreadCount: 0 })));
