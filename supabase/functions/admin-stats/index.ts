@@ -53,8 +53,10 @@ serve(async (req) => {
       });
     }
 
-    // 使用service role key来绕过RLS
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    // 使用外部 Supabase 的 service role key 来绕过 RLS
+    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')!;
+    const externalServiceKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')!;
+    const adminClient = createClient(externalUrl, externalServiceKey);
 
     const { action } = await req.json();
 
