@@ -72,7 +72,7 @@ const ProfilePage: React.FC = () => {
     if (existing) {
       ({ error } = await supabase.from('profiles').update(payload).eq('user_id', user.id));
     } else {
-      ({ error } = await supabase.from('profiles').insert({ user_id: user.id, ...payload }));
+      ({ error } = await supabase.from('profiles').insert({ id: user.id, user_id: user.id, ...payload }));
     }
     
     if (error) {
