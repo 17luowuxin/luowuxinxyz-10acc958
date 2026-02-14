@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
-import { supabase } from '@/lib/supabase';
+import { supabase, cloudSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
@@ -201,7 +201,7 @@ const FriendsPage: React.FC = () => {
     const fileExt = avatarFile.name.split('.').pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
     
-    const { error } = await supabase.storage
+    const { error } = await cloudSupabase.storage
       .from('avatars')
       .upload(fileName, avatarFile, { upsert: true });
     
@@ -211,7 +211,7 @@ const FriendsPage: React.FC = () => {
       return null;
     }
     
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = cloudSupabase.storage
       .from('avatars')
       .getPublicUrl(fileName);
     
