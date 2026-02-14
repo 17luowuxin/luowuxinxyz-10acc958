@@ -94,7 +94,6 @@ async function getAICompletion(
       max_tokens: 2048,
     };
   } else {
-    // Use default Lovable AI
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('No API configuration available');
@@ -127,7 +126,6 @@ async function getAICompletion(
 
   const data = await response.json();
   
-  // Extract content from various response formats
   if (data.choices?.[0]?.message?.content) {
     return data.choices[0].message.content;
   } else if (data.choices?.[0]?.text) {
@@ -164,7 +162,7 @@ serve(async (req) => {
     // Get user's API config
     const apiConfig = await checkDefaultApiSetting(supabase, userId);
 
-    // Get recent messages for this character (descending to get latest, then reverse)
+    // Get recent messages
     const { data: rawMessages, error: messagesError } = await supabase
       .from('chat_messages')
       .select('role, content, created_at')
@@ -185,24 +183,45 @@ serve(async (req) => {
       );
     }
 
-    // Reverse to chronological order for summary
     const messages = rawMessages.reverse();
 
     // Get existing memory
     const { data: existingMemory } = await supabase
       .from('character_memories')
-      .select('summary')
+      .select('summary, manually_edited')
       .eq('character_id', characterId)
       .eq('user_id', userId)
       .maybeSingle();
+
+    const isManuallyEdited = existingMemory?.manually_edited === true;
+    const existingSummary = existingMemory?.summary || '';
 
     // Format messages for summary
     const conversationText = messages
       .map((m: any) => `${m.role === 'user' ? '用户' : characterName || '角色'}: ${m.content}`)
       .join('\n');
 
-    // Create summary prompt
-    const systemPrompt = `你是一个对话记忆助手。你的任务是总结对话内容，提取关键信息，包括：
+    // Build prompt - if manually edited, treat existing summary as pinned core memory
+    let systemPrompt: string;
+    if (isManuallyEdited && existingSummary) {
+      systemPrompt = `你是一个对话记忆助手。你的任务是总结对话内容，提取关键信息。
+
+【重要】以下是用户手动设定的核心记忆，这些内容必须完整保留，不得删除或修改：
+---
+${existingSummary}
+---
+
+在保留以上核心记忆的基础上，从最新对话中补充以下信息：
+1. 用户提到的重要个人信息（名字、喜好、习惯、生日、工作等）
+2. 对话中建立的关系和情感连接
+3. 重要的话题和讨论内容
+4. 任何承诺或约定
+5. 最近的情绪状态和重要事件
+6. 用户的偏好和习惯
+
+请用简洁的中文总结，保持在800字以内。格式：先输出核心记忆（原文保留），再输出补充记忆。`;
+    } else {
+      systemPrompt = `你是一个对话记忆助手。你的任务是总结对话内容，提取关键信息，包括：
 1. 用户提到的重要个人信息（名字、喜好、习惯、生日、工作等）
 2. 对话中建立的关系和情感连接（称呼、亲密度变化）
 3. 重要的话题和讨论内容（最近聊了什么、讨论了什么问题）
@@ -210,9 +229,10 @@ serve(async (req) => {
 5. 最近的情绪状态和重要事件
 6. 用户的偏好和习惯（喜欢什么、不喜欢什么）
 
-${existingMemory?.summary ? `之前的记忆摘要：\n${existingMemory.summary}\n\n请在此基础上更新和补充记忆，保留重要的旧信息，加入新的关键内容。如有矛盾以最新对话为准。` : ''}
+${existingSummary ? `之前的记忆摘要：\n${existingSummary}\n\n请在此基础上更新和补充记忆，保留重要的旧信息，加入新的关键内容。如有矛盾以最新对话为准。` : ''}
 
 请用简洁的中文总结，保持在800字以内。重点关注最近的对话内容。`;
+    }
 
     const userPrompt = `以下是${characterName || '角色'}与用户的最近对话，请总结关键记忆：
 
@@ -223,7 +243,7 @@ ${conversationText}`;
       { role: 'user', content: userPrompt }
     ], apiConfig);
 
-    // Upsert memory
+    // Upsert memory - keep manually_edited flag
     const { error: upsertError } = await supabase
       .from('character_memories')
       .upsert({
@@ -231,6 +251,7 @@ ${conversationText}`;
         user_id: userId,
         summary: summary,
         message_count: messages.length,
+        manually_edited: isManuallyEdited,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'character_id,user_id'
@@ -241,7 +262,7 @@ ${conversationText}`;
       throw upsertError;
     }
 
-    console.log(`Memory summary updated for character ${characterId}`);
+    console.log(`Memory summary updated for character ${characterId}, manually_edited: ${isManuallyEdited}`);
 
     return new Response(
       JSON.stringify({ success: true, summary }),
