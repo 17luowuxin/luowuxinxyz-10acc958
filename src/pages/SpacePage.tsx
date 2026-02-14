@@ -145,11 +145,24 @@ const SpacePage: React.FC = () => {
 
   const fetchMoments = async () => {
     setLoading(true);
-    const { data } = await supabase
+    
+    // 先尝试带 join 查询，如果失败则用分开查询
+    let { data, error } = await supabase
       .from('moments')
       .select('*, characters(id, name, avatar_url, persona)')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
+    
+    // 如果 join 失败（外部数据库可能没有 foreign key），回退到单独查询
+    if (error || !data) {
+      console.warn('Moments join query failed, falling back:', error?.message);
+      const { data: momentsOnly } = await supabase
+        .from('moments')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+      data = momentsOnly as any;
+    }
     
     if (data) {
       const momentsWithComments = await Promise.all(
@@ -160,9 +173,18 @@ const SpacePage: React.FC = () => {
             .eq('moment_id', moment.id)
             .order('created_at');
           
+          // 如果 join 没有返回 character 信息，从已加载的 characters 中查找
+          let character = moment.characters;
+          if (!character && moment.character_id) {
+            const found = characters.find(c => c.id === moment.character_id);
+            if (found) {
+              character = { id: found.id, name: found.name, avatar_url: found.avatar_url, persona: found.persona };
+            }
+          }
+          
           return {
             ...moment,
-            character: moment.characters,
+            character,
             comments: comments || [],
             is_user_post: moment.is_user_post === true
           };
