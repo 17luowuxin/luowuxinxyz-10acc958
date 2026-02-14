@@ -66,8 +66,10 @@ serve(async (req) => {
       );
     }
 
-    // Use service role client for admin operations
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+    // Use external Supabase service role client for admin operations
+    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')!;
+    const externalServiceKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')!;
+    const adminClient = createClient(externalUrl, externalServiceKey);
     const { action, inactiveMonths, userId, userIds, newPassword } = await req.json();
 
     if (action === 'get_users') {
