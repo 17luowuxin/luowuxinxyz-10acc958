@@ -2187,7 +2187,8 @@ const ChatPage: React.FC = () => {
     
     if (saveError) {
       console.error('Save message error:', saveError);
-      toast.error('发送失败，请重试');
+      console.error('Save message error details:', JSON.stringify(saveError));
+      toast.error(`发送失败: ${saveError.message || saveError.code || '未知错误'}`);
       setLoading(false);
       setInput(messageContent); // 恢复输入
       return;
