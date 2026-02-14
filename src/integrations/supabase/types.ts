@@ -174,6 +174,7 @@ export type Database = {
           character_id: string
           created_at: string
           id: string
+          manually_edited: boolean
           message_count: number
           summary: string
           updated_at: string
@@ -183,6 +184,7 @@ export type Database = {
           character_id: string
           created_at?: string
           id?: string
+          manually_edited?: boolean
           message_count?: number
           summary?: string
           updated_at?: string
@@ -192,6 +194,7 @@ export type Database = {
           character_id?: string
           created_at?: string
           id?: string
+          manually_edited?: boolean
           message_count?: number
           summary?: string
           updated_at?: string

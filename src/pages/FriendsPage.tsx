@@ -671,8 +671,9 @@ const FriendsPage: React.FC = () => {
           character_id: editingChar.id,
           user_id: user.id,
           summary: memorySummary,
+          manually_edited: true,
           updated_at: new Date().toISOString(),
-        }, {
+        } as any, {
           onConflict: 'character_id,user_id'
         });
       

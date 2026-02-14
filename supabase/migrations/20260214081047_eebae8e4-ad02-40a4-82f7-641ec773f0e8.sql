@@ -1,0 +1,1 @@
+ALTER TABLE public.character_memories ADD COLUMN IF NOT EXISTS manually_edited boolean NOT NULL DEFAULT false;
