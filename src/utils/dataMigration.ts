@@ -218,6 +218,15 @@ export async function importData(
         );
       }
 
+      // 标记所有导入的消息为已读
+      tasks.push(
+        supabase.from('chat_read_status').upsert({
+          user_id: userId,
+          character_id: newCharId,
+          last_read_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,character_id' }).select().then(r => r)
+      );
+
       const results = await Promise.all(tasks);
       const hasError = results.some(r => r.error);
       if (hasError) {
