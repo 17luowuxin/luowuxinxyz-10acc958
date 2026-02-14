@@ -51,7 +51,16 @@ const ProfilePage: React.FC = () => {
   };
 
   const handleSave = async () => {
-    await supabase.from('profiles').update({ nickname, persona }).eq('user_id', user?.id);
+    if (!user) return;
+    const { error } = await supabase.from('profiles').upsert(
+      { user_id: user.id, nickname, persona },
+      { onConflict: 'user_id' }
+    );
+    if (error) {
+      console.error('Profile save error:', error);
+      toast.error('保存失败');
+      return;
+    }
     toast.success('资料已保存');
   };
 
