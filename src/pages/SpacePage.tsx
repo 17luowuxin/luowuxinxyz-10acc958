@@ -106,11 +106,13 @@ const SpacePage: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      // 先加载角色，再加载说说（说说需要角色信息做 fallback）
-      fetchCharacters().then(() => fetchMoments());
+      // 先加载角色，再加载说说和留言板（它们需要角色信息做 fallback）
+      fetchCharacters().then(() => {
+        fetchMoments();
+        fetchGuestbook();
+      });
       fetchUserProfile();
       fetchSpaceBackground();
-      fetchGuestbook();
       fetchSpaceLogs();
     }
   }, [user]);
@@ -201,17 +203,37 @@ const SpacePage: React.FC = () => {
 
   const fetchGuestbook = async () => {
     if (!user?.id) return;
-    const { data } = await supabase
+    
+    // 先尝试带 join 查询
+    let { data, error } = await supabase
       .from('guestbook')
       .select('*, characters(name, avatar_url)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
+    // 如果 join 失败，回退到单独查询
+    if (error || !data) {
+      console.warn('Guestbook join query failed, falling back:', error?.message);
+      const { data: entriesOnly } = await supabase
+        .from('guestbook')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      data = entriesOnly as any;
+    }
+    
     if (data) {
-      setGuestbookEntries(data.map((entry: any) => ({
-        ...entry,
-        character: entry.characters
-      })));
+      setGuestbookEntries(data.map((entry: any) => {
+        let character = entry.characters;
+        // 如果 join 没返回角色信息，从已加载的 characters 中查找
+        if (!character && entry.character_id) {
+          const found = characters.find(c => c.id === entry.character_id);
+          if (found) {
+            character = { name: found.name, avatar_url: found.avatar_url };
+          }
+        }
+        return { ...entry, character };
+      }));
     }
   };
 
@@ -836,74 +858,80 @@ const SpacePage: React.FC = () => {
           </button>
         </div>
 
-        {/* Comments Section */}
+        {/* Comments Section - WeChat Style */}
         <AnimatePresence>
           {expandedComments[moment.id] && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="mt-3 space-y-2 overflow-hidden"
+              className="mt-3 overflow-hidden"
             >
-              {moment.comments?.map((comment) => {
-                const charMatch = comment.content.match(/^\[(.+?)\]\s*/);
-                const charName = charMatch
-                  ? charMatch[1]
-                  : comment.is_character_reply
-                    ? moment.character?.name || 'AI'
-                    : null;
-                const displayContent = charMatch ? comment.content.replace(/^\[.+?\]\s*/, '') : comment.content;
+              {/* WeChat-style compact comment list */}
+              {moment.comments && moment.comments.length > 0 && (
+                <div className="bg-muted/50 rounded-lg px-3 py-2 space-y-1.5">
+                  {moment.comments.map((comment) => {
+                    const charMatch = comment.content.match(/^\[(.+?)\]\s*/);
+                    const charName = charMatch
+                      ? charMatch[1]
+                      : comment.is_character_reply
+                        ? moment.character?.name || 'AI'
+                        : null;
+                    const displayContent = charMatch ? comment.content.replace(/^\[.+?\]\s*/, '') : comment.content;
 
-                const userName = userProfile?.nickname || '我';
-                const replyToMatch = !comment.is_character_reply
-                  ? displayContent.match(/^@([^\s]+)\s+(.*)$/)
-                  : null;
-                const replyToName = replyToMatch?.[1];
-                const userDisplayContent = replyToMatch ? replyToMatch[2] : displayContent;
+                    const userName = userProfile?.nickname || '我';
+                    const replyToMatch = !comment.is_character_reply
+                      ? displayContent.match(/^@([^\s]+)\s+(.*)$/)
+                      : null;
+                    const replyToName = replyToMatch?.[1];
+                    const userDisplayContent = replyToMatch ? replyToMatch[2] : displayContent;
 
-                return (
-                  <div
-                    key={comment.id}
-                    className={`text-sm p-3 rounded-lg ${comment.is_character_reply ? 'bg-primary/10 ml-4' : 'bg-muted'}`}
-                  >
-                    {comment.is_character_reply ? (
-                      <span className="font-medium">
-                        <button
-                          type="button"
-                          className="text-primary hover:underline"
-                          onClick={() => {
-                            if (!charName) return;
-                            setExpandedComments((prev) => ({ ...prev, [moment.id]: true }));
-                            setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: charName }));
-                          }}
-                        >
-                          {charName}
-                        </button>
-                        <span className="text-muted-foreground mx-1">回复</span>
-                        <span className="text-foreground">{userName}</span>
-                        <span className="text-muted-foreground">:</span>
-                      </span>
-                    ) : (
-                      <span className="font-medium">
-                        <span className="text-foreground">{userName}</span>
-                        <span className="text-muted-foreground mx-1">回复</span>
-                        <span className="text-primary">{replyToName || moment.character?.name || '角色'}</span>
-                        <span className="text-muted-foreground">:</span>
-                      </span>
-                    )}
-                    <span className="ml-2 text-foreground">{comment.is_character_reply ? displayContent : userDisplayContent}</span>
-                  </div>
-                );
-              })}
+                    return (
+                      <div key={comment.id} className="text-sm leading-relaxed">
+                        {comment.is_character_reply ? (
+                          <>
+                            <button
+                              type="button"
+                              className="text-primary font-medium hover:underline inline"
+                              onClick={() => {
+                                if (!charName) return;
+                                setCommentReplyTargets((prev) => ({ ...prev, [moment.id]: charName }));
+                              }}
+                            >
+                              {charName}
+                            </button>
+                            <span className="text-muted-foreground">回复</span>
+                            <span className="font-medium text-foreground">{userName}</span>
+                            <span className="text-muted-foreground">：</span>
+                            <span className="text-foreground">{displayContent}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium text-foreground">{userName}</span>
+                            {(replyToName || moment.character?.name) && (
+                              <>
+                                <span className="text-muted-foreground">回复</span>
+                                <span className="text-primary font-medium">{replyToName || moment.character?.name}</span>
+                              </>
+                            )}
+                            <span className="text-muted-foreground">：</span>
+                            <span className="text-foreground">{replyToMatch ? userDisplayContent : displayContent}</span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* 回复角色选择器 */}
+              {/* 回复提示 */}
               {commentReplyTargets[moment.id] && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-primary/5 px-3 py-1.5 rounded-lg">
-                  <span>正在回复</span>
-                  <span className="text-primary font-medium">@{commentReplyTargets[moment.id]}</span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-primary/5 px-3 py-1.5 rounded-lg mt-2">
+                  <span>回复</span>
+                  <span className="text-primary font-medium">{commentReplyTargets[moment.id]}</span>
                   <button
                     type="button"
-                    className="ml-auto text-muted-foreground hover:text-foreground"
+                    className="ml-auto text-muted-foreground hover:text-foreground text-base"
                     onClick={() => setCommentReplyTargets(prev => {
                       const next = { ...prev };
                       delete next[moment.id];
@@ -914,36 +942,18 @@ const SpacePage: React.FC = () => {
                   </button>
                 </div>
               )}
-              
-              {/* 角色快速选择 */}
-              <div className="flex flex-wrap gap-1 pt-1">
-                <span className="text-xs text-muted-foreground mr-1">回复:</span>
-                {characters.map(char => (
-                  <button
-                    key={char.id}
-                    type="button"
-                    className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
-                      commentReplyTargets[moment.id] === char.name
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                    }`}
-                    onClick={() => setCommentReplyTargets(prev => ({ ...prev, [moment.id]: char.name }))}
-                  >
-                    {char.name}
-                  </button>
-                ))}
-              </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 mt-2">
                 <Input
                   value={commentInputs[moment.id] || ''}
                   onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
-                  placeholder={commentReplyTargets[moment.id] ? `回复 @${commentReplyTargets[moment.id]}...` : "写评论..."}
-                  className="flex-1"
+                  placeholder={commentReplyTargets[moment.id] ? `回复 ${commentReplyTargets[moment.id]}...` : "写评论..."}
+                  className="flex-1 h-9 text-sm"
                   onKeyPress={(e) => e.key === 'Enter' && handleComment(moment)}
                 />
                 <Button 
                   size="icon"
+                  className="h-9 w-9"
                   onClick={() => handleComment(moment)}
                   disabled={!commentInputs[moment.id]?.trim()}
                 >
