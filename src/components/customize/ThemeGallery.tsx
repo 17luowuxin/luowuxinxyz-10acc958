@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Palette, Download, Check, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cloudSupabase } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -39,7 +40,7 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
   }, []);
 
   const fetchThemes = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await cloudSupabase
       .from('themes')
       .select('*')
       .eq('is_active', true)
