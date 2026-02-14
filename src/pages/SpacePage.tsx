@@ -588,7 +588,8 @@ const SpacePage: React.FC = () => {
 
       toast.success('留言成功!');
       const originalContent = newGuestbookContent.trim();
-      const parentId = insertedEntry?.id || null;
+      // AI reply should attach to the top-level entry, not to the user's nested reply
+      const parentId = guestbookReplyTarget?.entryId || insertedEntry?.id || null;
       setNewGuestbookContent('');
       fetchGuestbook();
 
