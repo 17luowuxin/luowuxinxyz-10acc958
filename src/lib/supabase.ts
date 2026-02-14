@@ -42,9 +42,10 @@ const getActiveClient = () => {
  */
 export const supabase = new Proxy({} as typeof cloudClient, {
   get(_target, prop: string | symbol) {
-    // Edge Functions 始终使用 Lovable Cloud
-    if (prop === 'functions') {
-      return cloudClient.functions;
+    // Edge Functions 和 Storage 始终使用 Lovable Cloud
+    // Storage buckets 仅在 Cloud 中配置，外部实例没有对应的 bucket
+    if (prop === 'functions' || prop === 'storage') {
+      return (cloudClient as any)[prop];
     }
     
     const client = getActiveClient();
