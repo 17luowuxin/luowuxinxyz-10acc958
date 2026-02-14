@@ -4,7 +4,7 @@ import { ChevronLeft, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase, cloudSupabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -20,7 +20,7 @@ const ProfilePage: React.FC = () => {
   }, [user]);
 
   const fetchProfile = async () => {
-    const { data } = await cloudSupabase.from('profiles').select('*').eq('user_id', user?.id).maybeSingle();
+    const { data } = await supabase.from('profiles').select('*').eq('user_id', user?.id).maybeSingle();
     if (data) {
       setNickname(data.nickname || '');
       setPersona(data.persona || '');
@@ -38,13 +38,13 @@ const ProfilePage: React.FC = () => {
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
-      const { error: uploadError } = await cloudSupabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
       if (uploadError) {
         console.error('Storage upload error:', uploadError);
         toast.error('头像上传失败: ' + uploadError.message);
         return;
       }
-      const { data: { publicUrl } } = cloudSupabase.storage.from('avatars').getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       setAvatarUrl(publicUrl);
       
       // 更新 profile 头像
@@ -60,7 +60,7 @@ const ProfilePage: React.FC = () => {
     if (!user) return false;
     
     // 先查是否存在
-    const { data: existing } = await cloudSupabase
+    const { data: existing } = await supabase
       .from('profiles')
       .select('id')
       .eq('user_id', user.id)
@@ -70,9 +70,9 @@ const ProfilePage: React.FC = () => {
     
     let error;
     if (existing) {
-      ({ error } = await cloudSupabase.from('profiles').update(payload).eq('user_id', user.id));
+      ({ error } = await supabase.from('profiles').update(payload).eq('user_id', user.id));
     } else {
-      ({ error } = await cloudSupabase.from('profiles').insert({ user_id: user.id, ...payload }));
+      ({ error } = await supabase.from('profiles').insert({ user_id: user.id, ...payload }));
     }
     
     if (error) {
