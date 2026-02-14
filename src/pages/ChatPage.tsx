@@ -2734,9 +2734,9 @@ const ChatPage: React.FC = () => {
         }
       }
       
-      // 触发记忆摘要生成（每20条消息）
+      // 触发记忆摘要生成（每10条消息）
       const totalMessages = messages.length + 2; // +2 for user and assistant messages just added
-      if (totalMessages > 0 && totalMessages % 20 === 0) {
+      if (totalMessages > 0 && totalMessages % 10 === 0) {
         console.log('Triggering memory summary generation at message count:', totalMessages);
         // 后台生成摘要，不阻塞UI
         fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
