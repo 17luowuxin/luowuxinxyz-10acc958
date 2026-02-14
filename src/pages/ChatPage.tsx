@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
 import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
 import VirtualMessageList from '@/components/chat/VirtualMessageList';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
 import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hooks/useLocalCache';
+import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -4173,6 +4174,31 @@ const ChatPage: React.FC = () => {
                 </div>
               )}
             </div>
+            
+            
+            {/* 导出当前角色 */}
+            <button
+              onClick={async () => {
+                setShowMenu(false);
+                if (!user || !characterId) return;
+                toast.loading('正在导出...', { id: 'export' });
+                try {
+                  const data = await exportSingleCharacter(user.id, characterId);
+                  if (!data) { toast.error('导出失败', { id: 'export' }); return; }
+                  downloadExportFile({
+                    version: '1.0',
+                    exported_at: new Date().toISOString(),
+                    app: 'luowuxin',
+                    characters: [data],
+                  }, `${data.character.name}-backup.json`);
+                  toast.success(`已导出"${data.character.name}"`, { id: 'export' });
+                } catch { toast.error('导出失败', { id: 'export' }); }
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              导出角色数据
+            </button>
             
             <div className="h-px bg-border my-1" />
             
