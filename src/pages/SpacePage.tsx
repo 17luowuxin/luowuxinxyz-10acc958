@@ -598,14 +598,11 @@ const SpacePage: React.FC = () => {
         
         if (guestbookReplyTarget) {
           const targetChar = characters.find(c => c.name === guestbookReplyTarget.charName);
-          replyChars = targetChar ? [targetChar] : [];
-        } else if (selectedGuestbookChars.size > 0) {
-          replyChars = characters.filter(c => selectedGuestbookChars.has(c.id));
+          replyChars = targetChar ? [targetChar] : [characters[Math.floor(Math.random() * characters.length)]];
         } else {
           replyChars = [characters[Math.floor(Math.random() * characters.length)]];
         }
         
-        setSelectedGuestbookChars(new Set());
         setGuestbookReplyTarget(null);
 
         for (const char of replyChars) {
@@ -1194,42 +1191,6 @@ const SpacePage: React.FC = () => {
               className="min-h-[80px] resize-none"
             />
             
-            {characters.length > 0 && !guestbookReplyTarget && (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">选择回复的角色（不选则随机）</p>
-                <div className="flex flex-wrap gap-2">
-                  {characters.map(char => (
-                    <button
-                      key={char.id}
-                      onClick={() => {
-                        setSelectedGuestbookChars(prev => {
-                          const next = new Set(prev);
-                          if (next.has(char.id)) next.delete(char.id);
-                          else next.add(char.id);
-                          return next;
-                        });
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                        selectedGuestbookChars.has(char.id)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      <div className="w-5 h-5 rounded-full overflow-hidden bg-primary/20 shrink-0">
-                        {char.avatar_url ? (
-                          <img src={char.avatar_url} className="w-full h-full object-cover" alt="" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs">
-                            {char.name[0]}
-                          </div>
-                        )}
-                      </div>
-                      <span>{char.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             
             <Button 
               onClick={handleGuestbookPost}
