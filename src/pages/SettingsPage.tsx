@@ -324,13 +324,29 @@ const SettingsPage: React.FC = () => {
   };
 
   const upsertApiKey = async (userId: string, provider: string, value: string) => {
-    // Delete then insert pattern (reliable across external/cloud DB)
-    await supabase.from('api_keys').delete().eq('user_id', userId).eq('provider', provider);
-    const { error } = await supabase.from('api_keys').insert({ user_id: userId, provider, api_key: value });
-    if (error) {
-      console.error(`[Settings] upsert api_keys failed for provider="${provider}":`, JSON.stringify(error, null, 2));
+    // First try upsert (works if unique constraint is on user_id+provider)
+    const { error: upsertErr } = await supabase
+      .from('api_keys')
+      .upsert({ user_id: userId, provider, api_key: value }, { onConflict: 'user_id,provider' } as any)
+      .select();
+    
+    if (!upsertErr) return null;
+    
+    console.warn(`[Settings] upsert failed for provider="${provider}", trying delete+insert:`, upsertErr.message);
+    
+    // Fallback: delete then insert (handles external DB with different constraints)
+    const { error: delErr } = await supabase.from('api_keys').delete().eq('user_id', userId).eq('provider', provider);
+    if (delErr) console.warn(`[Settings] delete failed:`, delErr.message);
+    
+    // Small delay to ensure delete completes
+    await new Promise(r => setTimeout(r, 100));
+    
+    const { error: insertErr } = await supabase.from('api_keys').insert({ user_id: userId, provider, api_key: value });
+    if (insertErr) {
+      console.error(`[Settings] insert api_keys failed for provider="${provider}":`, JSON.stringify(insertErr, null, 2));
+      return insertErr;
     }
-    return error;
+    return null;
   };
 
   const saveSettings = async () => {
