@@ -33,16 +33,22 @@ const ProfilePage: React.FC = () => {
     if (!file || !user) return;
     
     try {
-      // 压缩头像（512px，质量0.85）
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 512, 0.85);
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
-      await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        toast.error('头像上传失败: ' + uploadError.message);
+        return;
+      }
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       setAvatarUrl(publicUrl);
-      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('user_id', user.id);
+      
+      // 更新 profile 头像
+      await saveProfile({ avatar_url: publicUrl });
       toast.success('头像已更新');
     } catch (error) {
       console.error('Avatar upload error:', error);
@@ -50,18 +56,36 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!user) return;
-    const { error } = await supabase.from('profiles').upsert(
-      { user_id: user.id, nickname, persona },
-      { onConflict: 'user_id' }
-    );
+  const saveProfile = async (extraFields: Record<string, string> = {}) => {
+    if (!user) return false;
+    
+    // 先查是否存在
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    
+    const payload = { nickname, persona, ...extraFields };
+    
+    let error;
+    if (existing) {
+      ({ error } = await supabase.from('profiles').update(payload).eq('user_id', user.id));
+    } else {
+      ({ error } = await supabase.from('profiles').insert({ user_id: user.id, ...payload }));
+    }
+    
     if (error) {
       console.error('Profile save error:', error);
-      toast.error('保存失败');
-      return;
+      toast.error('保存失败: ' + error.message);
+      return false;
     }
-    toast.success('资料已保存');
+    return true;
+  };
+
+  const handleSave = async () => {
+    const ok = await saveProfile();
+    if (ok) toast.success('资料已保存');
   };
 
   return (
