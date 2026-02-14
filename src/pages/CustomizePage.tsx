@@ -354,7 +354,8 @@ const CustomizePage: React.FC = () => {
     // Clear session cache to force reload
     sessionStorage.removeItem(`bg_${user.id}`);
 
-    const payload = {
+    // Full payload with all fields
+    const fullPayload: Record<string, any> = {
       user_id: user.id,
       bubble_color: bubbleColor,
       friend_bubble_color: friendBubbleColor,
@@ -380,25 +381,88 @@ const CustomizePage: React.FC = () => {
       novel_thought_color: novelThoughtColor,
     };
 
-    console.log('[Save] Attempting upsert with payload:', JSON.stringify(payload, null, 2));
+    console.log('[Save] Attempting upsert with full payload');
 
     const { data, error } = await supabase
       .from('customization')
-      .upsert(payload as any, { onConflict: 'user_id' })
+      .upsert(fullPayload as any, { onConflict: 'user_id' })
       .select();
 
     if (error) {
-      console.error('[Save] Full error object:', JSON.stringify(error, null, 2));
-      toast.error(`保存失败 [${error.code}]: ${error.message}${error.details ? ' | ' + error.details : ''}${error.hint ? ' | hint: ' + error.hint : ''}`, {
-        duration: 10000,
-      });
+      console.warn('[Save] Full payload failed, trying minimal payload:', error.message);
+      
+      // Fallback: remove fields that might not exist in external DB schema cache
+      const minimalPayload: Record<string, any> = {
+        user_id: user.id,
+        bubble_color: bubbleColor,
+        friend_bubble_color: friendBubbleColor,
+        bubble_style: bubbleStyle,
+        bubble_opacity: opacity[0],
+        chat_background_url: chatBackgroundUrl || null,
+        theme: currentTheme,
+        font_color: fontColor,
+        friend_font_color: friendFontColor,
+        global_text_color: globalTextColor,
+      };
+
+      // Try adding optional fields one concept at a time
+      const optionalFields: Record<string, any> = {
+        bubble_size: bubbleSize[0],
+        global_background_url: globalBackgroundUrl || null,
+        video_background_url: videoBackgroundUrl || null,
+        font_family: currentFont,
+        avatar_frame_url: avatarFrame || null,
+        friend_avatar_frame_url: friendAvatarFrame || null,
+        bubble_frame_url: bubbleFrame || null,
+        friend_bubble_frame_url: friendBubbleFrame || null,
+        global_text_size: globalTextSize,
+        novel_dialogue_color: novelDialogueColor,
+        novel_narration_color: novelNarrationColor,
+        novel_action_color: novelActionColor,
+        novel_thought_color: novelThoughtColor,
+      };
+
+      // Try with all optional fields first
+      const retryPayload = { ...minimalPayload, ...optionalFields };
+      const { data: d2, error: e2 } = await supabase
+        .from('customization')
+        .upsert(retryPayload as any, { onConflict: 'user_id' })
+        .select();
+
+      if (e2) {
+        // Last resort: strip the problematic field mentioned in error
+        const problemField = e2.message?.match(/column '(\w+)'/)?.[1];
+        if (problemField && retryPayload[problemField] !== undefined) {
+          console.warn(`[Save] Removing problematic field: ${problemField}`);
+          delete retryPayload[problemField];
+          const { data: d3, error: e3 } = await supabase
+            .from('customization')
+            .upsert(retryPayload as any, { onConflict: 'user_id' })
+            .select();
+          if (e3) {
+            console.error('[Save] Final fallback failed:', JSON.stringify(e3, null, 2));
+            toast.error(`保存失败 [${e3.code}]: ${e3.message}`, { duration: 10000 });
+            return;
+          }
+          console.log('[Save] Saved with fallback (missing field:', problemField, ')');
+          toast.success(`美化已保存（${problemField} 字段暂不支持，请在外部数据库添加后重试）`);
+        } else {
+          console.error('[Save] Retry failed:', JSON.stringify(e2, null, 2));
+          toast.error(`保存失败 [${e2.code}]: ${e2.message}`, { duration: 10000 });
+          return;
+        }
+      } else {
+        console.log('[Save] Retry success:', d2);
+        toast.success('美化设置已保存！');
+      }
     } else {
       console.log('[Save] Success, returned data:', data);
-      // 立即同步到全局样式
-      applyGlobalTextColor(globalTextColor);
-      applyGlobalTextSize(globalTextSize);
       toast.success('美化设置已保存！返回桌面查看效果');
     }
+    
+    // 立即同步到全局样式
+    applyGlobalTextColor(globalTextColor);
+    applyGlobalTextSize(globalTextSize);
   };
 
   const getBubblePreviewClass = (style: string, isUser: boolean) => {
