@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { getSupabaseUrl } from '@/lib/supabaseUrl';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -92,6 +92,27 @@ const FriendsPage: React.FC = () => {
 
   // 本地缓存 Hook
   const { getCache: getCachedCharacters, setCache: cacheCharacters } = useCharactersCache(user?.id);
+
+  // 全部标记已读
+  const markAllAsRead = async () => {
+    if (!user || characters.length === 0) return;
+    const hasUnread = characters.some(c => c.unreadCount > 0);
+    if (!hasUnread) return;
+    
+    const upserts = characters
+      .filter(c => c.unreadCount > 0)
+      .map(c => ({
+        user_id: user.id,
+        character_id: c.id,
+        last_read_at: new Date().toISOString(),
+      }));
+    
+    await supabase.from('chat_read_status').upsert(upserts, { onConflict: 'user_id,character_id' });
+    
+    setCharacters(prev => prev.map(c => ({ ...c, unreadCount: 0 })));
+    cacheCharacters(characters.map(c => ({ ...c, unreadCount: 0 })));
+    toast.success('已全部标记为已读');
+  };
 
   // 初始化：先读取缓存，再从服务器更新
   useEffect(() => {
@@ -761,7 +782,18 @@ const FriendsPage: React.FC = () => {
         >
           <ChevronLeft className="w-6 h-6 text-gray-600" />
         </Button>
-        <h1 className="text-xl font-bold text-gray-700">好友</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-xl font-bold text-gray-700">好友</h1>
+          {characters.some(c => c.unreadCount > 0) && (
+            <button
+              onClick={markAllAsRead}
+              className="ml-1 p-1 rounded-full text-pink-500 hover:bg-pink-50 transition-colors"
+              title="全部已读"
+            >
+              <CheckCheck className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         <Dialog open={open} onOpenChange={(v) => v ? setOpen(true) : handleDialogClose()}>
           <DialogTrigger asChild>
             <Button 
