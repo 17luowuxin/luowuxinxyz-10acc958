@@ -577,14 +577,18 @@ const SpacePage: React.FC = () => {
       : newGuestbookContent.trim();
     
     try {
-      await supabase.from('guestbook').insert({
+      const { data: insertedEntry, error: insertError } = await supabase.from('guestbook').insert({
         user_id: user?.id,
         content: contentToPost,
-        is_character_reply: false
-      });
+        is_character_reply: false,
+        parent_id: guestbookReplyTarget?.entryId || null
+      }).select().single();
+
+      if (insertError) throw insertError;
 
       toast.success('留言成功!');
       const originalContent = newGuestbookContent.trim();
+      const parentId = insertedEntry?.id || null;
       setNewGuestbookContent('');
       fetchGuestbook();
 
@@ -592,7 +596,6 @@ const SpacePage: React.FC = () => {
       if (characters.length > 0 && apiConfig?.apiKey) {
         let replyChars: any[];
         
-        // 如果是回复某个角色，只让那个角色回复
         if (guestbookReplyTarget) {
           const targetChar = characters.find(c => c.name === guestbookReplyTarget.charName);
           replyChars = targetChar ? [targetChar] : [];
@@ -602,8 +605,8 @@ const SpacePage: React.FC = () => {
           replyChars = [characters[Math.floor(Math.random() * characters.length)]];
         }
         
-        setSelectedGuestbookChars(new Set()); // 重置选择
-        setGuestbookReplyTarget(null); // 重置回复目标
+        setSelectedGuestbookChars(new Set());
+        setGuestbookReplyTarget(null);
 
         for (const char of replyChars) {
           try {
@@ -626,7 +629,8 @@ const SpacePage: React.FC = () => {
                 user_id: user?.id,
                 content: replyData.content,
                 character_id: char.id,
-                is_character_reply: true
+                is_character_reply: true,
+                parent_id: parentId
               });
               fetchGuestbook();
             }
@@ -1169,7 +1173,6 @@ const SpacePage: React.FC = () => {
         <TabsContent value="guestbook" className="p-4 space-y-4 pb-24 mt-0">
           {/* Post Guestbook */}
           <div className="bg-card rounded-xl p-4 border border-border/50 space-y-3">
-            {/* 回复指定角色提示 */}
             {guestbookReplyTarget && (
               <div className="flex items-center gap-2 text-sm bg-primary/5 px-3 py-2 rounded-lg">
                 <span className="text-muted-foreground">正在回复</span>
@@ -1191,7 +1194,6 @@ const SpacePage: React.FC = () => {
               className="min-h-[80px] resize-none"
             />
             
-            {/* 选择回复角色（没有指定回复目标时显示） */}
             {characters.length > 0 && !guestbookReplyTarget && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">选择回复的角色（不选则随机）</p>
@@ -1202,11 +1204,8 @@ const SpacePage: React.FC = () => {
                       onClick={() => {
                         setSelectedGuestbookChars(prev => {
                           const next = new Set(prev);
-                          if (next.has(char.id)) {
-                            next.delete(char.id);
-                          } else {
-                            next.add(char.id);
-                          }
+                          if (next.has(char.id)) next.delete(char.id);
+                          else next.add(char.id);
                           return next;
                         });
                       }}
@@ -1242,83 +1241,131 @@ const SpacePage: React.FC = () => {
             </Button>
           </div>
 
-          {/* Guestbook Entries */}
+          {/* Guestbook Entries - QQ Style Cards */}
           {guestbookEntries.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>还没有留言</p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {guestbookEntries.map((entry, i) => (
-                <motion.div
-                  key={entry.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className={`p-4 rounded-xl ${
-                    entry.is_character_reply 
-                      ? 'bg-primary/10 border border-primary/20 ml-6' 
-                      : 'bg-card border border-border/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-                      {entry.is_character_reply && entry.character?.avatar_url ? (
-                        <img src={entry.character.avatar_url} className="w-full h-full object-cover" alt="" />
-                      ) : entry.is_character_reply ? (
-                        <User className="w-4 h-4 text-white" />
-                      ) : userProfile?.avatar_url ? (
-                        <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="" />
-                      ) : (
-                        <User className="w-4 h-4 text-white" />
-                      )}
+          ) : (() => {
+            // Group: top-level user messages with their character replies
+            const topLevel = guestbookEntries.filter(e => !e.is_character_reply && !e.parent_id);
+            // Orphan character replies (old data without parent_id)
+            const orphanReplies = guestbookEntries.filter(e => e.is_character_reply && !e.parent_id);
+            // Build reply map by parent_id
+            const replyMap = new Map<string, GuestbookEntry[]>();
+            guestbookEntries.filter(e => e.parent_id).forEach(e => {
+              const list = replyMap.get(e.parent_id!) || [];
+              list.push(e);
+              replyMap.set(e.parent_id!, list);
+            });
+
+            const allCards = [
+              ...topLevel.map(entry => ({ entry, replies: replyMap.get(entry.id) || [] })),
+              ...orphanReplies.map(entry => ({ entry, replies: [] as GuestbookEntry[] }))
+            ];
+
+            return (
+              <div className="space-y-4">
+                {allCards.map(({ entry, replies }, i) => (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="bg-card rounded-xl border border-border/50 overflow-hidden"
+                  >
+                    {/* Main message card */}
+                    <div className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0">
+                          {entry.is_character_reply && entry.character?.avatar_url ? (
+                            <img src={entry.character.avatar_url} className="w-full h-full object-cover" alt="" />
+                          ) : userProfile?.avatar_url ? (
+                            <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="" />
+                          ) : (
+                            <User className="w-5 h-5 text-primary-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-sm text-foreground">
+                              {entry.is_character_reply ? (entry.character?.name || 'AI角色') : (userProfile?.nickname || '我')}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">{formatTime(entry.created_at)}</span>
+                              <button
+                                onClick={() => setDeleteGuestbookId(entry.id)}
+                                className="p-1 hover:bg-destructive/10 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-foreground mt-2 leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-medium text-sm flex-1">
-                      {entry.is_character_reply ? (
-                        <button
-                          type="button"
-                          className="hover:underline"
-                          onClick={() => {
-                            const charName = entry.character?.name;
-                            if (charName) {
-                              setGuestbookReplyTarget({ entryId: entry.id, charName });
-                            }
-                          }}
-                        >
-                          <span className="text-primary">{entry.character?.name || 'AI角色'}</span>
-                          <span className="text-muted-foreground mx-1">回复</span>
-                          <span className="text-foreground">{userProfile?.nickname || '我'}</span>
-                        </button>
-                      ) : (
-                        <span className="text-foreground">{userProfile?.nickname || '我'}</span>
-                      )}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatTime(entry.created_at)}
-                    </span>
-                    {/* 回复按钮（角色留言可点击回复） */}
-                    {entry.is_character_reply && entry.character?.name && (
-                      <button
-                        onClick={() => setGuestbookReplyTarget({ entryId: entry.id, charName: entry.character!.name })}
-                        className="p-1 hover:bg-primary/10 rounded transition-colors text-primary"
-                        title={`回复 ${entry.character.name}`}
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
+
+                    {/* WeChat-style compact replies */}
+                    {replies.length > 0 && (
+                      <div className="bg-muted/50 mx-4 mb-3 rounded-lg px-3 py-2 space-y-1">
+                        {replies.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(reply => {
+                          const replyName = reply.is_character_reply
+                            ? (reply.character?.name || 'AI角色')
+                            : (userProfile?.nickname || '我');
+                          const targetName = reply.is_character_reply
+                            ? (userProfile?.nickname || '我')
+                            : null;
+                          
+                          return (
+                            <div key={reply.id} className="text-sm leading-relaxed">
+                              <button
+                                type="button"
+                                className="text-primary font-medium hover:underline inline"
+                                onClick={() => {
+                                  if (reply.is_character_reply && reply.character?.name) {
+                                    setGuestbookReplyTarget({ entryId: entry.id, charName: reply.character.name });
+                                  }
+                                }}
+                              >
+                                {replyName}
+                              </button>
+                              {targetName && (
+                                <>
+                                  <span className="text-muted-foreground"> 回复 </span>
+                                  <span className="font-medium text-foreground">{targetName}</span>
+                                </>
+                              )}
+                              <span className="text-muted-foreground">：</span>
+                              <span className="text-foreground">{reply.content}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                    <button
-                      onClick={() => setDeleteGuestbookId(entry.id)}
-                      className="p-1 hover:bg-destructive/10 rounded transition-colors"
+
+                    {/* Reply bar */}
+                    <div 
+                      className="bg-muted/30 px-4 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 transition-colors border-t border-border/30"
+                      onClick={() => {
+                        // If this is a user post, pick first character to reply to, or just scroll to input
+                        if (!entry.is_character_reply) {
+                          // For user's own messages, just focus the input
+                          const textarea = document.querySelector('textarea');
+                          textarea?.focus();
+                        } else if (entry.character?.name) {
+                          setGuestbookReplyTarget({ entryId: entry.id, charName: entry.character.name });
+                        }
+                      }}
                     >
-                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                    </button>
-                  </div>
-                  <p className="text-foreground">{entry.content}</p>
-                </motion.div>
-              ))}
-            </div>
-          )}
+                      回复
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
 
