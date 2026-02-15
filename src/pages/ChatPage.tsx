@@ -260,6 +260,9 @@ const ChatPage: React.FC = () => {
   const [showReplyModeMenu, setShowReplyModeMenu] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
   const [transferEnabled, setTransferEnabled] = useState(true);
+  const [showUserTransferDialog, setShowUserTransferDialog] = useState(false);
+  const [userTransferAmount, setUserTransferAmount] = useState('');
+  const [userTransferMessage, setUserTransferMessage] = useState('');
   const [historyLimit, setHistoryLimit] = useState(10);
   const [replyMode, setReplyMode] = useState<'novel' | 'online'>('novel');
   const [useNovelFormat, setUseNovelFormat] = useState(false);
@@ -1300,6 +1303,236 @@ const ChatPage: React.FC = () => {
       toast.success('转账记录已删除');
     } else {
       toast.error('删除失败');
+    }
+  };
+
+  // 用户向角色转账
+  const handleUserTransfer = async () => {
+    const amount = parseFloat(userTransferAmount);
+    if (!amount || amount <= 0 || !user?.id || !character) {
+      toast.error('请输入有效金额');
+      return;
+    }
+    
+    // 保存转账记录
+    const { data: transfer, error } = await supabase
+      .from('dream_transactions')
+      .insert({
+        user_id: user.id,
+        character_id: characterId,
+        character_name: character.name,
+        amount: amount,
+        message: userTransferMessage || null,
+        is_received: true, // 用户转给角色的，角色自动收到
+        is_user_transfer: true,
+      })
+      .select()
+      .single();
+
+    if (error || !transfer) {
+      toast.error('转账失败');
+      return;
+    }
+
+    // 在聊天中显示用户转账卡片
+    setPendingTransfers(prev => [...prev, transfer]);
+    setMessages(prev => [...prev, {
+      id: transfer.id,
+      role: 'transfer',
+      content: `[TRANSFER:${transfer.id}:${amount}:${userTransferMessage || ''}]`,
+      created_at: transfer.created_at,
+      timestamp: new Date(transfer.created_at).getTime(),
+      transferData: transfer,
+    }]);
+
+    // 关闭弹窗
+    setShowUserTransferDialog(false);
+    const transferMsg = userTransferMessage || '';
+    setUserTransferAmount('');
+    setUserTransferMessage('');
+    
+    toast.success('转账成功！');
+    
+    // 发送消息给AI，让AI知道用户转账了
+    const transferContext = `[用户转账:${amount}:${transferMsg}]`;
+    
+    // 保存用户消息到数据库
+    const { data: savedMsg } = await supabase
+      .from('chat_messages')
+      .insert({
+        user_id: user.id,
+        character_id: characterId,
+        role: 'user',
+        content: transferContext,
+      })
+      .select()
+      .single();
+
+    if (!savedMsg) return;
+
+    // 添加到消息列表（不显示为普通文本）
+    setMessages(prev => [...prev, {
+      id: savedMsg.id,
+      role: 'user',
+      content: transferContext,
+      created_at: savedMsg.created_at,
+      timestamp: new Date(savedMsg.created_at).getTime(),
+    }]);
+
+    // 调用AI获取回复
+    setLoading(true);
+    try {
+      const recentMessages = messages
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('[STICKER:'))
+        .slice(-historyLimit)
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const body: any = {
+        messages: [...recentMessages, { role: 'user', content: transferContext }],
+        characterName: character?.name,
+        characterId: characterId,
+        userId: user?.id,
+        persona: character?.persona,
+        userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
+        replyMode: replyMode,
+        onlineMessageCount: onlineMessageCount,
+        transferEnabled: true,
+        historyLimit: historyLimit,
+        useNovelFormat: useNovelFormat,
+        clientTime: {
+          timestamp: Date.now(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offset: new Date().getTimezoneOffset(),
+        },
+      };
+
+      body.userApiKey = apiConfig?.apiKey;
+      body.provider = apiConfig?.provider;
+      if (apiConfig?.baseUrl) body.baseUrl = apiConfig.baseUrl;
+      if (apiConfig?.model) body.model = apiConfig.model;
+
+      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok || !resp.body) {
+        setLoading(false);
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode();
+
+      let assistantContent = '';
+      if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
+        try {
+          const json = JSON.parse(fullText);
+          if (json.error) { setLoading(false); return; }
+          assistantContent = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || '';
+        } catch {
+          assistantContent = fullText.trim();
+        }
+      }
+      if (!assistantContent) {
+        const lines = fullText.split('\n');
+        for (const rawLine of lines) {
+          let line = rawLine.trim();
+          if (!line || line.startsWith(':')) continue;
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta = json.choices?.[0]?.delta?.content || json.choices?.[0]?.text || '';
+              if (delta) assistantContent += delta;
+            } catch {}
+          }
+        }
+      }
+
+      assistantContent = assistantContent.trim();
+      if (!assistantContent) { setLoading(false); return; }
+
+      // 检查AI是否要退回转账 [退回转账:金额:原因]
+      const returnMatch = assistantContent.match(/[\[\(](?:退回转账|RETURN_TRANSFER):(\d+(?:\.\d{1,2})?):([^\]\)]*?)[\]\)]/i);
+      if (returnMatch) {
+        const returnAmount = parseFloat(returnMatch[1]);
+        const returnReason = returnMatch[2].trim();
+        // 创建角色退回的转账记录
+        const { data: returnTransfer } = await supabase
+          .from('dream_transactions')
+          .insert({
+            user_id: user.id,
+            character_id: characterId,
+            character_name: character.name,
+            amount: returnAmount,
+            message: returnReason || '退回给你~',
+            is_received: false,
+            is_user_transfer: false,
+          })
+          .select()
+          .single();
+
+        if (returnTransfer) {
+          setPendingTransfers(prev => [...prev, returnTransfer]);
+          setMessages(prev => [...prev, {
+            id: returnTransfer.id,
+            role: 'transfer',
+            content: `[TRANSFER:${returnTransfer.id}:${returnAmount}:${returnReason}]`,
+            created_at: returnTransfer.created_at,
+            timestamp: new Date(returnTransfer.created_at).getTime(),
+            transferData: returnTransfer,
+          }]);
+        }
+        // 移除退回指令
+        assistantContent = assistantContent.replace(/[\[\(](?:退回转账|RETURN_TRANSFER):\d+(?:\.\d{1,2})?:[^\]\)]*?[\]\)]/gi, '').trim();
+      }
+
+      // 也检查普通转账指令（AI可能因为用户转账而也转账给用户）
+      const transferData = parseTransferCommand(assistantContent);
+      if (transferEnabled && transferData) {
+        const newTransfer = await createTransfer(transferData.amount, transferData.message);
+        if (newTransfer) {
+          setPendingTransfers(prev => [...prev, newTransfer]);
+          setMessages(prev => [...prev, {
+            id: Date.now() + 999,
+            role: 'transfer',
+            content: `[TRANSFER:${newTransfer.id}:${transferData.amount}:${transferData.message}]`,
+            transferData: newTransfer,
+          }]);
+        }
+        assistantContent = removeTransferCommand(assistantContent);
+      }
+
+      if (assistantContent.trim()) {
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: assistantContent,
+        }]);
+        await supabase.from('chat_messages').insert({
+          user_id: user?.id,
+          character_id: characterId,
+          role: 'assistant',
+          content: assistantContent,
+        });
+      }
+    } catch (e) {
+      console.error('User transfer AI response error:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -4428,6 +4661,20 @@ const ChatPage: React.FC = () => {
                 </div>
                 <span className="text-[10px] text-muted-foreground">视频</span>
               </button>
+              
+              {/* 转账 */}
+              {transferEnabled && (
+                <button 
+                  className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                  onClick={() => setShowUserTransferDialog(true)}
+                  disabled={loading}
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                    <Gift className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">转账</span>
+                </button>
+              )}
             </div>
           </PopoverContent>
         </Popover>
@@ -5017,6 +5264,54 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 用户转账弹窗 */}
+      <AlertDialog open={showUserTransferDialog} onOpenChange={setShowUserTransferDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-amber-500" />
+              转账给 {character?.name}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              虚拟转账，角色会根据情境决定接收或退还
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">金额</label>
+              <Input
+                type="number"
+                placeholder="输入金额"
+                value={userTransferAmount}
+                onChange={(e) => setUserTransferAmount(e.target.value)}
+                min="0.01"
+                step="0.01"
+                className="text-lg font-bold"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">留言（可选）</label>
+              <Input
+                placeholder="添加转账留言..."
+                value={userTransferMessage}
+                onChange={(e) => setUserTransferMessage(e.target.value)}
+                maxLength={50}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUserTransfer}
+              disabled={!userTransferAmount || parseFloat(userTransferAmount) <= 0}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              确认转账
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );
