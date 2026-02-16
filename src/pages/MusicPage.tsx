@@ -93,6 +93,7 @@ const MusicPage: React.FC = () => {
         const supabaseUrl = getSupabaseUrl();
         xhr.open('POST', `${supabaseUrl}/storage/v1/object/avatars/${fileName}`);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
         xhr.setRequestHeader('x-upsert', 'false');
         xhr.send(file);
       });
