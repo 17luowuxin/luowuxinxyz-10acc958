@@ -4675,6 +4675,36 @@ const ChatPage: React.FC = () => {
                   <span className="text-[10px] text-muted-foreground">转账</span>
                 </button>
               )}
+              
+              {/* 角色语音模式切换 */}
+              {ttsConfig?.enabled && (
+                <button 
+                  className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
+                  onClick={() => {
+                    const modes: Array<'off' | 'sometimes' | 'always'> = ['off', 'sometimes', 'always'];
+                    const currentIndex = modes.indexOf(voiceMode);
+                    const nextMode = modes[(currentIndex + 1) % modes.length];
+                    setVoiceMode(nextMode);
+                    // 保存到数据库
+                    if (characterId && user?.id) {
+                      supabase.from('characters').update({ voice_mode: nextMode }).eq('id', characterId).eq('user_id', user.id).then(() => {});
+                    }
+                    const labels = { off: '关闭', sometimes: '偶尔', always: '总是' };
+                    toast.success(`角色语音：${labels[nextMode]}`);
+                  }}
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    voiceMode === 'always' ? 'bg-pink-500/20' : voiceMode === 'sometimes' ? 'bg-pink-500/10' : 'bg-gray-500/10'
+                  }`}>
+                    <Volume2 className={`w-5 h-5 ${
+                      voiceMode === 'always' ? 'text-pink-500' : voiceMode === 'sometimes' ? 'text-pink-400' : 'text-gray-400'
+                    }`} />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {voiceMode === 'off' ? '语音关' : voiceMode === 'sometimes' ? '偶尔语音' : '总是语音'}
+                  </span>
+                </button>
+              )}
             </div>
           </PopoverContent>
         </Popover>
