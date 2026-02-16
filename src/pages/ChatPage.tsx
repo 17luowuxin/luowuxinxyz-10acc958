@@ -4773,14 +4773,38 @@ const ChatPage: React.FC = () => {
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()} 
           className="flex-1 h-9 rounded-full bg-muted border-0 text-sm" 
         />
-        <Button 
-          size="icon" 
-          onClick={sendMessage} 
-          disabled={loading || uploadingImage}
-          className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
-        >
-          <Send className="w-4 h-4" />
-        </Button>
+        {/* 语音输入按钮 - 没有文字时显示麦克风，有文字时显示发送 */}
+        {input.trim() || pendingImage ? (
+          <Button 
+            size="icon" 
+            onClick={sendMessage} 
+            disabled={loading || uploadingImage}
+            className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        ) : speechToText.isSupported ? (
+          <Button
+            size="icon"
+            onClick={speechToText.toggle}
+            className={`flex-shrink-0 w-9 h-9 rounded-full transition-all ${
+              speechToText.isListening 
+                ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                : 'bg-gradient-to-r from-pink-400 to-purple-400 text-white'
+            }`}
+          >
+            {speechToText.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </Button>
+        ) : (
+          <Button 
+            size="icon" 
+            onClick={sendMessage} 
+            disabled={loading || uploadingImage}
+            className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 text-white"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        )}
       </footer>
       )}
 
