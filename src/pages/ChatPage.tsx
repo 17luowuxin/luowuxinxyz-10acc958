@@ -3755,10 +3755,8 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // 接听通话 - 先解锁音频，自动开启语音识别
+  // 接听通话 - 在用户手势中立即启动语音识别（移动端关键）
   const answerCall = async () => {
-    // 先更新UI，避免某些浏览器在音频解锁阶段卡住导致“点了没反应”
-
     // 停止来电铃声
     if (ringtoneAudioRef.current) {
       (ringtoneAudioRef.current as any).stop?.();
@@ -3770,18 +3768,20 @@ const ChatPage: React.FC = () => {
     setCallStartTime(Date.now());
     setInterimTranscript('');
 
-    // 在同一次“接听”用户手势里：
-    // 1) 触发音频解锁（否则后续 TTS 可能被浏览器当作非手势播放而静音/拦截）
-    // 2) 触发麦克风权限（否则后续在 onEnd 等非手势回调里启动识别可能被拦截）
-    const unlockPromise = Promise.race([
-      audioQueue.unlock(),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
-    ]).catch(() => false);
+    // 【关键修复】在用户点击手势的同步调用链中立即启动语音识别
+    // 移动端浏览器（Android/iOS）要求 start() 必须在用户手势上下文中
+    // 不能放在 await 之后或 setTimeout/回调中，否则会被拒绝
+    if (speechToText.isSupported) {
+      try {
+        console.log('[Call] Starting speech recognition immediately in user gesture');
+        speechToText.start();
+      } catch (e) {
+        console.warn('[Call] Immediate speech start failed:', e);
+      }
+    }
 
-    const primePromise = speechToText.prime().catch(() => false);
-
-    // 等待两者完成（不关心结果，失败也继续走通话流程）
-    await Promise.allSettled([unlockPromise, primePromise]);
+    // 同时解锁音频（不阻塞）
+    audioQueue.unlock().catch(() => {});
 
     // 角色的开场白 + TTS播放
     const greeting = showCallDialog === 'voice'
@@ -3790,10 +3790,15 @@ const ChatPage: React.FC = () => {
 
     setCallMessages([{ role: 'assistant', content: greeting }]);
 
-    // 播放开场白TTS（使用队列）
+    // 播放开场白TTS
     if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
       try {
         setIsAISpeaking(true);
+        // TTS播放时暂停识别避免识别AI声音
+        if (speechToText.isListening) {
+          speechToText.stop();
+        }
+
         const controller = new AbortController();
         const ttsTimeout = window.setTimeout(() => controller.abort(), 8000);
 
@@ -3820,11 +3825,11 @@ const ChatPage: React.FC = () => {
         const ttsData = await ttsResp.json().catch(() => ({} as any));
         if (ttsData.audioContent) {
           const audioUrl = `data:audio/mpeg;base64,${ttsData.audioContent}`;
-          // 使用队列播放，完成后开始语音识别
           audioQueue.enqueue({
             src: audioUrl,
             onEnd: () => {
               setIsAISpeaking(false);
+              // 权限已在手势中获取，这里重启是安全的
               if (speechToText.isSupported && !speechToText.isListening) {
                 speechToText.start();
               }
@@ -3843,7 +3848,6 @@ const ChatPage: React.FC = () => {
           });
         } else {
           setIsAISpeaking(false);
-          // 没有语音则直接开始识别
           if (speechToText.isSupported && !speechToText.isListening) {
             speechToText.start();
           }
@@ -3851,20 +3855,12 @@ const ChatPage: React.FC = () => {
       } catch (err) {
         console.error('TTS error:', err);
         setIsAISpeaking(false);
-        // 出错也开始识别
         if (speechToText.isSupported && !speechToText.isListening) {
           speechToText.start();
         }
       }
-    } else {
-      // 没有TTS配置，延迟后开始语音识别（给用户准备时间）
-      setTimeout(() => {
-        if (speechToText.isSupported && !speechToText.isListening) {
-          console.log('[Call] Starting speech recognition (no TTS)');
-          speechToText.start();
-        }
-      }, 800);
     }
+    // 没有TTS时识别已在上面启动，无需额外操作
   };
 
   // 结束通话 - 立即关闭UI，后台保存记录
@@ -4157,24 +4153,18 @@ const ChatPage: React.FC = () => {
         // 调试日志
         console.log('TTS check - enabled:', ttsConfig?.enabled, 'apiKey:', !!ttsConfig?.apiKey, 'baseUrl:', !!ttsConfig?.baseUrl, 'voice_id:', character?.voice_id);
         
-        // 恢复语音识别的辅助函数 - 不依赖闭包中的inCall，直接启动
+        // 恢复语音识别的辅助函数 - 权限已在接听时获取，直接重启即可
         const resumeSpeechRecognition = () => {
-          console.log('[Call] Resuming speech recognition, isSupported:', speechToText.isSupported, 'isListening:', speechToText.isListening, 'isPersistentEnabled:', speechToText.isPersistentEnabled);
+          console.log('[Call] Resuming speech recognition');
           setIsAISpeaking(false);
-          // 直接启动识别，不检查inCall（因为闭包问题）
-          // 在结束通话时会调用stop()来停止识别
-          if (speechToText.isSupported && !speechToText.isListening && !speechToText.isPersistentEnabled) {
-            // 增加延迟到500ms，确保音频播放完全结束
+          if (speechToText.isSupported && !speechToText.isListening) {
+            // 短延迟确保音频完全释放麦克风
             setTimeout(() => {
-              console.log('[Call] Starting speech recognition after delay');
-              speechToText.start();
-            }, 500);
-          } else if (speechToText.isPersistentEnabled && !speechToText.isListening) {
-            // 如果持续模式已开启但没有在监听，强制重启
-            setTimeout(() => {
-              console.log('[Call] Force restarting speech recognition');
-              speechToText.start();
-            }, 500);
+              if (!speechToText.isListening) {
+                console.log('[Call] Starting speech recognition after TTS');
+                speechToText.start();
+              }
+            }, 300);
           }
         };
         

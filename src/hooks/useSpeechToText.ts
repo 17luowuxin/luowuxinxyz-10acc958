@@ -241,19 +241,27 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       return;
     }
 
-    const ok = await prime();
-    if (!ok) return;
-
     shouldRestartRef.current = Boolean(persistent);
     setIsPersistentEnabled(Boolean(persistent));
 
     try {
+      // 直接启动识别，不先调用 prime()
+      // 在移动端，start() 本身会触发权限请求
+      // 预先调用 getUserMedia 反而可能占用麦克风导致识别失败
       rec.start();
     } catch (e: any) {
-      onErrorRef.current?.(String(e?.message || "语音识别启动失败"));
-      cleanupPermissionStream();
-      shouldRestartRef.current = false;
-      setIsPersistentEnabled(false);
+      // 如果直接启动失败，尝试先获取权限再启动
+      console.log('[SpeechToText] Direct start failed, trying with prime:', e?.message);
+      const ok = await prime();
+      if (!ok) return;
+      try {
+        rec.start();
+      } catch (e2: any) {
+        onErrorRef.current?.(String(e2?.message || "语音识别启动失败"));
+        cleanupPermissionStream();
+        shouldRestartRef.current = false;
+        setIsPersistentEnabled(false);
+      }
     }
   }, [cleanupPermissionStream, ensureRecognition, persistent, prime]);
 
