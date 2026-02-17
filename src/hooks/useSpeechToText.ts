@@ -106,27 +106,37 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     }
   }, []);
 
+  const isStartingRef = useRef(false); // Prevent double-start
+
   const restartRecognition = useCallback(() => {
     if (!shouldRestartRef.current || !recognitionRef.current) return;
+    if (isStartingRef.current) return; // Already starting
 
     const now = Date.now();
     const timeSinceLastRestart = now - lastRestartTimeRef.current;
 
-    // Prevent rapid restarts - wait at least 300ms between restarts
-    const delay = Math.max(300, 500 - timeSinceLastRestart);
+    // Prevent rapid restarts - wait at least 500ms between restarts
+    const delay = Math.max(500, 800 - timeSinceLastRestart);
 
     setTimeout(() => {
-      if (shouldRestartRef.current && recognitionRef.current) {
+      if (shouldRestartRef.current && recognitionRef.current && !isStartingRef.current) {
         try {
           console.log('[SpeechToText] Restarting recognition...');
+          isStartingRef.current = true;
           lastRestartTimeRef.current = Date.now();
           restartCountRef.current++;
           recognitionRef.current.start();
-        } catch (e) {
+        } catch (e: any) {
+          isStartingRef.current = false;
+          const msg = String(e?.message || '');
+          if (msg.includes('already started')) {
+            console.log('[SpeechToText] Already running, skip restart');
+            setIsListening(true);
+            return;
+          }
           console.log('[SpeechToText] Restart failed, will retry:', e);
-          // If start fails, try again after a longer delay
           if (shouldRestartRef.current) {
-            setTimeout(() => restartRecognition(), 500);
+            setTimeout(() => restartRecognition(), 1000);
           }
         }
       }
@@ -146,15 +156,16 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     rec.onstart = () => {
       console.log('[SpeechToText] Recognition started');
+      isStartingRef.current = false;
       setIsListening(true);
-      restartCountRef.current = 0; // Reset restart count on successful start
+      restartCountRef.current = 0;
     };
 
     rec.onend = () => {
       console.log('[SpeechToText] Recognition ended, shouldRestart:', shouldRestartRef.current);
+      isStartingRef.current = false;
       setIsListening(false);
       setHasAudioActivity(false);
-      // In persistent mode, auto-restart unless explicitly stopped
       if (shouldRestartRef.current) {
         restartRecognition();
       }
@@ -235,6 +246,12 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   }, [cleanupPermissionStream, interimResults, lang, restartRecognition]);
 
   const start = useCallback(async () => {
+    // Guard: don't start if already listening or starting
+    if (isListening || isStartingRef.current) {
+      console.log('[SpeechToText] Already listening or starting, skip');
+      return;
+    }
+
     const rec = ensureRecognition();
     if (!rec) {
       onErrorRef.current?.("当前浏览器不支持语音输入（建议用 Chrome）");
@@ -243,27 +260,39 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     shouldRestartRef.current = Boolean(persistent);
     setIsPersistentEnabled(Boolean(persistent));
+    isStartingRef.current = true;
 
     try {
-      // 直接启动识别，不先调用 prime()
-      // 在移动端，start() 本身会触发权限请求
-      // 预先调用 getUserMedia 反而可能占用麦克风导致识别失败
       rec.start();
     } catch (e: any) {
-      // 如果直接启动失败，尝试先获取权限再启动
-      console.log('[SpeechToText] Direct start failed, trying with prime:', e?.message);
+      const msg = String(e?.message || '');
+      if (msg.includes('already started')) {
+        console.log('[SpeechToText] Already running');
+        isStartingRef.current = false;
+        setIsListening(true);
+        return;
+      }
+      console.log('[SpeechToText] Direct start failed, trying with prime:', msg);
+      isStartingRef.current = false;
       const ok = await prime();
       if (!ok) return;
+      isStartingRef.current = true;
       try {
         rec.start();
       } catch (e2: any) {
+        isStartingRef.current = false;
+        const msg2 = String(e2?.message || '');
+        if (msg2.includes('already started')) {
+          setIsListening(true);
+          return;
+        }
         onErrorRef.current?.(String(e2?.message || "语音识别启动失败"));
         cleanupPermissionStream();
         shouldRestartRef.current = false;
         setIsPersistentEnabled(false);
       }
     }
-  }, [cleanupPermissionStream, ensureRecognition, persistent, prime]);
+  }, [cleanupPermissionStream, ensureRecognition, persistent, prime, isListening]);
 
   const stop = useCallback(() => {
     console.log('[SpeechToText] Stopping recognition');
