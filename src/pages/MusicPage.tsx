@@ -61,7 +61,9 @@ const MusicPage: React.FC = () => {
     setUploadProgress(0);
     
     try {
-      const fileName = `${user.id}/${Date.now()}_${file.name}`;
+      // 移除文件名中的特殊字符，防止400错误
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${user.id}/${Date.now()}_${safeName}`;
       
       // 使用 XMLHttpRequest 来获取上传进度
       const formData = new FormData();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
 import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download, Keyboard } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
 import VirtualMessageList from '@/components/chat/VirtualMessageList';
 import { Button } from '@/components/ui/button';
@@ -320,6 +320,8 @@ const ChatPage: React.FC = () => {
   const [callDuration, setCallDuration] = useState(0); // 通话时长（秒）
   const [isAISpeaking, setIsAISpeaking] = useState(false); // AI正在说话（TTS播放中）
   const [interimTranscript, setInterimTranscript] = useState(''); // 临时识别文字
+  const [showCallTextInput, setShowCallTextInput] = useState(false); // 通话中文字输入
+  const [callTextInput, setCallTextInput] = useState(''); // 通话文字输入内容
   // TTS相关状态
   const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -5268,6 +5270,7 @@ const ChatPage: React.FC = () => {
               </div>
             ) : (
               /* 通话中控制栏 - 参考图1底部样式 */
+              <>
               <div className="flex items-center justify-center gap-8">
                 {/* 挂断按钮 */}
                 <Button
@@ -5295,15 +5298,55 @@ const ChatPage: React.FC = () => {
                   </Button>
                 )}
                 
-                {/* 扬声器按钮 */}
+                {/* 键盘输入按钮 */}
                 <Button
                   variant="ghost"
                   size="lg"
-                  className="w-14 h-14 rounded-full bg-white hover:bg-gray-100 text-gray-700 shadow-lg"
+                  className={`w-14 h-14 rounded-full shadow-lg transition-all ${
+                    showCallTextInput 
+                      ? 'bg-primary hover:bg-primary/90 text-white' 
+                      : 'bg-white hover:bg-gray-100 text-gray-700'
+                  }`}
+                  onClick={() => setShowCallTextInput(!showCallTextInput)}
                 >
-                  <Volume2 className="w-6 h-6" />
+                  <Keyboard className="w-6 h-6" />
                 </Button>
               </div>
+              
+              {/* 文字输入框 - 不起眼的隐藏式 */}
+              {showCallTextInput && inCall && (
+                <div className="mt-3 flex items-center gap-2 px-2">
+                  <input
+                    type="text"
+                    value={callTextInput}
+                    onChange={(e) => setCallTextInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && callTextInput.trim() && !callLoading) {
+                        autoSendCallMessageRef.current?.(callTextInput.trim());
+                        setCallTextInput('');
+                      }
+                    }}
+                    placeholder="输入文字..."
+                    className="flex-1 h-9 px-3 rounded-full bg-white/90 text-gray-800 text-sm placeholder:text-gray-400 outline-none"
+                    autoFocus
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-9 h-9 rounded-full bg-primary text-white"
+                    disabled={!callTextInput.trim() || callLoading}
+                    onClick={() => {
+                      if (callTextInput.trim()) {
+                        autoSendCallMessageRef.current?.(callTextInput.trim());
+                        setCallTextInput('');
+                      }
+                    }}
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+              </>
             )}
           </div>
         </div>
