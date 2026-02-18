@@ -60,27 +60,40 @@ const MusicPage: React.FC = () => {
     setUploadProgress(0);
     
     try {
-      // 移除文件名中的特殊字符，防止400错误
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const fileName = `${user.id}/${Date.now()}_${safeName}`;
       
-      // 模拟上传进度（SDK不支持进度回调）
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 5, 90));
-      }, 500);
+      // 使用 XMLHttpRequest 获取真实上传进度
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       
-      // 使用 Supabase SDK 上传，更可靠
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        });
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      if (uploadError) throw uploadError;
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${supabaseUrl}/storage/v1/object/avatars/${fileName}`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.setRequestHeader('x-upsert', 'false');
+        
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress(pct);
+          }
+        };
+        
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`上传失败 (${xhr.status}): ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('网络错误，请检查网络后重试'));
+        xhr.ontimeout = () => reject(new Error('上传超时，请重试'));
+        xhr.timeout = 600000; // 10分钟超时
+        
+        xhr.send(file);
+      });
       
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
