@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
 import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, Mic, MicOff, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download, Keyboard } from 'lucide-react';
+import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download, Keyboard } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
 import VirtualMessageList from '@/components/chat/VirtualMessageList';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
 import UserTransferCard from '@/components/chat/UserTransferCard';
 import { defaultStickers, matchSticker, parseStickerRequest, shouldSendSticker, Sticker as StickerType } from '@/data/stickers';
-import { useSpeechToText } from '@/hooks/useSpeechToText';
+
 import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 import VoiceWaveform from '@/components/chat/VoiceWaveform';
 import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
@@ -319,8 +319,6 @@ const ChatPage: React.FC = () => {
   const [callStartTime, setCallStartTime] = useState<number | null>(null); // 通话开始时间
   const [callDuration, setCallDuration] = useState(0); // 通话时长（秒）
   const [isAISpeaking, setIsAISpeaking] = useState(false); // AI正在说话（TTS播放中）
-  const [interimTranscript, setInterimTranscript] = useState(''); // 临时识别文字
-  const [showCallTextInput, setShowCallTextInput] = useState(false); // 通话中文字输入
   const [callTextInput, setCallTextInput] = useState(''); // 通话文字输入内容
   // TTS相关状态
   const [ttsConfig, setTtsConfig] = useState<{ enabled: boolean; baseUrl: string; apiKey: string; model: string } | null>(null);
@@ -401,36 +399,6 @@ const ChatPage: React.FC = () => {
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
 
-  // 语音输入 Hook - 微信风格：识别完成自动发送
-  const speechToText = useSpeechToText({
-    lang: 'zh-CN',
-    continuous: true,
-    interimResults: true,
-    persistent: true,
-    onFinal: (text) => {
-      console.log('[Call] Speech final:', text, 'inCall:', inCall, 'isAISpeaking:', isAISpeaking);
-      if (text.trim() && showCallDialog && inCall && !isAISpeaking) {
-        // 自动发送识别到的文字
-        autoSendCallMessageRef.current?.(text.trim());
-      }
-    },
-    onInterim: (text) => {
-      // 实时显示正在识别的文字
-      if (showCallDialog && inCall) {
-        setInterimTranscript(text);
-      }
-    },
-    onError: (message) => {
-      console.error('[Call] Speech error:', message);
-      toast.error(message);
-    },
-    onAudioStart: () => {
-      console.log('[Call] Audio activity started');
-    },
-    onAudioEnd: () => {
-      console.log('[Call] Audio activity ended');
-    },
-  });
 
   // 先定义 fetchProfile - 需要在 useEffect 之前
   const fetchProfile = useCallback(async () => {
@@ -3768,19 +3736,6 @@ const ChatPage: React.FC = () => {
     setCallRinging(false);
     setInCall(true);
     setCallStartTime(Date.now());
-    setInterimTranscript('');
-
-    // 【关键修复】在用户点击手势的同步调用链中立即启动语音识别
-    // 移动端浏览器（Android/iOS）要求 start() 必须在用户手势上下文中
-    // 不能放在 await 之后或 setTimeout/回调中，否则会被拒绝
-    if (speechToText.isSupported) {
-      try {
-        console.log('[Call] Starting speech recognition immediately in user gesture');
-        speechToText.start();
-      } catch (e) {
-        console.warn('[Call] Immediate speech start failed:', e);
-      }
-    }
 
     // 同时解锁音频（不阻塞）
     audioQueue.unlock().catch(() => {});
@@ -3796,10 +3751,6 @@ const ChatPage: React.FC = () => {
     if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
       try {
         setIsAISpeaking(true);
-        // TTS播放时暂停识别避免识别AI声音
-        if (speechToText.isListening) {
-          speechToText.stop();
-        }
 
         const controller = new AbortController();
         const ttsTimeout = window.setTimeout(() => controller.abort(), 8000);
@@ -3831,35 +3782,19 @@ const ChatPage: React.FC = () => {
             src: audioUrl,
             onEnd: () => {
               setIsAISpeaking(false);
-              // 权限已在手势中获取，这里重启是安全的
-              if (speechToText.isSupported && !speechToText.isListening) {
-                speechToText.start();
-              }
             },
             onError: () => {
               setIsAISpeaking(false);
-              if (speechToText.isSupported && !speechToText.isListening) {
-                speechToText.start();
-              }
             },
           }).catch(() => {
             setIsAISpeaking(false);
-            if (speechToText.isSupported && !speechToText.isListening) {
-              speechToText.start();
-            }
           });
         } else {
           setIsAISpeaking(false);
-          if (speechToText.isSupported && !speechToText.isListening) {
-            speechToText.start();
-          }
         }
       } catch (err) {
         console.error('TTS error:', err);
         setIsAISpeaking(false);
-        if (speechToText.isSupported && !speechToText.isListening) {
-          speechToText.start();
-        }
       }
     }
     // 没有TTS时识别已在上面启动，无需额外操作
@@ -3877,9 +3812,6 @@ const ChatPage: React.FC = () => {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
-    if (speechToText.isListening || speechToText.isPersistentEnabled) {
-      speechToText.stop();
-    }
     
     // 缓存需要保存的数据
     const msgsToSave = [...callMessages];
@@ -3896,7 +3828,6 @@ const ChatPage: React.FC = () => {
     setCallVideoUrl(null);
     setCallVideoPlaying(false);
     setIsAISpeaking(false);
-    setInterimTranscript('');
     
     // 播放挂断音效（非阻塞）
     try {
@@ -4033,8 +3964,6 @@ const ChatPage: React.FC = () => {
   const autoSendCallMessage = useCallback(async (userText: string) => {
     if (!userText.trim() || callLoading || !character) return;
 
-    // 清空临时识别文字
-    setInterimTranscript('');
     setCallMessages(prev => [...prev, { role: 'user', content: userText }]);
     setCallLoading(true);
 
@@ -4155,26 +4084,11 @@ const ChatPage: React.FC = () => {
         // 调试日志
         console.log('TTS check - enabled:', ttsConfig?.enabled, 'apiKey:', !!ttsConfig?.apiKey, 'baseUrl:', !!ttsConfig?.baseUrl, 'voice_id:', character?.voice_id);
         
-        // 恢复语音识别的辅助函数 - 权限已在接听时获取，直接重启即可
-        const resumeSpeechRecognition = () => {
-          console.log('[Call] Resuming speech recognition');
+        const resumeAfterTTS = () => {
           setIsAISpeaking(false);
-          if (speechToText.isSupported && !speechToText.isListening) {
-            // 短延迟确保音频完全释放麦克风
-            setTimeout(() => {
-              if (!speechToText.isListening) {
-                console.log('[Call] Starting speech recognition after TTS');
-                speechToText.start();
-              }
-            }, 300);
-          }
         };
         
         if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
-          // 暂停语音识别，避免识别到AI说话的声音
-          if (speechToText.isListening) {
-            speechToText.stop();
-          }
           setIsAISpeaking(true);
           
           console.log('Generating TTS for:', assistantContent.slice(0, 50));
@@ -4215,17 +4129,16 @@ const ChatPage: React.FC = () => {
               audioQueue.enqueue({
                 src: audioUrl,
                 onEnd: () => {
-                  console.log('TTS playback ended, resuming speech recognition');
-                  resumeSpeechRecognition();
+                  console.log('TTS playback ended');
+                  resumeAfterTTS();
                 },
                 onError: () => {
                   console.error('TTS playback error');
-                  resumeSpeechRecognition();
+                  resumeAfterTTS();
                 },
-              }).catch(() => resumeSpeechRecognition());
+              }).catch(() => resumeAfterTTS());
             } else {
-              console.log('No audio content in TTS response');
-              resumeSpeechRecognition();
+              resumeAfterTTS();
             }
           } catch (err: any) {
             clearTimeout(ttsTimeout);
@@ -4235,12 +4148,10 @@ const ChatPage: React.FC = () => {
             } else {
               console.error('TTS generation error:', err);
             }
-            resumeSpeechRecognition();
+            resumeAfterTTS();
           }
         } else {
-          console.log('TTS not configured or missing voice_id');
-          // 没有TTS配置，直接恢复识别
-          resumeSpeechRecognition();
+          resumeAfterTTS();
         }
         setCallMessages(prev => [...prev, { role: 'assistant', content: assistantContent, audioBase64 }]);
       }
@@ -4250,7 +4161,7 @@ const ChatPage: React.FC = () => {
     }
 
     setCallLoading(false);
-  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, speechToText, inCall, audioQueue]);
+  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, audioQueue]);
 
   // 更新自动发送函数引用
   useEffect(() => {
@@ -4805,18 +4716,6 @@ const ChatPage: React.FC = () => {
           >
             <Send className="w-4 h-4" />
           </Button>
-        ) : speechToText.isSupported ? (
-          <Button
-            size="icon"
-            onClick={speechToText.toggle}
-            className={`flex-shrink-0 w-9 h-9 rounded-full transition-all ${
-              speechToText.isListening 
-                ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                : 'bg-gradient-to-r from-pink-400 to-purple-400 text-white'
-            }`}
-          >
-            {speechToText.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </Button>
         ) : (
           <Button 
             size="icon" 
@@ -5136,13 +5035,6 @@ const ChatPage: React.FC = () => {
                 }
               </p>
               
-              {/* 语音识别状态显示 - 更简洁 */}
-              {inCall && speechToText.isListening && !isAISpeaking && !callLoading && (
-                <div className="mt-2 px-3 py-1 bg-red-500/80 rounded-full flex items-center gap-2">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  <span className="text-white text-xs">正在听...</span>
-                </div>
-              )}
               {inCall && isAISpeaking && (
                 <div className="mt-2 px-3 py-1 bg-green-500/80 rounded-full flex items-center gap-2">
                   <Volume2 className="w-3 h-3 text-white animate-pulse" />
@@ -5195,26 +5087,6 @@ const ChatPage: React.FC = () => {
                   </div>
                 )}
                 
-                {/* 正在识别临时文字 - 带波形动画 */}
-                {interimTranscript && !isAISpeaking && (
-                  <div className="flex flex-col items-center gap-2">
-                    <VoiceWaveform isActive={true} color="#ef4444" bars={5} />
-                    <div className="px-4 py-2 bg-white/90 rounded-2xl shadow-sm max-w-[80%]">
-                      <span className="text-gray-600 text-sm">{interimTranscript}</span>
-                      <span className="inline-block w-1 h-4 bg-gray-400 ml-1 animate-pulse" />
-                    </div>
-                  </div>
-                )}
-                
-                {/* 等待用户说话 - 带波形动画 */}
-                {!isAISpeaking && !interimTranscript && !callLoading && speechToText.isListening && (
-                  <div className="flex flex-col items-center gap-2">
-                    <VoiceWaveform isActive={true} color="#ef4444" bars={7} />
-                    <span className="text-sm text-white/80">
-                      正在听你说话...
-                    </span>
-                  </div>
-                )}
                 
                 {/* AI回复加载中 */}
                 {callLoading && !isAISpeaking && (
@@ -5282,40 +5154,25 @@ const ChatPage: React.FC = () => {
                   <Phone className="w-6 h-6 rotate-[135deg]" />
                 </Button>
                 
-                {/* 麦克风按钮 - 语音输入切换 */}
-                {speechToText.isSupported && (
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    className={`w-14 h-14 rounded-full shadow-lg transition-all ${
-                      speechToText.isListening 
-                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                        : 'bg-white hover:bg-gray-100 text-gray-700'
-                    }`}
-                    onClick={speechToText.toggle}
-                  >
-                    {speechToText.isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-                  </Button>
-                )}
-                
-                {/* 键盘输入按钮 */}
+                {/* 键盘输入按钮 - 小而不起眼 */}
                 <Button
                   variant="ghost"
-                  size="lg"
-                  className={`w-14 h-14 rounded-full shadow-lg transition-all ${
-                    showCallTextInput 
-                      ? 'bg-primary hover:bg-primary/90 text-white' 
-                      : 'bg-white hover:bg-gray-100 text-gray-700'
-                  }`}
-                  onClick={() => setShowCallTextInput(!showCallTextInput)}
+                  size="icon"
+                  className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white/60"
+                  onClick={() => {
+                    const el = document.getElementById('call-text-input');
+                    if (el) {
+                      el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+                    }
+                  }}
                 >
-                  <Keyboard className="w-6 h-6" />
+                  <Keyboard className="w-4 h-4" />
                 </Button>
               </div>
               
-              {/* 文字输入框 - 不起眼的隐藏式 */}
-              {showCallTextInput && inCall && (
-                <div className="mt-3 flex items-center gap-2 px-2">
+              {/* 文字输入框 - 默认隐藏 */}
+              {inCall && (
+                <div id="call-text-input" className="mt-3 flex items-center gap-2 px-2" style={{ display: 'none' }}>
                   <input
                     type="text"
                     value={callTextInput}
