@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Music, Play, Pause, Upload, Repeat, Repeat1, SkipBack, SkipForward, Edit2, Image, Check, X, Trash2, Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
-import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
@@ -65,40 +64,23 @@ const MusicPage: React.FC = () => {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const fileName = `${user.id}/${Date.now()}_${safeName}`;
       
-      // 使用 XMLHttpRequest 来获取上传进度
-      const formData = new FormData();
-      formData.append('file', file);
+      // 模拟上传进度（SDK不支持进度回调）
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 5, 90));
+      }, 500);
       
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      // 使用 Supabase SDK 上传，更可靠
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        });
       
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            const percent = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(percent);
-          }
-        });
-        
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload failed: ${xhr.status}`));
-          }
-        });
-        
-        xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-        
-        const supabaseUrl = getSupabaseUrl();
-        xhr.open('POST', `${supabaseUrl}/storage/v1/object/avatars/${fileName}`);
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-        xhr.setRequestHeader('x-upsert', 'false');
-        xhr.send(file);
-      });
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      if (uploadError) throw uploadError;
       
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
