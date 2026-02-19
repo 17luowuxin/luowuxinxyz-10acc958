@@ -4,7 +4,7 @@ import { ChevronLeft, Music, Play, Pause, Upload, Repeat, Repeat1, SkipBack, Ski
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { cloudSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusicPlayer } from '@/contexts/MusicContext';
 import { toast } from 'sonner';
@@ -64,7 +64,7 @@ const MusicPage: React.FC = () => {
       const fileName = `${user.id}/${Date.now()}_${safeName}`;
       
       // 使用SDK上传，显示简单进度动画
-      const uploadPromise = supabase.storage
+      const uploadPromise = cloudSupabase.storage
         .from('avatars')
         .upload(fileName, file, {
           contentType: file.type || 'application/octet-stream',
@@ -85,10 +85,10 @@ const MusicPage: React.FC = () => {
       if (uploadError) throw uploadError;
       setUploadProgress(100);
       
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const { data: urlData } = cloudSupabase.storage.from('avatars').getPublicUrl(fileName);
       
       const title = file.name.replace(/\.[^/.]+$/, '');
-      const { error: insertError } = await supabase
+      const { error: insertError } = await cloudSupabase
         .from('music')
         .insert({ 
           title, 
@@ -152,17 +152,17 @@ const MusicPage: React.FC = () => {
       const compressedFile = new File([compressedBlob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
       
       const fileName = `${user.id}/covers/${Date.now()}_${compressedFile.name}`;
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await cloudSupabase.storage
         .from('avatars')
         .upload(fileName, compressedFile);
       
       if (uploadError) throw uploadError;
       
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const { data: urlData } = cloudSupabase.storage.from('avatars').getPublicUrl(fileName);
       const publicUrl = urlData.publicUrl;
       
       if (trackId) {
-        const { error: updateError } = await supabase
+        const { error: updateError } = await cloudSupabase
           .from('music')
           .update({ cover_url: publicUrl })
           .eq('id', trackId)
@@ -188,7 +188,7 @@ const MusicPage: React.FC = () => {
 
   const handleUpdateTitle = async (trackId: string) => {
     if (!editTitle.trim()) return;
-    await supabase.from('music').update({ title: editTitle }).eq('id', trackId);
+    await cloudSupabase.from('music').update({ title: editTitle }).eq('id', trackId);
     setEditingId(null);
     setEditTitle('');
     fetchTracks();
@@ -196,7 +196,7 @@ const MusicPage: React.FC = () => {
   };
 
   const handleDelete = async (trackId: string) => {
-    await supabase.from('music').delete().eq('id', trackId);
+    await cloudSupabase.from('music').delete().eq('id', trackId);
     fetchTracks();
     toast.success('已删除');
   };
