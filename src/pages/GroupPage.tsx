@@ -30,12 +30,17 @@ const GroupPage: React.FC = () => {
   }, [user]);
 
   const fetchGroups = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('group_chats')
       .select('*, group_members(character_id, characters(id, name, avatar_url))')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
-    if (data) setGroups(data);
+    if (error) {
+      console.error('获取群聊列表失败:', error);
+      toast.error('获取群聊列表失败: ' + error.message);
+      return;
+    }
+    setGroups(data || []);
   };
 
   const fetchCharacters = async () => {
