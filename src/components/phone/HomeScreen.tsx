@@ -434,15 +434,16 @@ const HomeScreen: React.FC = () => {
   // 第一页布局
   const renderPage1 = () => (
     <div className="flex flex-col gap-4 px-4">
-      {/* 第一行：3:2大图在左上 + 右侧3个APP横排 */}
+      {/* 第一行：3:2大图在左上 + 右侧2x2四宫格(相册、相机、我的、财务) */}
       <div className="flex gap-3">
         <div className="w-[55%]">
           {renderImageSlot('page_image_top', '3/2')}
         </div>
-        <div className="flex gap-2 items-start pt-1">
+        <div className="grid grid-cols-2 gap-2 items-start pt-1">
           {renderAppIcon(page1Apps[0])}
           {renderAppIcon(page1Apps[1])}
           {renderAppIcon(page1Apps[2])}
+          {renderAppIcon(page1Apps[11])}
         </div>
       </div>
 
@@ -469,8 +470,6 @@ const HomeScreen: React.FC = () => {
           {renderAppIcon(page1Apps[8])}
           {renderAppIcon(page1Apps[9])}
           {renderAppIcon(page1Apps[10])}
-          {page1Apps[11] && renderAppIcon(page1Apps[11])}
-          {page1Apps[12] && renderAppIcon(page1Apps[12])}
         </div>
       </div>
     </div>
