@@ -469,6 +469,8 @@ const HomeScreen: React.FC = () => {
           {renderAppIcon(page1Apps[8])}
           {renderAppIcon(page1Apps[9])}
           {renderAppIcon(page1Apps[10])}
+          {page1Apps[11] && renderAppIcon(page1Apps[11])}
+          {page1Apps[12] && renderAppIcon(page1Apps[12])}
         </div>
       </div>
     </div>
