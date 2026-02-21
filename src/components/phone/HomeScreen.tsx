@@ -439,7 +439,7 @@ const HomeScreen: React.FC = () => {
         <div className="w-[55%]">
           {renderImageSlot('page_image_top', '3/2')}
         </div>
-        <div className="grid grid-cols-2 gap-2 items-start pt-1">
+        <div className="grid grid-cols-2 gap-2 items-center justify-items-center flex-1">
           {renderAppIcon(page1Apps[0])}
           {renderAppIcon(page1Apps[1])}
           {renderAppIcon(page1Apps[2])}
