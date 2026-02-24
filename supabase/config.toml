@@ -59,3 +59,9 @@ verify_jwt = false
 
 [functions.test-unsplash]
 verify_jwt = false
+
+[functions.novelai-generate]
+verify_jwt = false
+
+[functions.generate-image]
+verify_jwt = false
