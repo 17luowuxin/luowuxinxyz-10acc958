@@ -181,7 +181,7 @@ ${charPersona}
         }
 
         if (i < messagesToGenerate - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
 
