@@ -49,7 +49,7 @@ serve(async (req) => {
       characterReplyMode,
     } = await req.json();
 
-    console.log('block-message called:', { action, userId, characterId, apiUrl: apiUrl?.substring(0, 30), batchCount });
+    console.log('block-message called (v2):', { action, userId, characterId, apiUrl: apiUrl?.substring(0, 30), batchCount });
 
     if (action === 'generate_block_message') {
       
