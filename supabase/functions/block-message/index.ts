@@ -74,7 +74,12 @@ serve(async (req) => {
         fallbackName: effectiveCharacter.name,
       });
 
-      // 拉黑消息在所有模式下都生效（不再限制仅online模式）
+      // 小说模式不支持拉黑消息
+      if (effectiveCharacter.reply_mode === 'novel') {
+        return new Response(JSON.stringify({ success: false, message: 'Novel mode does not support block messages' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       // 获取拉黑记录
       const { data: blockRecord } = await supabase

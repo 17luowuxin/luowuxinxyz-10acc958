@@ -3007,7 +3007,8 @@ const ChatPage: React.FC = () => {
     }
 
     if (!isBlocked) return;
-    // 拉黑消息在所有模式下都生效（不再限制仅online模式）
+    // 小说模式不支持拉黑消息
+    if (replyMode !== 'online') return;
     if (!user?.id || !characterId) return;
 
     blockedMessageTimerRef.current = setTimeout(async () => {
