@@ -57,19 +57,21 @@ const stripNsfwBlocksFromNegative = (negative: string) =>
     .join(', ');
 
 // ============ 自动补全高质量后缀 & 针对性关键词优化 ============
-const QUALITY_SUFFIX = 'masterpiece, best quality, highly detailed, realistic skin texture, amazing shading, beautiful lighting';
+// 仅追加轻量质量后缀，不加 realistic skin texture（与动漫模型冲突）
+const QUALITY_SUFFIX = 'masterpiece, best quality, amazing quality';
 
+// 关键词增强仅匹配中文关键词，避免英文标签 "blue eyes" 误触发
 const KEYWORD_BOOSTS: Array<{ keywords: string[]; tags: string }> = [
-  { keywords: ['腹肌', 'abs', '肌肉', 'muscular'], tags: 'defined abs, muscular, fit body, male focus, toned body, six pack abs' },
-  { keywords: ['胸', 'breasts', '巨乳', 'oppai'], tags: 'detailed body, beautiful body, soft lighting' },
-  { keywords: ['眼睛', 'eyes', '瞳'], tags: 'beautiful detailed eyes, sparkling eyes, eye focus' },
-  { keywords: ['头发', 'hair', '长发', '短发'], tags: 'beautiful detailed hair, flowing hair, hair strand details' },
-  { keywords: ['风景', 'landscape', 'scenery', '背景'], tags: 'detailed background, beautiful scenery, depth of field' },
-  { keywords: ['花', 'flower', '花园'], tags: 'beautiful flowers, floral, petals, botanical details' },
-  { keywords: ['战斗', 'battle', 'fight', '打斗'], tags: 'dynamic pose, action scene, dramatic lighting, motion blur' },
-  { keywords: ['夜', 'night', '月', 'moon'], tags: 'night sky, moonlight, starry sky, atmospheric lighting' },
-  { keywords: ['制服', 'uniform', '校服', '西装', 'suit'], tags: 'detailed clothing, fabric texture, well-dressed' },
-  { keywords: ['泳装', 'swimsuit', '比基尼', 'bikini'], tags: 'beach, summer, water, sunlight' },
+  { keywords: ['腹肌', '肌肉'], tags: 'defined abs, muscular, fit body, male focus, toned body, six pack abs' },
+  { keywords: ['胸', '巨乳'], tags: 'detailed body, beautiful body, soft lighting' },
+  { keywords: ['眼睛', '瞳孔'], tags: 'beautiful detailed eyes, sparkling eyes, eye focus' },
+  { keywords: ['长发', '短发', '头发'], tags: 'beautiful detailed hair, flowing hair' },
+  { keywords: ['风景', '背景'], tags: 'detailed background, beautiful scenery, depth of field' },
+  { keywords: ['花', '花园'], tags: 'beautiful flowers, floral, petals' },
+  { keywords: ['战斗', '打斗'], tags: 'dynamic pose, action scene, dramatic lighting' },
+  { keywords: ['夜晚', '月亮', '夜空'], tags: 'night sky, moonlight, starry sky, atmospheric lighting' },
+  { keywords: ['制服', '校服', '西装'], tags: 'detailed clothing, fabric texture, well-dressed' },
+  { keywords: ['泳装', '比基尼'], tags: 'beach, summer, water, sunlight' },
 ];
 
 function enhancePrompt(rawPrompt: string): string {
@@ -78,11 +80,16 @@ function enhancePrompt(rawPrompt: string): string {
   let enhanced = rawPrompt.trim();
   const lower = enhanced.toLowerCase();
 
-  // 收集需要追加的关键词 boost
+  // 如果提示词已经很长（>120字符），说明用户已经精心编写，只加质量后缀
+  const isDetailedPrompt = enhanced.length > 120;
+
+  // 收集需要追加的关键词 boost（仅对较短提示词）
   const boosts: string[] = [];
-  for (const rule of KEYWORD_BOOSTS) {
-    if (rule.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
-      boosts.push(rule.tags);
+  if (!isDetailedPrompt) {
+    for (const rule of KEYWORD_BOOSTS) {
+      if (rule.keywords.some(kw => enhanced.includes(kw))) {
+        boosts.push(rule.tags);
+      }
     }
   }
 
