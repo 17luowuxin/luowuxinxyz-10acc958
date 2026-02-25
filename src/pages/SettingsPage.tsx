@@ -535,8 +535,13 @@ const SettingsPage: React.FC = () => {
   const saveNovelaiGenSettings = async () => {
     if (!user) return;
 
+    const selectedSize = NOVELAI_SIZES.find(s => s.id === novelaiSize) || NOVELAI_SIZES[1];
+
     const settingsToSave = [
       { provider: 'novelai_size', value: novelaiSize },
+      // 兼容旧逻辑：同时保存宽高，避免某些后端分支只读 width/height
+      { provider: 'novelai_width', value: String(selectedSize.width) },
+      { provider: 'novelai_height', value: String(selectedSize.height) },
       { provider: 'novelai_steps', value: String(novelaiSteps) },
       { provider: 'novelai_scale', value: String(novelaiScale) },
       { provider: 'novelai_sampler', value: novelaiSampler },

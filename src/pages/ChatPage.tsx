@@ -334,6 +334,10 @@ const ChatPage: React.FC = () => {
   // 沉默自动回复相关状态（仅线上模式生效）
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoReplyingRef = useRef(false); // 防止重复触发
+
+  // 拉黑后持续消息相关状态（每1分钟尝试一次）
+  const blockedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isBlockMessageSendingRef = useRef(false);
   
   // 本地缓存 Hooks（秒开界面）
   const { getCache: getCachedMessages, setCache: cacheMessages, clearCache: clearMessagesCache } = useMessagesCache(user?.id, characterId);
@@ -2977,25 +2981,80 @@ const ChatPage: React.FC = () => {
   
   // 沉默自动回复功能：仅在线上模式开启时，用户2分钟不说话触发AI主动发消息
   const SILENCE_TIMEOUT_MS = 2 * 60 * 1000; // 2分钟
+  const BLOCKED_MESSAGE_TIMEOUT_MS = 60 * 1000; // 拉黑后1分钟继续发
   const AUTO_REPLY_INTERVAL_MS = 1500; // 连发消息间隔1.5秒
-  
+
   const resetSilenceTimer = useCallback(() => {
-    // 清除旧计时器
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
-    
-    // 仅在线上模式且角色开启了自动回复时启动计时器
+
     if (replyMode !== 'online') return;
     if (!character?.auto_reply_enabled) return;
     if (!user?.id || !characterId || !character || !apiConfig?.apiKey) return;
-    
+    if (isBlocked) return; // 拉黑状态不走普通沉默自动回复
+
     silenceTimerRef.current = setTimeout(() => {
       triggerAutoReply();
     }, SILENCE_TIMEOUT_MS);
-  }, [replyMode, user?.id, characterId, character, apiConfig?.apiKey]);
-  
+  }, [replyMode, user?.id, characterId, character, apiConfig?.apiKey, isBlocked]);
+
+  const resetBlockedMessageTimer = useCallback(() => {
+    if (blockedMessageTimerRef.current) {
+      clearTimeout(blockedMessageTimerRef.current);
+      blockedMessageTimerRef.current = null;
+    }
+
+    if (!isBlocked) return;
+    if (replyMode !== 'online') return;
+    if (!user?.id || !characterId) return;
+
+    blockedMessageTimerRef.current = setTimeout(async () => {
+      if (isBlockMessageSendingRef.current) return;
+      isBlockMessageSendingRef.current = true;
+
+      try {
+        const { data: apiSettings } = await supabase
+          .from('api_keys')
+          .select('api_key, provider, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
+        const customKey = apiSettings?.find(s => s.provider === 'custom');
+        const customModel = apiSettings?.find(s => s.provider === 'custom_model');
+
+        const { data, error } = await supabase.functions.invoke('block-message', {
+          body: {
+            action: 'generate_block_message',
+            userId: user.id,
+            characterId,
+            apiUrl: customUrl?.api_key || '',
+            apiKey: customKey?.api_key || '',
+            model: customModel?.api_key || '',
+            batchCount: 1,
+            characterName: character?.name || 'TA',
+            characterPersona: character?.persona || '一个温柔体贴、很在意用户关系的人',
+            characterReplyMode: replyMode,
+          },
+        });
+
+        if (error) {
+          console.error('[BlockAutoMessage] invoke error:', error);
+        } else if ((data as any)?.success) {
+          await refetchBlockStatus();
+          await fetchMessagesWithTransfers();
+        }
+      } catch (e) {
+        console.error('[BlockAutoMessage] error:', e);
+      } finally {
+        isBlockMessageSendingRef.current = false;
+        resetBlockedMessageTimer();
+      }
+    }, BLOCKED_MESSAGE_TIMEOUT_MS);
+  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
+
   const triggerAutoReply = async () => {
     // 防止重复触发
     if (isAutoReplyingRef.current) return;
@@ -3003,18 +3062,17 @@ const ChatPage: React.FC = () => {
     if (replyMode !== 'online') return; // 非线上模式不触发
     if (!character?.auto_reply_enabled) return; // 角色未开启自动回复
     if (!user?.id || !characterId || !character || !apiConfig?.apiKey) return;
-    
+    if (isBlocked) return;
+
     isAutoReplyingRef.current = true;
     console.log('[AutoReply] 用户沉默2分钟，触发自动回复');
-    
+
     try {
-      // 获取最近消息作为上下文
       const recentMessages = messages
         .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.content?.startsWith('[STICKER:'))
         .slice(-historyLimit)
         .map(m => ({ role: m.role, content: m.content }));
-      
-      // 调用API，传递 isAutoReply 标记
+
       const body: any = {
         messages: recentMessages,
         characterName: character?.name,
@@ -3023,22 +3081,22 @@ const ChatPage: React.FC = () => {
         persona: character?.persona,
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         replyMode: 'online',
-        onlineMessageCount: '3-5', // 自动回复固定3-5条
-        transferEnabled: false, // 自动回复不发转账
+        onlineMessageCount: '3-5',
+        transferEnabled: false,
         historyLimit: historyLimit,
-        isAutoReply: true, // 标记为自动回复
+        isAutoReply: true,
         clientTime: {
           timestamp: Date.now(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           offset: new Date().getTimezoneOffset(),
         }
       };
-      
+
       body.userApiKey = apiConfig.apiKey;
       body.provider = apiConfig.provider;
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
-      
+
       const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -3047,33 +3105,31 @@ const ChatPage: React.FC = () => {
         },
         body: JSON.stringify(body),
       });
-      
+
       if (!resp.ok || !resp.body) {
         console.error('[AutoReply] 请求失败');
         isAutoReplyingRef.current = false;
         return;
       }
-      
-      // 读取响应
+
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
       }
       fullText += decoder.decode();
-      
-      // 解析响应
+
       let assistantContent = '';
-      
+
       if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
         try {
           const json = JSON.parse(fullText);
           if (!json.error) {
-            assistantContent = json.choices?.[0]?.message?.content 
+            assistantContent = json.choices?.[0]?.message?.content
               || json.choices?.[0]?.delta?.content
               || json.content
               || '';
@@ -3084,20 +3140,20 @@ const ChatPage: React.FC = () => {
           }
         }
       }
-      
+
       if (!assistantContent) {
         const lines = fullText.split('\n');
         for (const rawLine of lines) {
           let line = rawLine.trim();
           if (!line || line.startsWith(':')) continue;
-          
+
           if (line.startsWith('data: ')) {
             const jsonStr = line.slice(6).trim();
             if (jsonStr === '[DONE]') continue;
-            
+
             try {
               const json = JSON.parse(jsonStr);
-              const delta = json.choices?.[0]?.delta?.content 
+              const delta = json.choices?.[0]?.delta?.content
                 || json.choices?.[0]?.message?.content
                 || '';
               if (delta) assistantContent += delta;
@@ -3105,98 +3161,95 @@ const ChatPage: React.FC = () => {
           }
         }
       }
-      
+
       if (!assistantContent.trim()) {
         console.error('[AutoReply] AI返回为空');
         isAutoReplyingRef.current = false;
         return;
       }
-      
-      // 解析多条消息（线上模式用 ||| 分隔）
+
       const { parseOnlineMessages, isValidMessageContent } = await import('@/utils/messageParser');
       let multiMessages = parseOnlineMessages(assistantContent.trim(), 5);
-      
+
       if (multiMessages.length === 0 || !multiMessages.some(isValidMessageContent)) {
         multiMessages = [assistantContent.trim().replace(/\s*\|+\s*/g, ' ')];
       }
-      
-      // 最多5条，最少3条
+
       if (multiMessages.length > 5) {
         multiMessages = multiMessages.slice(0, 5);
       }
-      
-      console.log(`[AutoReply] 准备连发 ${multiMessages.length} 条消息`);
-      
-      // 逐条显示消息，模拟真人连发，每条间隔1.5秒
+
       for (let i = 0; i < multiMessages.length; i++) {
         const msgContent = multiMessages[i];
         if (!msgContent.trim()) continue;
-        
-        // 等待间隔
+
         if (i > 0) {
           await new Promise(r => setTimeout(r, AUTO_REPLY_INTERVAL_MS));
         }
-        
+
         const msgId = Date.now() + i;
-        
-        // 添加到消息列表
-        setMessages(prev => [...prev, { 
-          id: msgId, 
-          role: 'assistant', 
-          content: msgContent 
+        setMessages(prev => [...prev, {
+          id: msgId,
+          role: 'assistant',
+          content: msgContent
         }]);
-        
-        // 保存到数据库
-        await supabase.from('chat_messages').insert({ 
-          user_id: user?.id, 
-          character_id: characterId, 
-          role: 'assistant', 
-          content: msgContent 
+
+        await supabase.from('chat_messages').insert({
+          user_id: user?.id,
+          character_id: characterId,
+          role: 'assistant',
+          content: msgContent
         });
-        
-        // 触发推送通知（如果用户不在页面）
+
         if (characterId && character?.name && !isPageVisible.current) {
           triggerPush(characterId, character.name, msgContent);
         }
       }
-      
-      // 更新已读状态
+
       await markCurrentChatRead();
-      
       console.log('[AutoReply] 自动回复完成');
-      
     } catch (err) {
       console.error('[AutoReply] 错误:', err);
     }
-    
+
     isAutoReplyingRef.current = false;
-    
-    // 重新启动计时器（等待下次沉默）
     resetSilenceTimer();
   };
   
   // 页面加载和replyMode变化时管理沉默计时器
   useEffect(() => {
-    // 当进入聊天页面且为线上模式且角色开启自动回复时，启动沉默计时器
-    if (replyMode === 'online' && character?.auto_reply_enabled && user?.id && characterId && character && apiConfig?.apiKey && !loading) {
+    if (replyMode === 'online' && character?.auto_reply_enabled && user?.id && characterId && character && apiConfig?.apiKey && !loading && !isBlocked) {
       resetSilenceTimer();
     }
-    
+
+    if (isBlocked && replyMode === 'online' && user?.id && characterId) {
+      resetBlockedMessageTimer();
+    }
+
     return () => {
-      // 离开页面时清除计时器
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
       }
+      if (blockedMessageTimerRef.current) {
+        clearTimeout(blockedMessageTimerRef.current);
+        blockedMessageTimerRef.current = null;
+      }
     };
-  }, [replyMode, user?.id, characterId, character, apiConfig?.apiKey, resetSilenceTimer]);
-  
+  }, [replyMode, user?.id, characterId, character, apiConfig?.apiKey, resetSilenceTimer, resetBlockedMessageTimer, isBlocked, loading]);
+
   // 当replyMode从online切换到novel时，清除计时器
   useEffect(() => {
-    if (replyMode !== 'online' && silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-      console.log('[SilenceTimer] 非线上模式，清除计时器');
+    if (replyMode !== 'online') {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (blockedMessageTimerRef.current) {
+        clearTimeout(blockedMessageTimerRef.current);
+        blockedMessageTimerRef.current = null;
+      }
+      console.log('[Timer] 非线上模式，清除计时器');
     }
   }, [replyMode]);
 

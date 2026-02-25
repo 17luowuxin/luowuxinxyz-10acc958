@@ -11,11 +11,17 @@ const corsHeaders = {
 interface NovelAIConfig {
   apiKey: string;
   model?: string;
+  size?: string;
   steps?: number;
   scale?: number;
   sampler?: string;
   width?: number;
   height?: number;
+  seed?: number;
+  ucPreset?: number;
+  qualityTags?: boolean;
+  smea?: boolean;
+  smeaDyn?: boolean;
   negativePrompt?: string;
   nsfwMode?: boolean;
   referenceImage?: string;
@@ -24,6 +30,41 @@ interface NovelAIConfig {
   vibeImage?: string;
   vibeStrength?: number;
 }
+
+const NOVELAI_SIZE_MAP: Record<string, { width: number; height: number }> = {
+  square: { width: 1024, height: 1024 },
+  portrait: { width: 832, height: 1216 },
+  landscape: { width: 1216, height: 832 },
+  portrait_small: { width: 640, height: 1024 },
+  landscape_small: { width: 1024, height: 640 },
+};
+
+const parseNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const stripNsfwBlocksFromNegative = (negative: string) =>
+  negative
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((tag) => !['nsfw', 'nude', 'naked', 'explicit', 'sexual'].includes(tag.toLowerCase()))
+    .join(', ');
+
+const resolveSize = (sizeId?: string, fallback?: { width?: number; height?: number }) => {
+  if (sizeId && NOVELAI_SIZE_MAP[sizeId]) {
+    return NOVELAI_SIZE_MAP[sizeId];
+  }
+  return {
+    width: fallback?.width || 832,
+    height: fallback?.height || 1216,
+  };
+};
 
 async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -48,12 +89,19 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
 
   const novelaiKey = pickLatest("novelai");
   const novelaiModel = pickLatest("novelai_model");
+  const novelaiSize = pickLatest("novelai_size");
   const novelaiSteps = pickLatest("novelai_steps");
   const novelaiScale = pickLatest("novelai_scale");
   const novelaiSampler = pickLatest("novelai_sampler");
   const novelaiWidth = pickLatest("novelai_width");
   const novelaiHeight = pickLatest("novelai_height");
-  const novelaiNegative = pickLatest("novelai_negative_prompt");
+  const novelaiSeed = pickLatest("novelai_seed");
+  const novelaiUcPreset = pickLatest("novelai_uc_preset");
+  const novelaiQualityTags = pickLatest("novelai_quality_tags");
+  const novelaiSmea = pickLatest("novelai_smea");
+  const novelaiSmeaDyn = pickLatest("novelai_smea_dyn");
+  const novelaiDefaultNegative = pickLatest("novelai_default_negative");
+  const novelaiLegacyNegative = pickLatest("novelai_negative_prompt");
   const novelaiNsfw = pickLatest("novelai_nsfw");
   const novelaiRefImage = pickLatest("novelai_reference_image");
   const novelaiRefStrength = pickLatest("novelai_reference_strength");
@@ -66,12 +114,18 @@ async function getNovelAIConfig(userId: string): Promise<NovelAIConfig | null> {
   return {
     apiKey: novelaiKey.api_key,
     model: novelaiModel?.api_key || "nai-diffusion-4-full",
+    size: novelaiSize?.api_key || 'portrait',
     steps: novelaiSteps ? parseInt(novelaiSteps.api_key) : 28,
     scale: novelaiScale ? parseFloat(novelaiScale.api_key) : 6.0,
     sampler: novelaiSampler?.api_key || "k_euler_ancestral",
-    width: novelaiWidth ? parseInt(novelaiWidth.api_key) : 832,
-    height: novelaiHeight ? parseInt(novelaiHeight.api_key) : 1216,
-    negativePrompt: novelaiNegative?.api_key,
+    width: novelaiWidth ? parseInt(novelaiWidth.api_key) : undefined,
+    height: novelaiHeight ? parseInt(novelaiHeight.api_key) : undefined,
+    seed: novelaiSeed ? parseInt(novelaiSeed.api_key) : -1,
+    ucPreset: novelaiUcPreset ? parseInt(novelaiUcPreset.api_key) : 0,
+    qualityTags: novelaiQualityTags ? novelaiQualityTags.api_key !== "false" : true,
+    smea: novelaiSmea ? novelaiSmea.api_key !== "false" : false,
+    smeaDyn: novelaiSmeaDyn?.api_key === "true",
+    negativePrompt: novelaiDefaultNegative?.api_key || novelaiLegacyNegative?.api_key,
     nsfwMode: novelaiNsfw?.api_key === "true",
     referenceImage: novelaiRefImage?.api_key,
     referenceStrength: novelaiRefStrength ? parseFloat(novelaiRefStrength.api_key) : 0.6,
@@ -94,6 +148,17 @@ serve(async (req) => {
       negativePrompt,
       referenceImage,
       referenceStrength,
+      width,
+      height,
+      steps,
+      scale,
+      sampler,
+      seed,
+      ucPreset,
+      qualityTags,
+      smea,
+      smeaDyn,
+      nsfwMode: requestNsfwMode,
       apiKey: requestApiKey,
     } = await req.json();
 
@@ -131,18 +196,27 @@ serve(async (req) => {
     const modelId = config.model || "nai-diffusion-4-5-full";
     // V4 和 V4.5 都使用 v4_prompt 格式
     const isV4OrNewer = modelId.includes("diffusion-4") || modelId.includes("diffusion-4-5");
-    
-    // User configurable parameters with defaults
-    const userSteps = config.steps || 28;
-    const userScale = config.scale || (isV4OrNewer ? 6.0 : 7.0);
-    const userSampler = config.sampler || "k_euler_ancestral";
-    const userWidth = config.width || (isV4OrNewer ? 832 : 640);
-    const userHeight = config.height || (isV4OrNewer ? 1216 : 640);
+
+    const requestedSize = resolveSize(config.size, { width: config.width, height: config.height });
+    const requestWidth = parseNumber(width);
+    const requestHeight = parseNumber(height);
+
+    // User configurable parameters with defaults + request overrides
+    const userSteps = parseNumber(steps) ?? config.steps ?? 28;
+    const userScale = parseNumber(scale) ?? config.scale ?? (isV4OrNewer ? 6.0 : 7.0);
+    const userSampler = (typeof sampler === 'string' && sampler.trim()) || config.sampler || "k_euler_ancestral";
+    const userWidth = requestWidth ?? config.width ?? requestedSize.width ?? (isV4OrNewer ? 832 : 640);
+    const userHeight = requestHeight ?? config.height ?? requestedSize.height ?? (isV4OrNewer ? 1216 : 640);
+    const userSeed = parseNumber(seed) ?? config.seed ?? -1;
+    const userUcPreset = parseNumber(ucPreset) ?? config.ucPreset ?? 0;
+    const userQualityTags = typeof qualityTags === 'boolean' ? qualityTags : (config.qualityTags ?? true);
+    const userSmea = typeof smea === 'boolean' ? smea : (config.smea ?? false);
+    const userSmeaDyn = typeof smeaDyn === 'boolean' ? smeaDyn : (config.smeaDyn ?? false);
 
     // 参考图/风格迁移图片过大会导致 NovelAI 400 “Error decoding request body”
     // 这里设置一个保守阈值，超过则自动跳过参考图参数并尝试继续生成。
     const MAX_REFERENCE_BASE64_LEN = 5_000_000; // ~3.5MB binary (rough)
-    
+
     console.log("Generating image with NovelAI:", {
       model: modelId,
       isV4OrNewer,
@@ -158,10 +232,13 @@ serve(async (req) => {
 
     // V4 models need different parameters
     // 根据NSFW模式决定负面提示词
-    const nsfwMode = config.nsfwMode || false;
+    const nsfwMode = typeof requestNsfwMode === 'boolean' ? requestNsfwMode : (config.nsfwMode || false);
     const baseNegative = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, transparent background, transparent, alpha channel";
-    const sfwNegative = nsfwMode ? baseNegative : baseNegative + ", nsfw, nude, naked, explicit, sexual";
-    const defaultNegative = negativePrompt || config.negativePrompt || sfwNegative;
+    const sfwNegative = nsfwMode ? baseNegative : `${baseNegative}, nsfw, nude, naked, explicit, sexual`;
+    const requestedNegative = (typeof negativePrompt === 'string' ? negativePrompt.trim() : '') || '';
+    const configNegative = (config.negativePrompt || '').trim();
+    const mergedNegative = requestedNegative || configNegative || sfwNegative;
+    const defaultNegative = nsfwMode ? stripNsfwBlocksFromNegative(mergedNegative) : mergedNegative;
 
     // Helper function to fetch image as base64
     const fetchImageAsBase64 = async (imageUrl: string): Promise<string | null> => {
@@ -240,13 +317,13 @@ serve(async (req) => {
       width: userWidth,
       height: userHeight,
       n_samples: 1,
-      seed: Math.floor(Math.random() * 4294967295),
+      seed: userSeed >= 0 ? Math.floor(userSeed) : Math.floor(Math.random() * 4294967295),
       sampler: userSampler,
       steps: userSteps,
       scale: userScale,
       cfg_rescale: 0,
-      sm: false,
-      sm_dyn: false,
+      sm: userSmea,
+      sm_dyn: userSmeaDyn,
       skip_cfg_below_sigma: 0,
       noise_schedule: "karras",
       legacy: false,
@@ -255,7 +332,7 @@ serve(async (req) => {
       reference_strength: effectiveRefStrength,
       add_original_image: false,
       uncond_scale: 1,
-      qualityToggle: true,
+      qualityToggle: userQualityTags,
       use_coords: false,
       v4_prompt: {
         caption: {
@@ -308,12 +385,12 @@ serve(async (req) => {
       width: userWidth,
       height: userHeight,
       n_samples: 1,
-      seed: Math.floor(Math.random() * 4294967295),
+      seed: userSeed >= 0 ? Math.floor(userSeed) : Math.floor(Math.random() * 4294967295),
       sampler: userSampler,
       steps: userSteps,
       scale: userScale,
-      ucPreset: 0,
-      qualityToggle: true,
+      ucPreset: Math.max(0, Math.min(3, Math.floor(userUcPreset))),
+      qualityToggle: userQualityTags,
       negative_prompt: defaultNegative,
     };
 
