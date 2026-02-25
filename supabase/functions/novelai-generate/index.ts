@@ -56,6 +56,49 @@ const stripNsfwBlocksFromNegative = (negative: string) =>
     .filter((tag) => !['nsfw', 'nude', 'naked', 'explicit', 'sexual'].includes(tag.toLowerCase()))
     .join(', ');
 
+// ============ 自动补全高质量后缀 & 针对性关键词优化 ============
+const QUALITY_SUFFIX = 'masterpiece, best quality, highly detailed, realistic skin texture, amazing shading, beautiful lighting';
+
+const KEYWORD_BOOSTS: Array<{ keywords: string[]; tags: string }> = [
+  { keywords: ['腹肌', 'abs', '肌肉', 'muscular'], tags: 'defined abs, muscular, fit body, male focus, toned body, six pack abs' },
+  { keywords: ['胸', 'breasts', '巨乳', 'oppai'], tags: 'detailed body, beautiful body, soft lighting' },
+  { keywords: ['眼睛', 'eyes', '瞳'], tags: 'beautiful detailed eyes, sparkling eyes, eye focus' },
+  { keywords: ['头发', 'hair', '长发', '短发'], tags: 'beautiful detailed hair, flowing hair, hair strand details' },
+  { keywords: ['风景', 'landscape', 'scenery', '背景'], tags: 'detailed background, beautiful scenery, depth of field' },
+  { keywords: ['花', 'flower', '花园'], tags: 'beautiful flowers, floral, petals, botanical details' },
+  { keywords: ['战斗', 'battle', 'fight', '打斗'], tags: 'dynamic pose, action scene, dramatic lighting, motion blur' },
+  { keywords: ['夜', 'night', '月', 'moon'], tags: 'night sky, moonlight, starry sky, atmospheric lighting' },
+  { keywords: ['制服', 'uniform', '校服', '西装', 'suit'], tags: 'detailed clothing, fabric texture, well-dressed' },
+  { keywords: ['泳装', 'swimsuit', '比基尼', 'bikini'], tags: 'beach, summer, water, sunlight' },
+];
+
+function enhancePrompt(rawPrompt: string): string {
+  if (!rawPrompt || !rawPrompt.trim()) return rawPrompt;
+
+  let enhanced = rawPrompt.trim();
+  const lower = enhanced.toLowerCase();
+
+  // 收集需要追加的关键词 boost
+  const boosts: string[] = [];
+  for (const rule of KEYWORD_BOOSTS) {
+    if (rule.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
+      boosts.push(rule.tags);
+    }
+  }
+
+  // 检查是否已经包含质量标签，避免重复
+  const hasQuality = ['masterpiece', 'best quality'].some(q => lower.includes(q));
+  if (!hasQuality) {
+    enhanced = `${enhanced}, ${QUALITY_SUFFIX}`;
+  }
+
+  if (boosts.length > 0) {
+    enhanced = `${enhanced}, ${boosts.join(', ')}`;
+  }
+
+  return enhanced;
+}
+
 const resolveSize = (sizeId?: string, fallback?: { width?: number; height?: number }) => {
   if (sizeId && NOVELAI_SIZE_MAP[sizeId]) {
     return NOVELAI_SIZE_MAP[sizeId];
@@ -197,6 +240,10 @@ serve(async (req) => {
     // V4 和 V4.5 都使用 v4_prompt 格式
     const isV4OrNewer = modelId.includes("diffusion-4") || modelId.includes("diffusion-4-5");
 
+    // 自动增强提示词
+    const enhancedPrompt = enhancePrompt(prompt);
+    console.log('[PromptEnhance] original:', prompt?.slice(0, 80), '=> enhanced:', enhancedPrompt?.slice(0, 120));
+
     const requestedSize = resolveSize(config.size, { width: config.width, height: config.height });
     const requestWidth = parseNumber(width);
     const requestHeight = parseNumber(height);
@@ -336,7 +383,7 @@ serve(async (req) => {
       use_coords: false,
       v4_prompt: {
         caption: {
-          base_caption: prompt,
+          base_caption: enhancedPrompt,
           char_captions: []
         },
         use_coords: false,
@@ -401,7 +448,7 @@ serve(async (req) => {
     }
 
     const novelaiPayload = {
-      input: isV4OrNewer ? "" : prompt,
+      input: isV4OrNewer ? "" : enhancedPrompt,
       model: modelId,
       action: actionType,
       parameters: isV4OrNewer ? v4Params : v3Params,
@@ -500,7 +547,7 @@ serve(async (req) => {
           delete v4ParamsGen.image;
           delete v4ParamsGen.strength;
           const payloadGen = {
-            input: isV4OrNewer ? "" : prompt,
+            input: isV4OrNewer ? "" : enhancedPrompt,
             model: modelId,
             action: "generate",
             parameters: v4ParamsGen,
