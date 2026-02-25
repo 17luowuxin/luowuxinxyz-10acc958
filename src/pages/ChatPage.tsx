@@ -4736,6 +4736,8 @@ const ChatPage: React.FC = () => {
         onOpenChange={setShowBlockDialog}
         characterId={characterId || ''}
         characterName={character?.name || ''}
+        characterPersona={character?.persona || ''}
+        characterReplyMode={replyMode}
         isBlocked={isBlocked}
         onBlockStatusChange={(blocked) => {
           setBlocked(blocked);

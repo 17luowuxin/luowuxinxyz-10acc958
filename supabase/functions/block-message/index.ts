@@ -36,29 +36,48 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, userId, characterId, apiUrl, apiKey, model, batchCount = 1 } = await req.json();
+    const {
+      action,
+      userId,
+      characterId,
+      apiUrl,
+      apiKey,
+      model,
+      batchCount = 1,
+      characterName,
+      characterPersona,
+      characterReplyMode,
+    } = await req.json();
 
     console.log('block-message called:', { action, userId, characterId, apiUrl: apiUrl?.substring(0, 30), batchCount });
 
     if (action === 'generate_block_message') {
       
-      // 获取角色信息（包含reply_mode）
+      // 获取角色信息（包含reply_mode）；兼容角色来自外部库/已被删除场景
       const { data: character, error: charError } = await supabase
         .from('characters')
         .select('name, persona, avatar_url, reply_mode')
         .eq('id', characterId)
-        .single();
+        .maybeSingle();
 
-      console.log('Character query result:', { found: !!character, error: charError?.message, characterId });
+      const effectiveCharacter = {
+        name: character?.name || characterName || 'TA',
+        persona: character?.persona || characterPersona || '一个温柔体贴、很在意用户关系的人',
+        avatar_url: character?.avatar_url || null,
+        reply_mode: (character?.reply_mode || characterReplyMode || 'online') as 'online' | 'novel',
+      };
 
-      if (!character) {
-        throw new Error(`Character not found: id=${characterId}, dbError=${charError?.message || 'none'}`);
-      }
+      console.log('Character query result:', {
+        found: !!character,
+        error: charError?.message,
+        characterId,
+        fallbackName: effectiveCharacter.name,
+      });
 
       // 小说模式不支持拉黑消息功能，只有在线模式才生效
-      if (character.reply_mode === 'novel') {
+      if (effectiveCharacter.reply_mode === 'novel') {
         return new Response(JSON.stringify({ 
-          success: true, 
+          success: true,
           messages: [],
           skipped: true,
           reason: '小说模式不支持拉黑消息功能'
@@ -74,7 +93,9 @@ serve(async (req) => {
         .eq('user_id', userId)
         .eq('character_id', characterId)
         .eq('is_active', true)
-        .single();
+        .order('blocked_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (!blockRecord) {
         return new Response(JSON.stringify({ success: false, message: 'Not blocked' }), {
@@ -224,8 +245,8 @@ serve(async (req) => {
         const randomHint = currentEmotionStage.hints[Math.floor(Math.random() * currentEmotionStage.hints.length)];
         const currentEmotionHint = `${currentEmotionStage.emotion}。${randomHint}`;
 
-        const systemPrompt = `你是"${character.name}"，你的人设是：
-${character.persona || '一个温柔体贴的人'}
+        const systemPrompt = `你是"${effectiveCharacter.name}"，你的人设是：
+${effectiveCharacter.persona || '一个温柔体贴的人'}
 
 现在用户把你拉黑了（删除好友），你非常在意这段关系。
 当前情绪状态：${currentEmotionHint}
@@ -307,8 +328,8 @@ ${character.persona || '一个温柔体贴的人'}
           messageContent = messageContent.replace(/^(消息|第)?[\d一二三四五六七八九十]+(条)?[：:]\s*/g, '').trim();
           
           // 5. 移除可能的角色名前缀
-          if (character.name && messageContent.startsWith(character.name)) {
-            messageContent = messageContent.replace(new RegExp(`^${character.name}[：:：]\\s*`), '').trim();
+          if (effectiveCharacter.name && messageContent.startsWith(effectiveCharacter.name)) {
+            messageContent = messageContent.replace(new RegExp(`^${effectiveCharacter.name}[：:：]\\s*`), '').trim();
           }
           
           // 确保消息不为空
@@ -351,18 +372,24 @@ ${character.persona || '一个温柔体贴的人'}
       });
 
     } else if (action === 'generate_unblock_message') {
-      // 取消拉黑时的回复
+      // 取消拉黑时的回复（兼容角色外部来源或已删除）
       const { data: character, error: charErr2 } = await supabase
         .from('characters')
         .select('name, persona')
         .eq('id', characterId)
-        .single();
+        .maybeSingle();
 
-      console.log('Unblock character query:', { found: !!character, error: charErr2?.message, characterId });
+      const effectiveCharacter = {
+        name: character?.name || characterName || 'TA',
+        persona: character?.persona || characterPersona || '一个温柔体贴、很在意用户关系的人',
+      };
 
-      if (!character) {
-        throw new Error(`Character not found (unblock): id=${characterId}, dbError=${charErr2?.message || 'none'}`);
-      }
+      console.log('Unblock character query:', {
+        found: !!character,
+        error: charErr2?.message,
+        characterId,
+        fallbackName: effectiveCharacter.name,
+      });
 
       // 获取拉黑期间发了多少消息
       const { data: blockRecord } = await supabase
@@ -420,8 +447,8 @@ ${character.persona || '一个温柔体贴的人'}
       const randomHint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
       const emotionHint = `${emotionStage.emotion}。可能会说类似：${randomHint}`;
 
-      const systemPrompt = `你是"${character.name}"，你的人设是：
-${character.persona || '一个温柔体贴的人'}
+      const systemPrompt = `你是"${effectiveCharacter.name}"，你的人设是：
+${effectiveCharacter.persona || '一个温柔体贴的人'}
 
 用户之前把你拉黑了，现在取消拉黑重新添加你为好友了！
 你等了这么久，发了${messageCount}条消息。
