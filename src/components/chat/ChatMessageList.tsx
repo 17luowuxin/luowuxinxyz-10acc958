@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useRef } from 'react';
-import { Phone, Video, Quote, Copy, RotateCcw, X } from 'lucide-react';
+import { Phone, Video, Quote, Copy, RotateCcw, Trash2, X } from 'lucide-react';
 import VoiceMessageBubble from './VoiceMessageBubble';
 import TransferCard from './TransferCard';
 import UserTransferCard from './UserTransferCard';
@@ -104,6 +104,7 @@ interface MessageItemProps {
   onQuoteMessage: () => void;
   onCopyMessage: () => void;
   onDeleteFromMessage: () => void;
+  onDeleteSingleMessage: () => void;
   onClearLongPress: () => void;
   parseTransferCommand: (content: string) => { amount: number; message: string } | null;
   removeTransferCommand: (content: string) => string;
@@ -144,6 +145,7 @@ const MessageItem = memo(({
   onQuoteMessage,
   onCopyMessage,
   onDeleteFromMessage,
+  onDeleteSingleMessage,
   onClearLongPress,
   parseTransferCommand,
   removeTransferCommand,
@@ -380,52 +382,64 @@ const MessageItem = memo(({
         
         {/* 长按菜单 */}
         {isLongPressed && (
-          <div
-            className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-              onClick={onQuoteMessage}
+          <>
+            <div className="fixed inset-0 z-40" onClick={onClearLongPress} onTouchStart={onClearLongPress} />
+            <div
+              className={`absolute bottom-full mb-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
             >
-              <Quote className="w-4 h-4" />
-              引用
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-              onClick={onCopyMessage}
-            >
-              <Copy className="w-4 h-4" />
-              复制
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
-                  <RotateCcw className="w-4 h-4" />
-                  回溯
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>回溯删除？</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    这将删除该消息及之后的所有消息，以便重新开始对话。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={onClearLongPress}>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDeleteFromMessage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    确认删除
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+                onClick={onQuoteMessage}
+              >
+                <Quote className="w-4 h-4" />
+                引用
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+                onClick={onCopyMessage}
+              >
+                <Copy className="w-4 h-4" />
+                复制
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive"
+                onClick={onDeleteSingleMessage}
+              >
+                <Trash2 className="w-4 h-4" />
+                删除
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
+                    <RotateCcw className="w-4 h-4" />
+                    回溯
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>回溯删除？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      这将删除该消息及之后的所有消息，以便重新开始对话。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={onClearLongPress}>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={onDeleteFromMessage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      确认删除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </>
         )}
       </div>
     </>

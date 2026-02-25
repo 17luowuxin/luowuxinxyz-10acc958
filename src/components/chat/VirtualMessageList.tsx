@@ -37,6 +37,7 @@ interface VirtualMessageListProps {
   onQuoteMessage: (msg: any) => void;
   onCopyMessage: (msg: any) => void;
   onDeleteFromMessage: (msg: any) => void;
+  onDeleteSingleMessage: (msg: any) => void;
   onClearLongPress: () => void;
   parseTransferCommand: (content: string) => { amount: number; message: string } | null;
   removeTransferCommand: (content: string) => string;
@@ -136,6 +137,7 @@ const VirtualMessageList: React.FC<VirtualMessageListProps> = ({
   onQuoteMessage,
   onCopyMessage,
   onDeleteFromMessage,
+  onDeleteSingleMessage,
   onClearLongPress,
   parseTransferCommand,
   removeTransferCommand,
@@ -328,6 +330,7 @@ const VirtualMessageList: React.FC<VirtualMessageListProps> = ({
                 onQuoteMessage={() => onQuoteMessage(msg)}
                 onCopyMessage={() => onCopyMessage(msg)}
                 onDeleteFromMessage={() => onDeleteFromMessage(msg)}
+                onDeleteSingleMessage={() => onDeleteSingleMessage(msg)}
                 onClearLongPress={onClearLongPress}
                 parseTransferCommand={parseTransferCommand}
                 removeTransferCommand={removeTransferCommand}

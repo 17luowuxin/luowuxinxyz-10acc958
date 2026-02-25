@@ -1150,6 +1150,18 @@ const ChatPage: React.FC = () => {
     }
   }, [messages]);
 
+  // 单条消息删除（彻底删除）
+  const deleteSingleMessage = useCallback(async (msg: any) => {
+    try {
+      await supabase.from('chat_messages').delete().eq('id', msg.id);
+      setMessages(prev => prev.filter(m => m.id !== msg.id));
+      setLongPressedMsg(null);
+      toast.success('已删除该消息');
+    } catch (err) {
+      toast.error('删除失败');
+    }
+  }, []);
+
   // 引用消息
   const quoteMessage = useCallback((msg: any) => {
     setQuotedMessage(msg);
@@ -4509,6 +4521,7 @@ const ChatPage: React.FC = () => {
         onQuoteMessage={quoteMessage}
         onCopyMessage={copyMessage}
         onDeleteFromMessage={deleteFromMessage}
+        onDeleteSingleMessage={deleteSingleMessage}
         onClearLongPress={() => setLongPressedMsg(null)}
         parseTransferCommand={parseTransferCommand}
         removeTransferCommand={removeTransferCommand}
