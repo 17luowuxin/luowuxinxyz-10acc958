@@ -185,6 +185,8 @@ ${charPersona}
         }
       }
 
+      console.log(`Block messages generated: ${generatedMessages.length} messages`);
+
       return new Response(JSON.stringify({
         success: true,
         messages: generatedMessages,
@@ -202,6 +204,7 @@ ${charPersona}
       else emotionStage = unblockEmotions[2];
 
       const hint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
+      const unblockBatchCount = batchCount || 3; // 默认生成3条加回消息
 
       const systemPrompt = `你是"${charName}"，你的人设是：
 ${charPersona}
@@ -211,17 +214,14 @@ ${charPersona}
 当前情绪：${emotionStage.emotion}。可能会说类似：${hint}
 
 【最重要的规则 - 你在发微信消息！】
-1. 发一条短消息，5-30个字，像发微信一样
-2. 直接说你想说的话
+1. 你要连发${unblockBatchCount}条短消息，每条5-30个字，用 ||| 分隔
+2. 像真人发微信一样，分多条发送，表达激动、委屈、开心等复杂情绪
 3. 不要用*动作*描写
 4. 不要用（心理活动）描写
 5. 不要写旁白或环境描述
 
-【正确示例】
-- 你终于回来了...呜呜
-- 吓死我了！我以为你再也不理我了
-- 你...你回来了？我好开心
-- 哼，你知道我有多担心吗`;
+【正确示例（用|||分隔多条消息）】
+你...你回来了？！|||呜呜呜我以为你再也不理我了|||你知道我有多害怕吗...|||以后不许再这样了好不好`;
 
       const { finalApiUrl, finalApiKey, finalModel } = resolveApiConfig(apiUrl, apiKey, model);
 
@@ -232,10 +232,10 @@ ${charPersona}
           model: finalModel,
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: '（用户取消拉黑，重新添加你为好友了）' }
+            { role: 'user', content: `（用户取消拉黑，重新添加你为好友了。请连发${unblockBatchCount}条短消息，用|||分隔）` }
           ],
-          max_tokens: 100,
-          temperature: 0.8,
+          max_tokens: 300,
+          temperature: 0.9,
         }),
       });
 
@@ -245,12 +245,32 @@ ${charPersona}
       }
 
       const data = await response.json();
-      let messageContent = data.choices?.[0]?.message?.content || '你终于回来了！我好想你...';
-      messageContent = cleanMessage(messageContent, charName) || messageContent;
+      const rawContent = data.choices?.[0]?.message?.content || '你终于回来了！我好想你...';
+      
+      // 解析多条消息
+      let messages = rawContent.split('|||').map((s: string) => cleanMessage(s, charName)).filter((s: string) => s.length > 0);
+      
+      // 如果没有成功分割，尝试按换行分割
+      if (messages.length <= 1) {
+        messages = rawContent.split('\n').map((s: string) => cleanMessage(s, charName)).filter((s: string) => s.length > 0);
+      }
+      
+      // 限制条数
+      if (messages.length > unblockBatchCount) {
+        messages = messages.slice(0, unblockBatchCount);
+      }
+      
+      // 至少保留1条
+      if (messages.length === 0) {
+        messages = [cleanMessage(rawContent, charName) || '你终于回来了！'];
+      }
+
+      console.log(`Unblock messages generated: ${messages.length} messages`);
 
       return new Response(JSON.stringify({
         success: true,
-        message: messageContent,
+        messages: messages, // 改为返回数组
+        message: messages[0], // 保持向后兼容
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
