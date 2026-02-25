@@ -4826,15 +4826,24 @@ const ChatPage: React.FC = () => {
         onBlockStatusChange={(blocked) => {
           setBlocked(blocked);
           refetchBlockStatus();
-          // 刷新消息以显示角色的回复（解除拉黑时AI需要时间生成消息）
-          setTimeout(() => {
-            fetchMessagesWithTransfers();
+          // 显示"对方正在输入"效果
+          setLoading(true);
+          // 刷新消息以显示角色的回复
+          setTimeout(async () => {
+            await fetchMessagesWithTransfers();
+            // 如果还没收到消息，继续等
           }, blocked ? 2000 : 3000);
-          // 再刷一次确保完整
+          // 再刷一次确保完整，然后关闭输入状态
+          setTimeout(async () => {
+            await fetchMessagesWithTransfers();
+            setLoading(false);
+          }, blocked ? 5000 : 8000);
+          // 最终保底刷新
           if (!blocked) {
-            setTimeout(() => {
-              fetchMessagesWithTransfers();
-            }, 6000);
+            setTimeout(async () => {
+              await fetchMessagesWithTransfers();
+              setLoading(false);
+            }, 12000);
           }
         }}
       />
