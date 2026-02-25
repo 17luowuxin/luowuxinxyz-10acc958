@@ -61,7 +61,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
-      // 1. 更新/创建拉黑记录（通过代理→外部DB）
+      // 1. 快速更新/创建拉黑记录
       const { data: existingBlock } = await supabase
         .from('character_blocks')
         .select('id, message_count')
@@ -92,57 +92,62 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           });
       }
 
-      // 2. 调用边缘函数生成AI消息（纯生成，不操作DB）
-      const apiConfig = await fetchApiConfig(user.id);
-
-      const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
-        body: {
-          action: 'generate_block_message',
-          ...apiConfig,
-          batchCount: 5,
-          characterName,
-          characterPersona,
-          characterReplyMode,
-          messageCount: 0, // 刚拉黑，从0开始
-        },
-      });
-
-      if (invokeError) {
-        console.error('block-message invoke error:', invokeError);
-      }
-
-      // 3. 前端保存消息到DB（通过代理→外部DB）
-      const messages = (data as any)?.messages as string[] | undefined;
-      if (Array.isArray(messages) && messages.length > 0) {
-        for (let i = 0; i < messages.length; i++) {
-          const { error } = await supabase.from('chat_messages').insert({
-            user_id: user.id,
-            character_id: characterId,
-            role: 'assistant',
-            content: messages[i],
-            created_at: new Date(Date.now() + i * 1000).toISOString(),
-          });
-          if (error) console.warn('Insert block message failed:', error.message);
-        }
-
-        // 4. 更新拉黑记录的消息计数
-        await supabase
-          .from('character_blocks')
-          .update({
-            message_count: messages.length,
-            last_message_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id)
-          .eq('character_id', characterId);
-      }
-
+      // 2. 立即关闭弹窗、更新状态，不等AI生成
       toast.success(`已将 ${characterName} 移出好友列表`);
       onBlockStatusChange(true);
       onOpenChange(false);
+      setLoading(false);
+
+      // 3. 后台异步生成AI消息（不阻塞UI）
+      const userId = user.id;
+      const charId = characterId;
+      (async () => {
+        try {
+          const apiConfig = await fetchApiConfig(userId);
+          const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
+            body: {
+              action: 'generate_block_message',
+              ...apiConfig,
+              batchCount: 3, // 减少到3条，加快速度
+              characterName,
+              characterPersona,
+              characterReplyMode,
+              messageCount: 0,
+            },
+          });
+
+          if (invokeError) {
+            console.error('block-message invoke error:', invokeError);
+            return;
+          }
+
+          const messages = (data as any)?.messages as string[] | undefined;
+          if (Array.isArray(messages) && messages.length > 0) {
+            for (let i = 0; i < messages.length; i++) {
+              await supabase.from('chat_messages').insert({
+                user_id: userId,
+                character_id: charId,
+                role: 'assistant',
+                content: messages[i],
+                created_at: new Date(Date.now() + i * 1000).toISOString(),
+              });
+            }
+            await supabase
+              .from('character_blocks')
+              .update({
+                message_count: messages.length,
+                last_message_at: new Date().toISOString(),
+              })
+              .eq('user_id', userId)
+              .eq('character_id', charId);
+          }
+        } catch (e) {
+          console.error('Background block message error:', e);
+        }
+      })();
     } catch (error: any) {
       console.error('Block error:', error);
       toast.error('操作失败: ' + (error?.message || '未知错误'));
-    } finally {
       setLoading(false);
     }
   };
@@ -152,61 +157,68 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
-      // 1. 获取拉黑期间的消息数（用于情绪判断）
-      const { data: blockRecord } = await supabase
-        .from('character_blocks')
-        .select('message_count')
-        .eq('user_id', user.id)
-        .eq('character_id', characterId)
-        .eq('is_active', true)
-        .maybeSingle();
+      // 1. 获取消息数 + 更新记录（并行）
+      const [{ data: blockRecord }] = await Promise.all([
+        supabase
+          .from('character_blocks')
+          .select('message_count')
+          .eq('user_id', user.id)
+          .eq('character_id', characterId)
+          .eq('is_active', true)
+          .maybeSingle(),
+        supabase
+          .from('character_blocks')
+          .update({ is_active: false })
+          .eq('user_id', user.id)
+          .eq('character_id', characterId),
+      ]);
 
       const messageCount = blockRecord?.message_count || 0;
 
-      // 2. 更新拉黑记录为不活跃
-      await supabase
-        .from('character_blocks')
-        .update({ is_active: false })
-        .eq('user_id', user.id)
-        .eq('character_id', characterId);
-
-      // 3. 调用边缘函数生成解除拉黑消息
-      const apiConfig = await fetchApiConfig(user.id);
-
-      const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
-        body: {
-          action: 'generate_unblock_message',
-          ...apiConfig,
-          characterName,
-          characterPersona,
-          characterReplyMode,
-          messageCount,
-        },
-      });
-
-      if (invokeError) {
-        console.error('unblock-message invoke error:', invokeError);
-      }
-
-      // 4. 前端保存消息到DB
-      const unblockMsg = (data as any)?.message as string | undefined;
-      if (unblockMsg) {
-        const { error } = await supabase.from('chat_messages').insert({
-          user_id: user.id,
-          character_id: characterId,
-          role: 'assistant',
-          content: unblockMsg,
-        });
-        if (error) console.warn('Insert unblock message failed:', error.message);
-      }
-
+      // 2. 立即关闭弹窗
       toast.success(`已重新添加 ${characterName} 为好友`);
       onBlockStatusChange(false);
       onOpenChange(false);
+      setLoading(false);
+
+      // 3. 后台生成欢迎回来消息
+      const userId = user.id;
+      const charId = characterId;
+      (async () => {
+        try {
+          const apiConfig = await fetchApiConfig(userId);
+          const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
+            body: {
+              action: 'generate_unblock_message',
+              ...apiConfig,
+              characterName,
+              characterPersona,
+              characterReplyMode,
+              messageCount,
+            },
+          });
+
+          if (invokeError) {
+            console.error('unblock-message invoke error:', invokeError);
+            return;
+          }
+
+          const unblockMsg = (data as any)?.message as string | undefined;
+          if (unblockMsg) {
+            await supabase.from('chat_messages').insert({
+              user_id: userId,
+              character_id: charId,
+              role: 'assistant',
+              content: unblockMsg,
+            });
+          }
+        } catch (e) {
+          console.error('Background unblock message error:', e);
+        }
+      })();
     } catch (error) {
       console.error('Unblock error:', error);
       toast.error('操作失败');
-    } finally {
       setLoading(false);
     }
   };
