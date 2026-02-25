@@ -25,6 +25,24 @@ interface BlockCharacterDialogProps {
   onBlockStatusChange: (blocked: boolean) => void;
 }
 
+// 获取用户API配置
+const fetchApiConfig = async (userId: string) => {
+  const { data: apiSettings } = await supabase
+    .from('api_keys')
+    .select('api_key, provider')
+    .eq('user_id', userId);
+
+  const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
+  const customKey = apiSettings?.find(s => s.provider === 'custom');
+  const customModel = apiSettings?.find(s => s.provider === 'custom_model');
+
+  return {
+    apiUrl: customUrl?.api_key || '',
+    apiKey: customKey?.api_key || '',
+    model: customModel?.api_key || '',
+  };
+};
+
 export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
   open,
   onOpenChange,
@@ -43,18 +61,16 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
-      // 兼容无唯一约束的后端：先查再更新/插入，避免 onConflict 报错
-      const { data: existingBlock, error: existingError } = await supabase
+      // 1. 更新/创建拉黑记录（通过代理→外部DB）
+      const { data: existingBlock } = await supabase
         .from('character_blocks')
-        .select('id')
+        .select('id, message_count')
         .eq('user_id', user.id)
         .eq('character_id', characterId)
         .maybeSingle();
 
-      if (existingError) throw existingError;
-
       if (existingBlock?.id) {
-        const { error } = await supabase
+        await supabase
           .from('character_blocks')
           .update({
             is_active: true,
@@ -63,10 +79,8 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
             last_message_at: null,
           })
           .eq('id', existingBlock.id);
-
-        if (error) throw error;
       } else {
-        const { error } = await supabase
+        await supabase
           .from('character_blocks')
           .insert({
             user_id: user.id,
@@ -76,45 +90,20 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
             message_count: 0,
             last_message_at: null,
           });
-
-        if (error) throw error;
       }
 
-      // 获取用户API配置 - 需要获取完整配置
-      const { data: apiSettings } = await supabase
-        .from('api_keys')
-        .select('api_key, provider, created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      // 解析API配置 - 正确的provider名称
-      let apiUrl = '';
-      let apiKey = '';
-      let model = '';
-      
-      if (apiSettings) {
-        // 使用正确的provider名称: custom_base_url (不是 custom_url)
-        const customUrl = apiSettings.find(s => s.provider === 'custom_base_url');
-        const customKey = apiSettings.find(s => s.provider === 'custom');
-        const customModel = apiSettings.find(s => s.provider === 'custom_model');
-        
-        apiUrl = customUrl?.api_key || '';
-        apiKey = customKey?.api_key || '';
-        model = customModel?.api_key || '';
-      }
+      // 2. 调用边缘函数生成AI消息（纯生成，不操作DB）
+      const apiConfig = await fetchApiConfig(user.id);
 
       const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
         body: {
           action: 'generate_block_message',
-          userId: user.id,
-          characterId,
-          apiUrl,
-          apiKey,
-          model,
+          ...apiConfig,
           batchCount: 5,
           characterName,
           characterPersona,
           characterReplyMode,
+          messageCount: 0, // 刚拉黑，从0开始
         },
       });
 
@@ -122,21 +111,29 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
         console.error('block-message invoke error:', invokeError);
       }
 
-      // 如果后端因FK约束无法保存消息，前端用客户端插入（外部数据库场景）
+      // 3. 前端保存消息到DB（通过代理→外部DB）
       const messages = (data as any)?.messages as string[] | undefined;
-      const savedToDb = (data as any)?.savedToDb;
-      if (Array.isArray(messages) && messages.length > 0 && !savedToDb) {
+      if (Array.isArray(messages) && messages.length > 0) {
         for (let i = 0; i < messages.length; i++) {
-          await supabase.from('chat_messages').insert({
+          const { error } = await supabase.from('chat_messages').insert({
             user_id: user.id,
             character_id: characterId,
             role: 'assistant',
             content: messages[i],
             created_at: new Date(Date.now() + i * 1000).toISOString(),
-          }).then(({ error }) => {
-            if (error) console.warn('Client-side insert fallback failed:', error.message);
           });
+          if (error) console.warn('Insert block message failed:', error.message);
         }
+
+        // 4. 更新拉黑记录的消息计数
+        await supabase
+          .from('character_blocks')
+          .update({
+            message_count: messages.length,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('character_id', characterId);
       }
 
       toast.success(`已将 ${characterName} 移出好友列表`);
@@ -155,37 +152,35 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
-      // 更新拉黑记录
-      const { error } = await supabase
+      // 1. 获取拉黑期间的消息数（用于情绪判断）
+      const { data: blockRecord } = await supabase
+        .from('character_blocks')
+        .select('message_count')
+        .eq('user_id', user.id)
+        .eq('character_id', characterId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      const messageCount = blockRecord?.message_count || 0;
+
+      // 2. 更新拉黑记录为不活跃
+      await supabase
         .from('character_blocks')
         .update({ is_active: false })
         .eq('user_id', user.id)
         .eq('character_id', characterId);
 
-      if (error) throw error;
+      // 3. 调用边缘函数生成解除拉黑消息
+      const apiConfig = await fetchApiConfig(user.id);
 
-      // 获取用户API配置
-      const { data: apiSettings } = await supabase
-        .from('api_keys')
-        .select('api_key, provider')
-        .eq('user_id', user.id);
-
-      const customKey = apiSettings?.find(s => s.provider === 'custom');
-      const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
-      const customModel = apiSettings?.find(s => s.provider === 'custom_model');
-
-      // 触发角色发送解除拉黑消息
       const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
         body: {
           action: 'generate_unblock_message',
-          userId: user.id,
-          characterId,
-          apiKey: customKey?.api_key,
-          apiUrl: customUrl?.api_key,
-          model: customModel?.api_key,
+          ...apiConfig,
           characterName,
           characterPersona,
           characterReplyMode,
+          messageCount,
         },
       });
 
@@ -193,18 +188,16 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
         console.error('unblock-message invoke error:', invokeError);
       }
 
-      // 如果后端因FK约束无法保存消息，前端用客户端插入
+      // 4. 前端保存消息到DB
       const unblockMsg = (data as any)?.message as string | undefined;
-      const savedToDb = (data as any)?.savedToDb;
-      if (unblockMsg && !savedToDb) {
-        await supabase.from('chat_messages').insert({
+      if (unblockMsg) {
+        const { error } = await supabase.from('chat_messages').insert({
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
           content: unblockMsg,
-        }).then(({ error }) => {
-          if (error) console.warn('Client-side unblock insert fallback failed:', error.message);
         });
+        if (error) console.warn('Insert unblock message failed:', error.message);
       }
 
       toast.success(`已重新添加 ${characterName} 为好友`);
