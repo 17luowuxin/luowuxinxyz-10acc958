@@ -39,21 +39,42 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
-      // 创建或更新拉黑记录
-      const { error } = await supabase
+      // 兼容无唯一约束的后端：先查再更新/插入，避免 onConflict 报错
+      const { data: existingBlock, error: existingError } = await supabase
         .from('character_blocks')
-        .upsert({
-          user_id: user.id,
-          character_id: characterId,
-          is_active: true,
-          blocked_at: new Date().toISOString(),
-          message_count: 0,
-          last_message_at: null,
-        }, {
-          onConflict: 'user_id,character_id',
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('character_id', characterId)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existingError) throw existingError;
+
+      if (existingBlock?.id) {
+        const { error } = await supabase
+          .from('character_blocks')
+          .update({
+            is_active: true,
+            blocked_at: new Date().toISOString(),
+            message_count: 0,
+            last_message_at: null,
+          })
+          .eq('id', existingBlock.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('character_blocks')
+          .insert({
+            user_id: user.id,
+            character_id: characterId,
+            is_active: true,
+            blocked_at: new Date().toISOString(),
+            message_count: 0,
+            last_message_at: null,
+          });
+
+        if (error) throw error;
+      }
 
       // 获取用户API配置 - 需要获取完整配置
       const { data: apiSettings } = await supabase
