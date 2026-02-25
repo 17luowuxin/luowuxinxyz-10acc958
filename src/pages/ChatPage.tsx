@@ -2005,6 +2005,7 @@ const ChatPage: React.FC = () => {
         userId: user.id,
         characterName: character?.name,
         characterId: characterId,
+        apiKey: novelaiConfig?.apiKey,
       };
       
       // 如果有角色专属负面提示词，传递给edge function
