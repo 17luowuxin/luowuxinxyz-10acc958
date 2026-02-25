@@ -38,17 +38,21 @@ serve(async (req) => {
 
     const { action, userId, characterId, apiUrl, apiKey, model, batchCount = 1 } = await req.json();
 
+    console.log('block-message called:', { action, userId, characterId, apiUrl: apiUrl?.substring(0, 30), batchCount });
+
     if (action === 'generate_block_message') {
       
       // 获取角色信息（包含reply_mode）
-      const { data: character } = await supabase
+      const { data: character, error: charError } = await supabase
         .from('characters')
         .select('name, persona, avatar_url, reply_mode')
         .eq('id', characterId)
         .single();
 
+      console.log('Character query result:', { found: !!character, error: charError?.message, characterId });
+
       if (!character) {
-        throw new Error('Character not found');
+        throw new Error(`Character not found: id=${characterId}, dbError=${charError?.message || 'none'}`);
       }
 
       // 小说模式不支持拉黑消息功能，只有在线模式才生效
@@ -348,14 +352,16 @@ ${character.persona || '一个温柔体贴的人'}
 
     } else if (action === 'generate_unblock_message') {
       // 取消拉黑时的回复
-      const { data: character } = await supabase
+      const { data: character, error: charErr2 } = await supabase
         .from('characters')
         .select('name, persona')
         .eq('id', characterId)
         .single();
 
+      console.log('Unblock character query:', { found: !!character, error: charErr2?.message, characterId });
+
       if (!character) {
-        throw new Error('Character not found');
+        throw new Error(`Character not found (unblock): id=${characterId}, dbError=${charErr2?.message || 'none'}`);
       }
 
       // 获取拉黑期间发了多少消息
