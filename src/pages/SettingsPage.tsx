@@ -79,6 +79,7 @@ const SettingsPage: React.FC = () => {
   const [novelaiQualityTags, setNovelaiQualityTags] = useState(true);
   const [novelaiSmea, setNovelaiSmea] = useState(true);
   const [novelaiSmeaDyn, setNovelaiSmeaDyn] = useState(false);
+  const [novelaiNsfw, setNovelaiNsfw] = useState(false);
   const [novelaiDefaultPrompt, setNovelaiDefaultPrompt] = useState('masterpiece, best quality, 1girl, beautiful, detailed face, detailed eyes, long hair, anime style');
   const [novelaiDefaultNegative, setNovelaiDefaultNegative] = useState('lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark');
   
@@ -210,6 +211,7 @@ const SettingsPage: React.FC = () => {
       const novelaiSmeaDynSetting = data.find(k => k.provider === 'novelai_smea_dyn');
       const novelaiDefaultPromptSetting = data.find(k => k.provider === 'novelai_default_prompt');
       const novelaiDefaultNegativeSetting = data.find(k => k.provider === 'novelai_default_negative');
+      const novelaiNsfwSetting = data.find(k => k.provider === 'novelai_nsfw');
       
       if (novelaiSizeSetting) setNovelaiSize(novelaiSizeSetting.api_key);
       if (novelaiStepsSetting) setNovelaiSteps(parseInt(novelaiStepsSetting.api_key) || 28);
@@ -222,6 +224,7 @@ const SettingsPage: React.FC = () => {
       if (novelaiSmeaDynSetting) setNovelaiSmeaDyn(novelaiSmeaDynSetting.api_key === 'true');
       if (novelaiDefaultPromptSetting) setNovelaiDefaultPrompt(novelaiDefaultPromptSetting.api_key);
       if (novelaiDefaultNegativeSetting) setNovelaiDefaultNegative(novelaiDefaultNegativeSetting.api_key);
+      if (novelaiNsfwSetting) setNovelaiNsfw(novelaiNsfwSetting.api_key === 'true');
       
       // TTS settings
       const ttsEnabledSetting = data.find(k => k.provider === 'tts_enabled');
@@ -544,6 +547,7 @@ const SettingsPage: React.FC = () => {
       { provider: 'novelai_smea_dyn', value: novelaiSmeaDyn ? 'true' : 'false' },
       { provider: 'novelai_default_prompt', value: novelaiDefaultPrompt },
       { provider: 'novelai_default_negative', value: novelaiDefaultNegative },
+      { provider: 'novelai_nsfw', value: novelaiNsfw ? 'true' : 'false' },
     ];
 
     const providers = settingsToSave.map(s => s.provider);
@@ -1803,6 +1807,24 @@ const SettingsPage: React.FC = () => {
                 >
                   <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
                     novelaiSmeaDyn ? 'translate-x-6' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+
+              {/* NSFW 模式 */}
+              <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-100">
+                <div>
+                  <p className="font-medium text-red-600 text-sm">🔞 NSFW 模式</p>
+                  <p className="text-xs text-red-400">开启后不再屏蔽成人内容（需V4 Full以上模型）</p>
+                </div>
+                <button
+                  onClick={() => setNovelaiNsfw(!novelaiNsfw)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    novelaiNsfw ? 'bg-red-400' : 'bg-gray-300'
+                  }`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    novelaiNsfw ? 'translate-x-6' : 'translate-x-0.5'
                   }`} />
                 </button>
               </div>
