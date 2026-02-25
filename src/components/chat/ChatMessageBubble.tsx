@@ -129,52 +129,60 @@ const LongPressMenu = memo(({
   onDelete: () => void; 
   onClose: () => void;
 }) => (
-  <div
-    className={`absolute top-full mt-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
-    onClick={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-  >
-    <Button 
-      variant="ghost" 
-      size="sm" 
-      className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-      onClick={onQuote}
+  <>
+    {/* 点击空白处关闭的透明遮罩 */}
+    <div 
+      className="fixed inset-0 z-40" 
+      onClick={onClose}
+      onTouchStart={onClose}
+    />
+    <div
+      className={`absolute bottom-full mb-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
+      onClick={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
-      <Quote className="w-4 h-4" />
-      引用
-    </Button>
-    <Button 
-      variant="ghost" 
-      size="sm" 
-      className="h-9 px-3 text-xs gap-1.5 rounded-lg"
-      onClick={onCopy}
-    >
-      <Copy className="w-4 h-4" />
-      复制
-    </Button>
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
-          <RotateCcw className="w-4 h-4" />
-          回溯
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>回溯删除？</AlertDialogTitle>
-          <AlertDialogDescription>
-            这将删除该消息及之后的所有消息，以便重新开始对话。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            确认删除
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  </div>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+        onClick={onQuote}
+      >
+        <Quote className="w-4 h-4" />
+        引用
+      </Button>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-9 px-3 text-xs gap-1.5 rounded-lg"
+        onClick={onCopy}
+      >
+        <Copy className="w-4 h-4" />
+        复制
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive">
+            <RotateCcw className="w-4 h-4" />
+            回溯
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>回溯删除？</AlertDialogTitle>
+            <AlertDialogDescription>
+              这将删除该消息及之后的所有消息，以便重新开始对话。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={onClose}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  </>
 ));
 
 LongPressMenu.displayName = 'LongPressMenu';
