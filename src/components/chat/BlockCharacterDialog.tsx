@@ -19,6 +19,8 @@ interface BlockCharacterDialogProps {
   onOpenChange: (open: boolean) => void;
   characterId: string;
   characterName: string;
+  characterPersona?: string;
+  characterReplyMode?: 'online' | 'novel';
   isBlocked: boolean;
   onBlockStatusChange: (blocked: boolean) => void;
 }
@@ -28,6 +30,8 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
   onOpenChange,
   characterId,
   characterName,
+  characterPersona,
+  characterReplyMode,
   isBlocked,
   onBlockStatusChange,
 }) => {
@@ -108,15 +112,20 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           apiKey,
           model,
           batchCount: 5, // 拉黑时连续发5条消息
+          characterName,
+          characterPersona,
+          characterReplyMode,
         },
       });
 
-      if (invokeError) throw invokeError;
+      if (invokeError) {
+        console.error('block-message invoke error:', invokeError);
+      }
 
-      // 后端函数会返回生成的消息列表；为空说明生成失败（通常是API地址/密钥问题）
+      // 后端函数会返回生成的消息列表；为空说明挽留消息未生成，但不阻塞删除好友流程
       const messages = (data as any)?.messages as unknown;
       if (Array.isArray(messages) && messages.length === 0) {
-        throw new Error('拉黑消息生成失败：未生成任何消息（请检查API地址/模型/密钥）');
+        toast.warning('好友已删除，但挽留消息未生成（可忽略）');
       }
 
       toast.success(`已将 ${characterName} 移出好友列表`);
@@ -163,6 +172,9 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           apiKey: customKey?.api_key,
           apiUrl: customUrl?.api_key,
           model: customModel?.api_key,
+          characterName,
+          characterPersona,
+          characterReplyMode,
         },
       });
 
