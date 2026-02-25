@@ -1,0 +1,1 @@
+ALTER TABLE public.character_blocks ADD CONSTRAINT character_blocks_user_character_unique UNIQUE (user_id, character_id);

@@ -101,9 +101,9 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
       toast.success(`已将 ${characterName} 移出好友列表`);
       onBlockStatusChange(true);
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Block error:', error);
-      toast.error('操作失败');
+      toast.error('操作失败: ' + (error?.message || '未知错误'));
     } finally {
       setLoading(false);
     }
@@ -114,12 +114,24 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
+      // 更新拉黑记录
+      const { error } = await supabase
+        .from('character_blocks')
+        .update({ is_active: false })
+        .eq('user_id', user.id)
+        .eq('character_id', characterId);
+
+      if (error) throw error;
+
       // 获取用户API配置
-      const { data: apiConfig } = await supabase
+      const { data: apiSettings } = await supabase
         .from('api_keys')
         .select('api_key, provider')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
+
+      const customKey = apiSettings?.find(s => s.provider === 'custom');
+      const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
+      const customModel = apiSettings?.find(s => s.provider === 'custom_model');
 
       // 触发角色发送解除拉黑消息
       await supabase.functions.invoke('block-message', {
@@ -127,7 +139,9 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           action: 'generate_unblock_message',
           userId: user.id,
           characterId,
-          apiKey: apiConfig?.api_key,
+          apiKey: customKey?.api_key,
+          apiUrl: customUrl?.api_key,
+          model: customModel?.api_key,
         },
       });
 
