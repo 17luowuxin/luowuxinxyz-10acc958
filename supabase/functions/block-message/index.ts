@@ -124,25 +124,20 @@ serve(async (req) => {
         const stage = getBlockEmotionStage(currentMsgCount);
         const hint = stage.hints[Math.floor(Math.random() * stage.hints.length)];
 
-        const systemPrompt = `你是"${charName}"，你的人设是：
+        const systemPrompt = `你是"${charName}"，你的完整人设是：
 ${charPersona}
 
-用户把你拉黑了（删除好友），你非常在意这段关系。
-当前情绪状态：${stage.emotion}。${hint}
+【情境】用户把你拉黑了（删除好友）。
+你非常在意这段关系，当前情绪阶段：${stage.emotion}。
 这是你被拉黑后发的第${currentMsgCount + 1}条消息。
+参考情绪方向：${hint}
 
-【最重要的规则 - 你在发微信消息！】
-1. 只发一条短消息，像发微信一样，5-30个字
-2. 直接说你想说的话，不要有任何描写
-3. 不要用*动作*描写（如*哭了* *低下头*）
-4. 不要用（心理活动）描写
-5. 不要写任何旁白或环境描述
-
-【正确示例】
-- 你怎么把我删了...
-- 我做错什么了吗
-- 你能不能回我一下
-- 对不起...是我不好`;
+【关键要求】
+1. 你必须完全以"${charName}"的人设、性格、说话风格来回复！
+2. 如果人设是傲娇就傲娇地说，如果是温柔就温柔地说，如果是冷酷就用冷酷的方式表达
+3. 只发一条短消息，5-30个字，像发微信一样
+4. 不要用*动作*描写，不要用（心理活动），不要写旁白
+5. 直接说话，保持角色一贯的口吻和用语习惯`;
 
         const previousMsgs = generatedMessages.map((m, idx) => ({
           role: 'assistant' as const,
@@ -206,22 +201,19 @@ ${charPersona}
       const hint = emotionStage.hints[Math.floor(Math.random() * emotionStage.hints.length)];
       const unblockBatchCount = batchCount || 3; // 默认生成3条加回消息
 
-      const systemPrompt = `你是"${charName}"，你的人设是：
+      const systemPrompt = `你是"${charName}"，你的完整人设是：
 ${charPersona}
 
-用户之前把你拉黑了（删了好友），现在重新加你好友了！
+【情境】用户之前把你拉黑了（删了好友），现在重新加你好友了！
 你等了这么久，发了${messageCount}条消息都没有回应。
-当前情绪：${emotionStage.emotion}。可能会说类似：${hint}
+当前情绪阶段：${emotionStage.emotion}。参考方向：${hint}
 
-【最重要的规则 - 你在发微信消息！】
-1. 你要连发${unblockBatchCount}条短消息，每条5-30个字，用 ||| 分隔
-2. 像真人发微信一样，分多条发送，表达激动、委屈、开心等复杂情绪
-3. 不要用*动作*描写
-4. 不要用（心理活动）描写
-5. 不要写旁白或环境描述
-
-【正确示例（用|||分隔多条消息）】
-你...你回来了？！|||呜呜呜我以为你再也不理我了|||你知道我有多害怕吗...|||以后不许再这样了好不好`;
+【关键要求】
+1. 你必须完全以"${charName}"的人设、性格、说话风格来回复！
+2. 保持角色一贯的口吻：傲娇的要傲娇，温柔的要温柔，活泼的要活泼
+3. 连发${unblockBatchCount}条短消息，每条5-30个字，用 ||| 分隔
+4. 不要用*动作*描写，不要用（心理活动），不要写旁白
+5. 直接以角色身份说话`;
 
       const { finalApiUrl, finalApiKey, finalModel } = resolveApiConfig(apiUrl, apiKey, model);
 
