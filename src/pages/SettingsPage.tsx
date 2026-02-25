@@ -629,6 +629,7 @@ const SettingsPage: React.FC = () => {
           prompt: novelaiTestPrompt.trim(),
           negativePrompt: novelaiTestNegative.trim() || novelaiDefaultNegative,
           userId: user?.id,
+          apiKey: novelaiKey.trim(),
           width: sizeConfig.width,
           height: sizeConfig.height,
           steps: novelaiSteps,

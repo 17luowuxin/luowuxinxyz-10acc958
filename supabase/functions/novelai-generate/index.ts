@@ -87,10 +87,21 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, userId, characterName, negativePrompt, referenceImage, referenceStrength } = await req.json();
+    const {
+      prompt,
+      userId,
+      characterName,
+      negativePrompt,
+      referenceImage,
+      referenceStrength,
+      apiKey: requestApiKey,
+    } = await req.json();
 
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "用户未登录" }), {
+    const trimmedRequestApiKey = typeof requestApiKey === "string" ? requestApiKey.trim() : "";
+
+    // 允许“测试生成”直接传 key，不强依赖数据库已保存配置
+    if (!userId && !trimmedRequestApiKey) {
+      return new Response(JSON.stringify({ error: "用户未登录，且未提供 NovelAI API 密钥" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -100,10 +111,18 @@ serve(async (req) => {
     const requestRefImage = referenceImage || null;
     const requestRefStrength = referenceStrength || 0.6;
 
-    const config = await getNovelAIConfig(userId);
+    let config = userId ? await getNovelAIConfig(userId) : null;
+
+    // 优先使用请求里传入的 key（用于设置页测试生成，避免“已填写但数据库未命中”）
+    if (trimmedRequestApiKey) {
+      config = {
+        ...(config ?? {}),
+        apiKey: trimmedRequestApiKey,
+      } as NovelAIConfig;
+    }
 
     if (!config) {
-      return new Response(JSON.stringify({ error: "请先在设置中配置NovelAI API密钥" }), {
+      return new Response(JSON.stringify({ error: "请先在设置中配置NovelAI API密钥，或在测试请求中传入有效密钥" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -372,7 +391,7 @@ serve(async (req) => {
     // - 若带了 reference_image_multiple（风格迁移）→ 去掉后重试
     // - 若是 img2img（带 image）→ 降级为 generate 后重试
     if (!response.ok) {
-      const firstErrorText = await response.text();
+      const firstErrorText = await response.clone().text();
       const isDecodeBodyError =
         response.status === 400 &&
         (firstErrorText.includes("Error decoding request body") || firstErrorText.includes("decoding request body"));
@@ -417,7 +436,7 @@ serve(async (req) => {
       }
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.clone().text();
         console.error("NovelAI API error:", response.status, errorText);
 
         if (response.status === 401) {
