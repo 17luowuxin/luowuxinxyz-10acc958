@@ -6,6 +6,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const normalizeReplyMode = (mode: unknown): 'online' | 'novel' | null => {
+  if (mode === 'online' || mode === 'novel') return mode;
+  return null;
+};
+
+const forceOnlineMessageFormat = (content: string, expectedCount: number): string => {
+  const cleaned = content
+    .replace(/\r/g, ' ')
+    .replace(/\n+/g, ' ')
+    .replace(/\*[^*]{1,80}\*/g, ' ')
+    .replace(/[（(][^）)]{1,80}[）)]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  let parts = cleaned
+    .split('|||')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) {
+    parts = (cleaned.match(/[^。！？!?]+[。！？!?]?/g) || [])
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  if (parts.length === 0 && cleaned) {
+    parts = [cleaned];
+  }
+
+  const fillers = ['嗯嗯', '然后呢', '你呢', '哈哈', '在想你'];
+
+  if (parts.length > expectedCount) {
+    parts = parts.slice(0, expectedCount);
+  }
+
+  while (parts.length < expectedCount) {
+    parts.push(fillers[(parts.length - 1 + fillers.length) % fillers.length]);
+  }
+
+  parts = parts.map((s) => s.replace(/\s{2,}/g, ' ').trim().slice(0, 30));
+
+  return parts.join('|||');
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -174,6 +218,7 @@ serve(async (req) => {
     let savedBaseUrl = '';
     let savedModel = '';
     let timeSyncEnabledFromDb = false;
+    let replyModeFromDb: 'online' | 'novel' | null = null;
     
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -217,10 +262,11 @@ serve(async (req) => {
           messages = messages.slice(-historyLimitValue);
         }
         
-        // 获取回复模式设置
+        // 获取回复模式设置（仅当前请求内有效）
         const replyModeSetting = apiSettings.find(s => s.provider === 'reply_mode');
-        if (replyModeSetting) {
-          (globalThis as any).__replyMode = replyModeSetting.api_key;
+        const parsedReplyMode = normalizeReplyMode(replyModeSetting?.api_key);
+        if (parsedReplyMode) {
+          replyModeFromDb = parsedReplyMode;
         }
       }
     }
@@ -346,8 +392,8 @@ serve(async (req) => {
 
     const userName = userProfile?.nickname || '用户';
     const userPersonaInfo = userProfile?.persona || '';
-    // 优先使用请求中的replyMode，其次是从数据库加载的
-    const replyMode = reqReplyMode || (globalThis as any).__replyMode || 'novel';
+    // 优先使用请求中的 replyMode，其次使用数据库配置；非法值自动回退
+    const replyMode = normalizeReplyMode(reqReplyMode) || replyModeFromDb || 'novel';
     const timeSyncEnabled = timeSyncEnabledFromDb;
     console.log('Reply mode:', replyMode, 'Time sync:', timeSyncEnabled);
 
@@ -1238,7 +1284,12 @@ ${transferPrompt}
       console.log(`Final stream content length: ${fullStreamContent.length} chars, continued ${continueCount} times`);
 
       // 返回完整内容（剔除思考/推理文本）
-      const safeStreamContent = sanitizeAssistantOutput(fullStreamContent);
+      let safeStreamContent = sanitizeAssistantOutput(fullStreamContent);
+      if (replyMode === 'online') {
+        const messageCount = isAutoReply ? '3-5' : (reqMessageCount || '3-5');
+        const fixedCount = messageCount === '1-2' ? 2 : 5;
+        safeStreamContent = forceOnlineMessageFormat(safeStreamContent, fixedCount);
+      }
 
       if (returnJson) {
         return new Response(JSON.stringify({ reply: safeStreamContent, response: safeStreamContent }), {
@@ -1335,7 +1386,12 @@ ${transferPrompt}
       });
     }
 
-    const safeFullContent = sanitizeAssistantOutput(fullContent);
+    let safeFullContent = sanitizeAssistantOutput(fullContent);
+    if (replyMode === 'online') {
+      const messageCount = isAutoReply ? '3-5' : (reqMessageCount || '3-5');
+      const fixedCount = messageCount === '1-2' ? 2 : 5;
+      safeFullContent = forceOnlineMessageFormat(safeFullContent, fixedCount);
+    }
     console.log(`Final content length: ${safeFullContent.length} chars, continued ${continueCount} times`);
 
     if (returnJson) {
