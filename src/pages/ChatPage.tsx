@@ -5068,7 +5068,7 @@ const ChatPage: React.FC = () => {
           {showCallDialog === 'video' && (
             <div 
               className="absolute inset-0 z-0"
-              style={{ background: '#FFB5C5' }}
+              style={{ background: '#1a1a1a' }}
             />
           )}
           {/* 隐藏的视频上传input */}
