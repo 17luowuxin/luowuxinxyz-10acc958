@@ -2945,9 +2945,11 @@ const ChatPage: React.FC = () => {
       // 更新已读状态（仅在仍在当前聊天且页面可见）
       await markCurrentChatRead();
       
-      // 检查是否需要生成图片
-      if (novelaiConfig?.apiKey && cleanContent.trim()) {
+      // 检查是否需要生成图片（小说模式和线上单消息模式）
+      console.log('[ImageGen] Mode:', replyMode, 'hasApiKey:', !!novelaiConfig?.apiKey, 'contentLen:', cleanContent?.length);
+      if (novelaiConfig?.apiKey && cleanContent && cleanContent.trim()) {
         const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
+        console.log('[ImageGen] shouldGenerate:', should, 'prompt:', prompt?.slice(0, 80));
         if (should) {
           // 异步生成图片，不阻塞主流程
           generateNovelAIImage(prompt);
