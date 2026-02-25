@@ -3007,7 +3007,7 @@ const ChatPage: React.FC = () => {
     }
 
     if (!isBlocked) return;
-    if (replyMode !== 'online') return;
+    // 拉黑消息在所有模式下都生效（不再限制仅online模式）
     if (!user?.id || !characterId) return;
 
     blockedMessageTimerRef.current = setTimeout(async () => {
@@ -3053,7 +3053,7 @@ const ChatPage: React.FC = () => {
         resetBlockedMessageTimer();
       }
     }, BLOCKED_MESSAGE_TIMEOUT_MS);
-  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
+  }, [isBlocked, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
 
   const triggerAutoReply = async () => {
     // 防止重复触发
@@ -3222,7 +3222,7 @@ const ChatPage: React.FC = () => {
       resetSilenceTimer();
     }
 
-    if (isBlocked && replyMode === 'online' && user?.id && characterId) {
+    if (isBlocked && user?.id && characterId) {
       resetBlockedMessageTimer();
     }
 
@@ -4794,10 +4794,17 @@ const ChatPage: React.FC = () => {
         isBlocked={isBlocked}
         onBlockStatusChange={(blocked) => {
           setBlocked(blocked);
-          // 刷新消息以显示角色的回复
+          refetchBlockStatus();
+          // 刷新消息以显示角色的回复（解除拉黑时AI需要时间生成消息）
           setTimeout(() => {
             fetchMessagesWithTransfers();
-          }, 1000);
+          }, blocked ? 2000 : 3000);
+          // 再刷一次确保完整
+          if (!blocked) {
+            setTimeout(() => {
+              fetchMessagesWithTransfers();
+            }, 6000);
+          }
         }}
       />
 
