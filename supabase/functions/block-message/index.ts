@@ -191,6 +191,7 @@ serve(async (req) => {
       // 确定要生成几条消息
       const messagesToGenerate = batchCount || 1;
       const generatedMessages: string[] = [];
+      let dbInsertFailed = false;
       
       // 使用用户的API配置或内置API
       let finalApiUrl = apiUrl || 'https://api.deepseek.com/v1/chat/completions';
@@ -340,13 +341,17 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
             generatedMessages.push(messageContent);
             
             // 保存消息到聊天记录，添加延迟使消息时间有差异
-            await supabase.from('chat_messages').insert({
+            const { error: insertError } = await supabase.from('chat_messages').insert({
               user_id: userId,
               character_id: characterId,
               role: 'assistant',
               content: messageContent,
-              created_at: new Date(Date.now() + i * 2000).toISOString(), // 每条消息间隔2秒
+              created_at: new Date(Date.now() + i * 2000).toISOString(),
             });
+            if (insertError) {
+              console.error(`Insert message ${i + 1} failed (FK?):`, insertError.message);
+              dbInsertFailed = true;
+            }
           }
         }
 
@@ -369,7 +374,8 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
       return new Response(JSON.stringify({ 
         success: true, 
         messages: generatedMessages,
-        messageCount: messageCount + generatedMessages.length 
+        messageCount: messageCount + generatedMessages.length,
+        savedToDb: !dbInsertFailed,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -518,12 +524,15 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
       const messageContent = data.choices?.[0]?.message?.content || '你终于回来了！我好想你...';
 
       // 保存消息
-      await supabase.from('chat_messages').insert({
+      const { error: insertError } = await supabase.from('chat_messages').insert({
         user_id: userId,
         character_id: characterId,
         role: 'assistant',
         content: messageContent,
       });
+      if (insertError) {
+        console.error('Insert unblock message failed (FK?):', insertError.message);
+      }
 
       // 将拉黑记录设为不活跃
       await supabase
@@ -534,7 +543,8 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
 
       return new Response(JSON.stringify({ 
         success: true, 
-        message: messageContent 
+        message: messageContent,
+        savedToDb: !insertError,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

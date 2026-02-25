@@ -3044,6 +3044,19 @@ const ChatPage: React.FC = () => {
         if (error) {
           console.error('[BlockAutoMessage] invoke error:', error);
         } else if ((data as any)?.success) {
+          // 如果后端无法保存到DB（FK约束），前端客户端插入
+          const msgs = (data as any)?.messages as string[] | undefined;
+          const savedToDb = (data as any)?.savedToDb;
+          if (Array.isArray(msgs) && msgs.length > 0 && !savedToDb) {
+            for (const msg of msgs) {
+              await supabase.from('chat_messages').insert({
+                user_id: user.id,
+                character_id: characterId,
+                role: 'assistant',
+                content: msg,
+              });
+            }
+          }
           await refetchBlockStatus();
           await fetchMessagesWithTransfers();
         }
@@ -3054,7 +3067,7 @@ const ChatPage: React.FC = () => {
         resetBlockedMessageTimer();
       }
     }, BLOCKED_MESSAGE_TIMEOUT_MS);
-  }, [isBlocked, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
+  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
 
   const triggerAutoReply = async () => {
     // 防止重复触发

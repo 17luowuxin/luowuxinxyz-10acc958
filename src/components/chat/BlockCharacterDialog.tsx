@@ -111,7 +111,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           apiUrl,
           apiKey,
           model,
-          batchCount: 5, // 拉黑时连续发5条消息
+          batchCount: 5,
           characterName,
           characterPersona,
           characterReplyMode,
@@ -122,10 +122,21 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
         console.error('block-message invoke error:', invokeError);
       }
 
-      // 后端函数会返回生成的消息列表；为空说明挽留消息未生成，但不阻塞删除好友流程
-      const messages = (data as any)?.messages as unknown;
-      if (Array.isArray(messages) && messages.length === 0) {
-        toast.warning('好友已删除，但挽留消息未生成（可忽略）');
+      // 如果后端因FK约束无法保存消息，前端用客户端插入（外部数据库场景）
+      const messages = (data as any)?.messages as string[] | undefined;
+      const savedToDb = (data as any)?.savedToDb;
+      if (Array.isArray(messages) && messages.length > 0 && !savedToDb) {
+        for (let i = 0; i < messages.length; i++) {
+          await supabase.from('chat_messages').insert({
+            user_id: user.id,
+            character_id: characterId,
+            role: 'assistant',
+            content: messages[i],
+            created_at: new Date(Date.now() + i * 1000).toISOString(),
+          }).then(({ error }) => {
+            if (error) console.warn('Client-side insert fallback failed:', error.message);
+          });
+        }
       }
 
       toast.success(`已将 ${characterName} 移出好友列表`);
@@ -164,7 +175,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
       const customModel = apiSettings?.find(s => s.provider === 'custom_model');
 
       // 触发角色发送解除拉黑消息
-      await supabase.functions.invoke('block-message', {
+      const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
         body: {
           action: 'generate_unblock_message',
           userId: user.id,
@@ -177,6 +188,24 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           characterReplyMode,
         },
       });
+
+      if (invokeError) {
+        console.error('unblock-message invoke error:', invokeError);
+      }
+
+      // 如果后端因FK约束无法保存消息，前端用客户端插入
+      const unblockMsg = (data as any)?.message as string | undefined;
+      const savedToDb = (data as any)?.savedToDb;
+      if (unblockMsg && !savedToDb) {
+        await supabase.from('chat_messages').insert({
+          user_id: user.id,
+          character_id: characterId,
+          role: 'assistant',
+          content: unblockMsg,
+        }).then(({ error }) => {
+          if (error) console.warn('Client-side unblock insert fallback failed:', error.message);
+        });
+      }
 
       toast.success(`已重新添加 ${characterName} 为好友`);
       onBlockStatusChange(false);
