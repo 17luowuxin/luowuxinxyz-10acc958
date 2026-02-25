@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
-import { Phone, Video, Quote, Copy, RotateCcw, X } from 'lucide-react';
+import { Phone, Video, Quote, Copy, RotateCcw, Trash2, X } from 'lucide-react';
 import VoiceMessageBubble from './VoiceMessageBubble';
 import TransferCard from './TransferCard';
 import UserTransferCard from './UserTransferCard';
@@ -44,6 +44,7 @@ interface ChatMessageBubbleProps {
   onQuoteMessage: () => void;
   onCopyMessage: () => void;
   onDeleteFromMessage: () => void;
+  onDeleteSingleMessage: () => void;
   onClearLongPress: () => void;
   parseTransferCommand: (content: string) => { amount: number; message: string } | null;
   removeTransferCommand: (content: string) => string;
@@ -121,12 +122,14 @@ const LongPressMenu = memo(({
   onQuote, 
   onCopy, 
   onDelete, 
+  onDeleteSingle,
   onClose 
 }: { 
   isUser: boolean; 
   onQuote: () => void; 
   onCopy: () => void; 
   onDelete: () => void; 
+  onDeleteSingle: () => void;
   onClose: () => void;
 }) => (
   <>
@@ -158,6 +161,15 @@ const LongPressMenu = memo(({
       >
         <Copy className="w-4 h-4" />
         复制
+      </Button>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-9 px-3 text-xs gap-1.5 rounded-lg text-destructive"
+        onClick={onDeleteSingle}
+      >
+        <Trash2 className="w-4 h-4" />
+        删除
       </Button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
@@ -220,6 +232,7 @@ const ChatMessageBubble = memo(({
   onQuoteMessage,
   onCopyMessage,
   onDeleteFromMessage,
+  onDeleteSingleMessage,
   onClearLongPress,
   parseTransferCommand,
   removeTransferCommand,
@@ -461,6 +474,7 @@ const ChatMessageBubble = memo(({
             onQuote={onQuoteMessage}
             onCopy={onCopyMessage}
             onDelete={onDeleteFromMessage}
+            onDeleteSingle={onDeleteSingleMessage}
             onClose={onClearLongPress}
           />
         )}
