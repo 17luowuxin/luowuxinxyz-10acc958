@@ -4841,23 +4841,19 @@ const ChatPage: React.FC = () => {
           refetchBlockStatus();
           // 显示"对方正在输入"效果
           setLoading(true);
-          // 刷新消息以显示角色的回复
-          setTimeout(async () => {
-            await fetchMessagesWithTransfers();
-            // 如果还没收到消息，继续等
-          }, blocked ? 2000 : 3000);
-          // 再刷一次确保完整，然后关闭输入状态
-          setTimeout(async () => {
-            await fetchMessagesWithTransfers();
-            setLoading(false);
-          }, blocked ? 5000 : 8000);
-          // 最终保底刷新
-          if (!blocked) {
+          // 阶梯式刷新：自定义API可能较慢，需要多次刷新确保消息可见
+          const refreshTimes = blocked 
+            ? [2000, 5000, 8000, 12000, 18000]  // 拉黑：3条消息生成可能需要较长时间
+            : [3000, 6000, 10000, 15000];        // 加回：多条消息生成
+          refreshTimes.forEach((ms, idx) => {
             setTimeout(async () => {
               await fetchMessagesWithTransfers();
-              setLoading(false);
-            }, 12000);
-          }
+              // 最后一次刷新时关闭loading
+              if (idx === refreshTimes.length - 1) {
+                setLoading(false);
+              }
+            }, ms);
+          });
         }}
       />
 

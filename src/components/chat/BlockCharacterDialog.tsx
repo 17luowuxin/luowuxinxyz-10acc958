@@ -191,6 +191,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
             body: {
               action: 'generate_unblock_message',
               ...apiConfig,
+              batchCount: 3, // 生成3条加回消息
               characterName,
               characterPersona,
               characterReplyMode,
@@ -203,13 +204,18 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
             return;
           }
 
-          const unblockMsg = (data as any)?.message as string | undefined;
-          if (unblockMsg) {
+          // 优先使用 messages 数组，向后兼容 message 字段
+          const messages = (data as any)?.messages as string[] | undefined;
+          const singleMsg = (data as any)?.message as string | undefined;
+          const allMsgs = Array.isArray(messages) && messages.length > 0 ? messages : (singleMsg ? [singleMsg] : []);
+          
+          for (let i = 0; i < allMsgs.length; i++) {
             await supabase.from('chat_messages').insert({
               user_id: userId,
               character_id: charId,
               role: 'assistant',
-              content: unblockMsg,
+              content: allMsgs[i],
+              created_at: new Date(Date.now() + i * 1000).toISOString(),
             });
           }
         } catch (e) {
