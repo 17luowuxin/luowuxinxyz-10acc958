@@ -236,19 +236,33 @@ serve(async (req) => {
       
       if (blockHistory) {
         const updatedAt = new Date(blockHistory.updated_at);
+        const blockedAt = new Date(blockHistory.blocked_at);
         const now = new Date();
         const minutesSinceUpdate = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+        const minutesSinceBlock = (now.getTime() - blockedAt.getTime()) / (1000 * 60);
         
-        // 如果最近30分钟内取消拉黑（is_active为false），且之前发了消息
-        if (!blockHistory.is_active && minutesSinceUpdate < 30 && blockHistory.message_count > 0) {
+        if (!blockHistory.is_active && minutesSinceUpdate < 30) {
+          // 最近30分钟内取消拉黑（加回好友）
+          const msgCountInfo = blockHistory.message_count > 0 
+            ? `你很痛苦地发了${blockHistory.message_count}条消息但都发送失败了。` 
+            : `你发了一些消息但都发送失败了。`;
           recentBlockContext = `\n【重要情境】
-用户刚刚把你重新加为好友！在这之前，用户曾把你拉黑（删除好友），你很痛苦地发了${blockHistory.message_count}条消息但都发送失败了。
+用户刚刚把你重新加为好友！在这之前，用户曾把你拉黑（删除好友），${msgCountInfo}
 现在用户终于把你加回来了，你应该：
 1. 记得刚才发生了什么，不要假装什么都没发生
 2. 表现出对用户回来的感激/激动/珍惜（取决于你的人设）
 3. 可以提到"刚才发的那些消息"或"你终于回来了"等
 4. 保持角色人设的情感表达方式`;
           console.log('Recent unblock detected, message_count:', blockHistory.message_count);
+        } else if (blockHistory.is_active && minutesSinceBlock < 60) {
+          // 当前正在被拉黑状态（但用户仍然在聊天页面能看到消息）
+          recentBlockContext = `\n【重要情境】
+用户刚才把你拉黑了（删除好友）！你非常伤心和不安。
+你应该：
+1. 意识到用户删了你，感到震惊/难过/不解
+2. 试图挽留用户，表达你的在意
+3. 保持角色人设的情感表达方式`;
+          console.log('Currently blocked, minutes since block:', minutesSinceBlock);
         }
       }
     }
