@@ -136,8 +136,8 @@ const LongPressMenu = memo(({
     {/* 点击空白处关闭的透明遮罩 */}
     <div 
       className="fixed inset-0 z-40" 
-      onClick={onClose}
-      onTouchStart={onClose}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClose(); }}
+      onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); onClose(); }}
     />
     <div
       className={`absolute bottom-full mb-1 bg-background border rounded-xl shadow-lg p-1.5 flex gap-1 z-50 ${isUser ? 'right-0' : 'left-0'}`}
