@@ -3016,11 +3016,21 @@ const ChatPage: React.FC = () => {
       isBlockMessageSendingRef.current = true;
 
       try {
+        // 获取当前拉黑记录的消息数
+        const { data: blockRecord } = await supabase
+          .from('character_blocks')
+          .select('message_count')
+          .eq('user_id', user.id)
+          .eq('character_id', characterId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        const currentMsgCount = blockRecord?.message_count || 0;
+
         const { data: apiSettings } = await supabase
           .from('api_keys')
-          .select('api_key, provider, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+          .select('api_key, provider')
+          .eq('user_id', user.id);
 
         const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
         const customKey = apiSettings?.find(s => s.provider === 'custom');
@@ -3029,8 +3039,6 @@ const ChatPage: React.FC = () => {
         const { data, error } = await supabase.functions.invoke('block-message', {
           body: {
             action: 'generate_block_message',
-            userId: user.id,
-            characterId,
             apiUrl: customUrl?.api_key || '',
             apiKey: customKey?.api_key || '',
             model: customModel?.api_key || '',
@@ -3038,16 +3046,16 @@ const ChatPage: React.FC = () => {
             characterName: character?.name || 'TA',
             characterPersona: character?.persona || '一个温柔体贴、很在意用户关系的人',
             characterReplyMode: replyMode,
+            messageCount: currentMsgCount,
           },
         });
 
         if (error) {
           console.error('[BlockAutoMessage] invoke error:', error);
         } else if ((data as any)?.success) {
-          // 如果后端无法保存到DB（FK约束），前端客户端插入
           const msgs = (data as any)?.messages as string[] | undefined;
-          const savedToDb = (data as any)?.savedToDb;
-          if (Array.isArray(msgs) && msgs.length > 0 && !savedToDb) {
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            // 前端插入消息到DB（通过代理→外部DB）
             for (const msg of msgs) {
               await supabase.from('chat_messages').insert({
                 user_id: user.id,
@@ -3056,6 +3064,15 @@ const ChatPage: React.FC = () => {
                 content: msg,
               });
             }
+            // 更新拉黑记录消息计数
+            await supabase
+              .from('character_blocks')
+              .update({
+                message_count: currentMsgCount + msgs.length,
+                last_message_at: new Date().toISOString(),
+              })
+              .eq('user_id', user.id)
+              .eq('character_id', characterId);
           }
           await refetchBlockStatus();
           await fetchMessagesWithTransfers();
