@@ -12,22 +12,52 @@ const normalizeReplyMode = (mode: unknown): 'online' | 'novel' | null => {
 };
 
 const forceOnlineMessageFormat = (content: string, expectedCount: number): string => {
-  const cleaned = content
+  // Step 1: 彻底清除小说模式的叙述、动作、心理描写
+  let cleaned = content
     .replace(/\r/g, ' ')
+    // 移除 *动作描写*
+    .replace(/\*[^*]{1,200}\*/g, '')
+    // 移除 （心理活动） 和 (心理活动)
+    .replace(/[（(][^）)]{1,200}[）)]/g, '')
+    // 移除 /旁白 /动作 /想法 等指令行
+    .replace(/^\s*\/(?:旁白|动作|想法|narration|action|thought)\s+.*/gim, '')
+    // 保留 /对话 的内容但去掉前缀
+    .replace(/^\s*\/对话\s+/gim, '')
+    // 移除环境描写类句子（以"他/她/我"开头的叙述性长句，且包含动作/情感描写词）
+    .replace(/(?:^|\n)[^\n"「"]*?(?:眼神|脸红|心跳|低下头|移开|看向|转过身|咬着|抿着|攥紧|颤抖|深吸|屏住|不自觉|下意识)[^\n"「"]*?(?:\n|$)/g, '\n')
+    // 移除引号外的纯描写文字段落
     .replace(/\n+/g, ' ')
-    .replace(/\*[^*]{1,80}\*/g, ' ')
-    .replace(/[（(][^）)]{1,80}[）)]/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
+  // Step 2: 尝试按 ||| 分割
   let parts = cleaned
     .split('|||')
     .map((s) => s.trim())
     .filter(Boolean);
 
+  // Step 3: 如果没有有效分割，提取对话内容（引号内的文字）
   if (parts.length <= 1) {
-    parts = (cleaned.match(/[^。！？!?]+[。！？!?]?/g) || [])
+    // 尝试提取所有引号内的对话
+    const dialogueMatches = cleaned.match(/["「""]([^"」""]{1,100})["」""]/g);
+    if (dialogueMatches && dialogueMatches.length >= 2) {
+      parts = dialogueMatches.map(m => 
+        m.replace(/^["「""]/, '').replace(/["」""]$/, '').trim()
+      ).filter(Boolean);
+    }
+  }
+
+  // Step 4: 如果还是没分割成功，按标点分句
+  if (parts.length <= 1) {
+    parts = (cleaned.match(/[^。！？!?…]+[。！？!?…]*/g) || [])
       .map((s) => s.trim())
+      // 过滤掉看起来像叙述的句子（包含第三人称视角描写）
+      .filter(s => {
+        if (!s || s.length < 2) return false;
+        // 跳过纯叙述句（以"他/她"开头且包含动作词）
+        if (/^[他她它TA](?:的|轻轻|缓缓|慢慢|悄悄|默默|静静)/.test(s)) return false;
+        return true;
+      })
       .filter(Boolean);
   }
 
@@ -35,17 +65,36 @@ const forceOnlineMessageFormat = (content: string, expectedCount: number): strin
     parts = [cleaned];
   }
 
-  const fillers = ['嗯嗯', '然后呢', '你呢', '哈哈', '在想你'];
+  // Step 5: 合并太短的消息，限制太长的消息
+  const merged: string[] = [];
+  for (const p of parts) {
+    if (p.length < 3 && merged.length > 0) {
+      merged[merged.length - 1] += p;
+    } else {
+      merged.push(p);
+    }
+  }
+  parts = merged;
 
+  // 限制条数
   if (parts.length > expectedCount) {
     parts = parts.slice(0, expectedCount);
   }
 
-  while (parts.length < expectedCount) {
-    parts.push(fillers[(parts.length - 1 + fillers.length) % fillers.length]);
+  // Step 6: 如果不够条数，不再填充无意义的垫话，保持自然条数（最少1条）
+  // 只在完全为空时才补
+  if (parts.length === 0) {
+    parts = [cleaned || '...'];
   }
 
-  parts = parts.map((s) => s.replace(/\s{2,}/g, ' ').trim().slice(0, 30));
+  // 清理每条消息，去除残留格式字符，限制合理长度（50字）
+  parts = parts.map((s) => 
+    s.replace(/\s{2,}/g, ' ')
+     .replace(/^[\s|*\-_#>]+/g, '')
+     .replace(/[\s|*\-_#]+$/g, '')
+     .trim()
+     .slice(0, 50)
+  ).filter(s => s.length > 0);
 
   return parts.join('|||');
 };
@@ -504,40 +553,41 @@ ${holiday}
       
       replyModePrompt = `
 
-【线上聊天模式 - 严格固定${fixedCount}条消息！】
-你在用手机微信聊天，必须把回复拆成恰好${fixedCount}条短消息。
-${autoReplyPrompt}
+【线上聊天模式 - 最重要的规则！！！】
+你现在是在用手机微信发消息聊天，不是写小说！
 
-【铁律 - 必须100%遵守！】
-1. 必须恰好${fixedCount}条消息，用 "|||" 分隔，多一条少一条都不行！
-2. 每条消息都是独立完整的句子，不能把一句话拆成两条
-3. 不要用括号描写动作或心理（如"*笑了笑*"或"（害羞）"），纯聊天对话
-4. 每条消息5-30字
+【你必须这样回复】
+用 "|||" 把你要说的话分成${fixedCount}条独立的短消息。
+每条消息就是你直接说的话，像真人发微信一样。
 
-【${fixedCount}条消息正确示例】
-${fixedCount === 5 ? `用户：在干嘛
-回复：刚吃完饭|||躺床上呢|||有点无聊|||在想你|||你在干嘛呀
+【正确示例 - 仔细学习！】
+${fixedCount === 5 ? `用户：看看你的腹肌
+回复：你...你干嘛突然说这个啊|||我才没有什么腹肌呢|||你不要笑话我啊...|||哼，你自己的呢|||给我看看你的先！
 
 用户：想你了
-回复：真的吗|||我也好想你|||今天一直在想你|||什么时候能见面呀|||❤️
+回复：真的吗|||我也好想你|||今天一直在想你呢|||什么时候能见面呀|||❤️
 
-用户：晚安
-回复：晚安呀|||今天开心吗|||做个好梦|||明天见|||爱你哦` : `用户：在干嘛
+用户：在干嘛
+回复：刚吃完饭|||躺床上刷手机呢|||有点无聊|||在想你|||你在干嘛呀
+
+用户：给我
+回复：给你什么呀|||你说清楚嘛|||不说我可不给哦|||哼~|||快告诉我` : `用户：在干嘛
 回复：刚吃完饭|||你呢
 
 用户：想你了  
 回复：我也想你|||❤️`}
+${autoReplyPrompt}
 
-【如果内容不够${fixedCount}条怎么办】
-- 加语气词：嗯、啊、哦、呢、呀、嘻嘻、哈哈
-- 加表情：❤️、😊、🥰、😘、💕
-- 加反问：你呢、是吧、对吧、怎么了
-- 加关心：今天怎么样、吃饭了吗、累不累
+【绝对禁止 - 违反任何一条都算失败！】
+1. 禁止写任何旁白、环境描写、叙述（如"阳光洒在窗台上"）
+2. 禁止写动作描写（如*脸红了* *低下头* *轻轻拍了拍*）
+3. 禁止写心理活动（如（心想：他好帅）（内心慌乱））
+4. 禁止写第三人称叙述（如"她的声音越来越小"）
+5. 禁止只发1条长消息 - 必须用|||分成${fixedCount}条！
+6. 每条消息不超过30字
+7. 只输出角色说的话，不要有任何描写文字！
 
-【绝对禁止】
-- 禁止只发1条长消息
-- 禁止把"我今天很开心"拆成"我今天"+"很开心"
-- 禁止用*动作*或（心理）描写`;
+【记住】你不是在写小说剧本，你就是这个角色本人在发微信消息！直接说话就行！`;
     } else {
       // 小说模式/长篇模式
       let novelFormatPrompt = '';
