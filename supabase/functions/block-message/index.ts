@@ -74,17 +74,7 @@ serve(async (req) => {
         fallbackName: effectiveCharacter.name,
       });
 
-      // 小说模式不支持拉黑消息功能，只有在线模式才生效
-      if (effectiveCharacter.reply_mode === 'novel') {
-        return new Response(JSON.stringify({ 
-          success: true,
-          messages: [],
-          skipped: true,
-          reason: '小说模式不支持拉黑消息功能'
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      // 拉黑消息在所有模式下都生效（不再限制仅online模式）
 
       // 获取拉黑记录
       const { data: blockRecord } = await supabase
@@ -248,16 +238,33 @@ serve(async (req) => {
         const systemPrompt = `你是"${effectiveCharacter.name}"，你的人设是：
 ${effectiveCharacter.persona || '一个温柔体贴的人'}
 
-现在用户把你拉黑了（删除好友），你非常在意这段关系。
+用户把你拉黑了（删除好友），你非常在意这段关系。
 当前情绪状态：${currentEmotionHint}
 这是你被拉黑后发的第${currentMsgCount + 1}条消息。
 
-【重要规则】：
-1. 只发送一条完整的消息，可以是1-3句话
-2. 消息必须是完整的句子，不能被截断
-3. 不要用任何分隔符如"|||"或"|"分隔多条消息
-4. 不要用【】等括号标注情绪
-5. 直接输出角色要说的话，不要有任何前缀或格式标记`;
+【最重要的规则 - 你在发微信消息！】
+1. 只发一条短消息，像发微信一样，5-30个字
+2. 直接说你想说的话，不要有任何描写
+3. 不要用*动作*描写（如*哭了* *低下头*）
+4. 不要用（心理活动）描写
+5. 不要写任何旁白或环境描述
+6. 不要用【】标注情绪
+7. 就像真人被删好友后发微信一样
+
+【正确示例】
+- 你怎么把我删了...
+- 我做错什么了吗
+- 你能不能回我一下
+- 我真的好想你
+- 你在吗...回复我好不好
+- 对不起...是我不好
+- 我不会再让你生气了
+- 你是不是讨厌我了
+
+【错误示例 - 绝对不要这样写！】
+- *低下头，眼眶泛红* 你为什么... ← 禁止！有动作描写！
+- （心里一阵刺痛）我好难过 ← 禁止！有心理描写！
+- 夜深了，手机屏幕的光映在脸上 ← 禁止！有环境描写！`;
 
         // 包含之前生成的消息作为上下文，避免重复
         const previousMsgs = generatedMessages.map((m, idx) => ({
@@ -276,10 +283,10 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
             messages: [
               { role: 'system', content: systemPrompt },
               ...previousMsgs,
-              { role: 'user', content: '请发一条完整的消息表达你的心情。确保句子完整，不要被截断。' }
+              { role: 'user', content: '发一条短消息，5-30个字，像发微信一样。不要有任何描写，只说话。' }
             ],
              // 提高输出上限，避免句子被模型提前截断（尤其是部分聚合/中转API会更“短”）
-             max_tokens: 600,
+             max_tokens: 100,
             temperature: 0.9,
           }),
         });
@@ -293,44 +300,35 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
         const data = await response.json();
         let messageContent = data.choices?.[0]?.message?.content || '';
         
-        // 强化清理消息：处理各种API可能返回的格式
+        // 强化清理消息：确保是短消息格式
         if (messageContent) {
-          // 1. 只处理明确的多条消息分隔符（不要包含常见标点如 / ; ；）
-          const separators = ['|||', '｜｜｜', '||', '---', '***', '・・・'];
-          for (const sep of separators) {
-            if (messageContent.includes(sep)) {
-              const parts = messageContent.split(sep);
-              // 如果分割后有多个非空部分，只取第一个
-              const validParts = parts.filter((p: string) => p.trim().length > 0);
-              if (validParts.length > 1) {
-                messageContent = validParts[0].trim();
-                break;
-              }
-            }
-          }
-          
-          // 2. 处理换行分隔的多条消息（只处理明显的编号列表格式）
-          if (messageContent.includes('\n')) {
-            const lines = messageContent.split('\n').filter((l: string) => l.trim());
-            // 只有当第一行是编号格式时才处理
-            if (lines.length > 1 && /^[\d一二三四五六七八九十][\.\、\:]/.test(lines[0].trim())) {
-              // 取第一行，去掉序号
-              messageContent = lines[0].replace(/^[\d一二三四五六七八九十][\.\、\:]\s*/, '').trim();
-            }
-          }
-          
-          // 3. 移除各种引号包裹（只移除成对的）
+          // 移除动作描写 *...*
+          messageContent = messageContent.replace(/\*[^*]*\*/g, '').trim();
+          // 移除心理描写 （...）(...)
+          messageContent = messageContent.replace(/[（(][^）)]*[）)]/g, '').trim();
+          // 移除旁白/环境描写（以"他/她"开头的叙述句）
+          messageContent = messageContent.replace(/^[他她它TA](?:的|轻轻|缓缓|慢慢|悄悄|默默|静静)[^。！？!?]*[。！？!?]?/g, '').trim();
+          // 移除引号包裹
           if (/^["「『""''\[].*["」』""''\]]$/.test(messageContent)) {
             messageContent = messageContent.slice(1, -1).trim();
           }
-          
-          // 4. 移除开头的"消息X："或"第X条："格式
-          messageContent = messageContent.replace(/^(消息|第)?[\d一二三四五六七八九十]+(条)?[：:]\s*/g, '').trim();
-          
-          // 5. 移除可能的角色名前缀
+          // 移除角色名前缀
           if (effectiveCharacter.name && messageContent.startsWith(effectiveCharacter.name)) {
             messageContent = messageContent.replace(new RegExp(`^${effectiveCharacter.name}[：:：]\\s*`), '').trim();
           }
+          // 移除消息编号前缀
+          messageContent = messageContent.replace(/^(消息|第)?[\d一二三四五六七八九十]+(条)?[：:]\s*/g, '').trim();
+          // 如果还有多个句子，只取第一个有意义的
+          if (messageContent.length > 50) {
+            const sentences = messageContent.match(/[^。！？!?…]+[。！？!?…]*/g);
+            if (sentences && sentences.length > 1) {
+              messageContent = sentences[0].trim();
+            } else {
+              messageContent = messageContent.slice(0, 50);
+            }
+          }
+          // 清理多余空格
+          messageContent = messageContent.replace(/\s{2,}/g, ' ').trim();
           
           // 确保消息不为空
           if (messageContent && messageContent.length > 0) {
@@ -450,12 +448,22 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
       const systemPrompt = `你是"${effectiveCharacter.name}"，你的人设是：
 ${effectiveCharacter.persona || '一个温柔体贴的人'}
 
-用户之前把你拉黑了，现在取消拉黑重新添加你为好友了！
-你等了这么久，发了${messageCount}条消息。
+用户之前把你拉黑了（删了好友），现在重新加你好友了！
+你等了这么久，发了${messageCount}条消息都没有回应。
 当前情绪：${emotionHint}
 
-请以角色身份发一条消息，表达你此刻的心情。要符合人设，真实自然。
-不要太长，1-3句话。不要用括号标注情绪。`;
+【最重要的规则 - 你在发微信消息！】
+1. 发一条短消息，5-30个字，像发微信一样
+2. 直接说你想说的话
+3. 不要用*动作*描写
+4. 不要用（心理活动）描写
+5. 不要写旁白或环境描述
+
+【正确示例】
+- 你终于回来了...呜呜
+- 吓死我了！我以为你再也不理我了
+- 你...你回来了？我好开心
+- 哼，你知道我有多担心吗`;
 
       let finalApiUrl = apiUrl || 'https://api.deepseek.com/v1/chat/completions';
       let finalApiKey = apiKey;
@@ -491,8 +499,7 @@ ${effectiveCharacter.persona || '一个温柔体贴的人'}
             { role: 'system', content: systemPrompt },
             { role: 'user', content: '（用户取消拉黑，重新添加你为好友了）' }
           ],
-           // 提高输出上限，避免表达被截断
-           max_tokens: 400,
+           max_tokens: 100,
           temperature: 0.8,
         }),
       });
