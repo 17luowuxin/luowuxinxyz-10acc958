@@ -5082,7 +5082,7 @@ const ChatPage: React.FC = () => {
           
           {/* 视频通话右上角上传按钮 */}
           {showCallDialog === 'video' && !callRinging && (
-            <div className="absolute top-4 right-4 z-20">
+            <div className="absolute right-4 z-20" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}>
               <button
                 onClick={() => callVideoInputRef.current?.click()}
                 className="text-white/90 text-sm font-medium hover:text-white transition-colors"
@@ -5111,7 +5111,7 @@ const ChatPage: React.FC = () => {
           )}
           
           {/* 主内容区域 */}
-          <div className="flex-1 flex flex-col relative z-10 px-4 py-4">
+          <div className="flex-1 flex flex-col relative z-10 px-4 py-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}>
             {/* 顶部：头像/名字区域 */}
             <div className="flex flex-col items-center mb-4">
               {/* 头像区域 - 语音通话参考图1样式 */}
