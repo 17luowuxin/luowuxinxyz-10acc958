@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface AIConfig {
@@ -176,9 +176,10 @@ serve(async (req) => {
       throw messagesError;
     }
 
-    if (!rawMessages || rawMessages.length < 5) {
+    if (!rawMessages || rawMessages.length < 3) {
+      console.log(`Not enough messages for summary: ${rawMessages?.length || 0} messages found for character ${characterId}`);
       return new Response(
-        JSON.stringify({ success: true, message: 'Not enough messages for summary' }),
+        JSON.stringify({ success: true, message: `消息不足（当前${rawMessages?.length || 0}条，至少需要3条）` }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

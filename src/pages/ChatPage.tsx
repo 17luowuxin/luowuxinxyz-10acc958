@@ -2665,16 +2665,19 @@ const ChatPage: React.FC = () => {
             // 如果移除转账指令后还有内容，显示消息
             if (msgContent.trim()) {
               // 生成语音气泡（如果TTS启用且voiceMode为always）
-              let audioBase64: string | null = null;
+               let audioBase64: string | null = null;
               if (ttsConfig?.enabled && voiceMode === 'always') {
-                audioBase64 = await generateTTSAudio(msgContent);
-                // 使用音频队列串行播放
-                if (audioBase64) {
-                  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
-                  audioQueue.enqueue({ src: audioUrl }).catch(console.error);
-                } else {
-                  // 语音生成失败，在总是语音模式下提示用户
-                  console.warn('语音生成失败，回退到文本消息');
+                try {
+                  audioBase64 = await generateTTSAudio(msgContent);
+                  if (audioBase64) {
+                    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+                    audioQueue.enqueue({ src: audioUrl }).catch(console.error);
+                  } else {
+                    console.warn('语音生成失败，回退到文本消息');
+                  }
+                } catch (ttsErr) {
+                  console.error('TTS生成异常，跳过语音:', ttsErr);
+                  audioBase64 = null;
                 }
               }
               
@@ -2825,14 +2828,17 @@ const ChatPage: React.FC = () => {
         // 生成语音气泡（如果TTS启用且voiceMode为always）
         let audioBase64: string | null = null;
         if (ttsConfig?.enabled && voiceMode === 'always') {
-          audioBase64 = await generateTTSAudio(cleanContent);
-          // 使用音频队列串行播放
-          if (audioBase64) {
-            const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
-            audioQueue.enqueue({ src: audioUrl }).catch(console.error);
-          } else {
-            // 语音生成失败，在总是语音模式下提示用户
-            console.warn('语音生成失败，回退到文本消息');
+          try {
+            audioBase64 = await generateTTSAudio(cleanContent);
+            if (audioBase64) {
+              const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+              audioQueue.enqueue({ src: audioUrl }).catch(console.error);
+            } else {
+              console.warn('语音生成失败，回退到文本消息');
+            }
+          } catch (ttsErr) {
+            console.error('TTS生成异常，跳过语音:', ttsErr);
+            audioBase64 = null;
           }
         }
         
@@ -2956,8 +2962,13 @@ const ChatPage: React.FC = () => {
         }
       }
       
-      // 触发记忆摘要生成（每10条消息）
-      const totalMessages = messages.length + 2; // +2 for user and assistant messages just added
+      // 触发记忆摘要生成（每10条消息，使用数据库计数而非内存计数）
+      const { count: dbMessageCount } = await supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('character_id', characterId)
+        .eq('user_id', user?.id);
+      const totalMessages = dbMessageCount || 0;
       if (totalMessages > 0 && totalMessages % 10 === 0) {
         console.log('Triggering memory summary generation at message count:', totalMessages);
         // 后台生成摘要，不阻塞UI
