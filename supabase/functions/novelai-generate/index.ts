@@ -5,7 +5,7 @@ import { unzipSync } from "https://esm.sh/fflate@0.8.2?deno";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface NovelAIConfig {
@@ -495,10 +495,32 @@ serve(async (req) => {
     };
 
     let response: Response;
-    try {
-      response = await sendNovelAIRequest(novelaiPayload);
-    } catch (fetchError) {
-      console.error("NovelAI fetch error:", fetchError);
+    const MAX_RETRIES = 2;
+    let lastFetchError: any = null;
+    
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        response = await sendNovelAIRequest(novelaiPayload);
+        
+        // 500错误自动重试
+        if (response.status === 500 && attempt < MAX_RETRIES) {
+          console.log(`NovelAI 500 error, retrying (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        break; // 成功或非500错误，退出重试
+      } catch (fetchError) {
+        lastFetchError = fetchError;
+        console.error(`NovelAI fetch error (attempt ${attempt + 1}):`, fetchError);
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+      }
+    }
+    
+    if (!response!) {
+      console.error("NovelAI all retries failed:", lastFetchError);
       return new Response(
         JSON.stringify({
           error: "无法连接NovelAI服务器（网络/代理问题），请稍后再试",
