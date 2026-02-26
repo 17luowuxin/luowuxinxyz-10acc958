@@ -52,6 +52,15 @@ const isVoiceRequestedByUser = (text: string) => {
   return VOICE_REQUEST_KEYWORDS.some((kw) => t.includes(kw));
 };
 
+// 检查内容是否有意义（用于决定是否生成TTS语音）
+// 过短/纯符号/省略号等内容不应生成语音
+const isMeaningfulForTTS = (text: string): boolean => {
+  if (!text) return false;
+  const cleaned = text.replace(/[\s.,。，！!？?…·~～、\-—]+/g, '').trim();
+  // 至少2个有意义的字符
+  return cleaned.length >= 2;
+};
+
 // 格式化时间 - 放在组件外避免每条消息都重新创建
 const formatMessageTime = (date: Date) => {
   const now = new Date();
@@ -2664,9 +2673,9 @@ const ChatPage: React.FC = () => {
             
             // 如果移除转账指令后还有内容，显示消息
             if (msgContent.trim()) {
-              // 生成语音气泡（如果TTS启用且voiceMode为always）
+              // 生成语音气泡（如果TTS启用且voiceMode为always，且内容有意义）
                let audioBase64: string | null = null;
-              if (ttsConfig?.enabled && voiceMode === 'always') {
+              if (ttsConfig?.enabled && voiceMode === 'always' && isMeaningfulForTTS(msgContent)) {
                 try {
                   audioBase64 = await generateTTSAudio(msgContent);
                   if (audioBase64) {
@@ -2827,7 +2836,7 @@ const ChatPage: React.FC = () => {
       if (cleanContent.trim()) {
         // 生成语音气泡（如果TTS启用且voiceMode为always）
         let audioBase64: string | null = null;
-        if (ttsConfig?.enabled && voiceMode === 'always') {
+        if (ttsConfig?.enabled && voiceMode === 'always' && isMeaningfulForTTS(cleanContent)) {
           try {
             audioBase64 = await generateTTSAudio(cleanContent);
             if (audioBase64) {
