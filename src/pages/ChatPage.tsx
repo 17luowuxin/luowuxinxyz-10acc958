@@ -2471,24 +2471,63 @@ const ChatPage: React.FC = () => {
         model: body.model 
       });
       
-      // Use fetch directly for streaming
-      const chatController = new AbortController();
-      const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
-
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify(body),
-        signal: chatController.signal,
-      }).finally(() => window.clearTimeout(chatTimeout));
-
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
-        console.error('Chat error:', errorData);
-        toast.error(errorData.error || 'AI服务暂时不可用');
+      // Use fetch directly for streaming, with retry on network errors
+      const MAX_CHAT_RETRIES = 1;
+      let resp: Response | null = null;
+      
+      for (let attempt = 0; attempt <= MAX_CHAT_RETRIES; attempt++) {
+        const chatController = new AbortController();
+        const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
+        
+        try {
+          resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify(body),
+            signal: chatController.signal,
+          });
+          window.clearTimeout(chatTimeout);
+          
+          if (resp.ok) break; // 成功，退出重试
+          
+          // 5xx 错误自动重试一次
+          if (resp.status >= 500 && attempt < MAX_CHAT_RETRIES) {
+            console.warn(`Chat API ${resp.status}, retrying...`);
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          
+          const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
+          console.error('Chat error:', errorData);
+          toast.error(errorData.error || 'AI服务暂时不可用');
+          setLoading(false);
+          return;
+        } catch (fetchErr: any) {
+          window.clearTimeout(chatTimeout);
+          if (fetchErr.name === 'AbortError') {
+            if (attempt < MAX_CHAT_RETRIES) {
+              console.warn('Chat request timeout, retrying...');
+              await new Promise(r => setTimeout(r, 1000));
+              continue;
+            }
+            toast.error('请求超时，请检查网络后重试');
+          } else if (attempt < MAX_CHAT_RETRIES) {
+            console.warn('Chat fetch error, retrying:', fetchErr);
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          } else {
+            toast.error('网络连接失败，请检查网络后重试');
+          }
+          setLoading(false);
+          return;
+        }
+      }
+      
+      if (!resp) {
+        toast.error('请求失败，请重试');
         setLoading(false);
         return;
       }
