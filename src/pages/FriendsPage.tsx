@@ -50,7 +50,7 @@ const truncateMessage = (content: string, maxLength: number = 30): string => {
 
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const [characters, setCharacters] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [persona, setPersona] = useState('');
@@ -665,23 +665,36 @@ const FriendsPage: React.FC = () => {
     if (!editingChar || !user) return;
     
     try {
-      const { error } = await supabase
+      const payload = {
+        character_id: editingChar.id,
+        user_id: user.id,
+        summary: memorySummary,
+        manually_edited: true,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase
         .from('character_memories')
-        .upsert({
-          character_id: editingChar.id,
-          user_id: user.id,
-          summary: memorySummary,
-          manually_edited: true,
-          updated_at: new Date().toISOString(),
-        } as any, {
+        .upsert(payload as any, {
           onConflict: 'character_id,user_id'
         });
+
+      // 兼容外部数据库旧结构（无 manually_edited 字段）
+      if (error?.code === 'PGRST204' && String(error.message || '').includes('manually_edited')) {
+        const { manually_edited, ...legacyPayload } = payload;
+        const retry = await supabase
+          .from('character_memories')
+          .upsert(legacyPayload as any, {
+            onConflict: 'character_id,user_id'
+          });
+        error = retry.error;
+      }
       
       if (error) throw error;
       toast.success('记忆已保存');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save memory:', err);
-      toast.error('保存失败');
+      toast.error(`保存失败：${err?.message || '请稍后重试'}`);
     }
   };
 
@@ -690,17 +703,22 @@ const FriendsPage: React.FC = () => {
     
     setRegeneratingMemory(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
       const resp = await fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${authToken}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify({
           characterId: editingChar.id,
           userId: user.id,
           characterName: editingChar.name,
           characterPersona: editingChar.persona,
+          authSource,
         }),
       });
       
