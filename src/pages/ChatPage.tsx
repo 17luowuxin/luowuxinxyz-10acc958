@@ -248,7 +248,7 @@ const StickerPickerItem = memo(({
 const ChatPage: React.FC = () => {
   const { characterId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   // 使用分页消息 - 初始加载20条，向上滚动加载更多
   const [messages, setMessages] = useState<any[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -3020,17 +3020,22 @@ const ChatPage: React.FC = () => {
       if (totalMessages > 0 && totalMessages % 10 === 0) {
         console.log('Triggering memory summary generation at message count:', totalMessages);
         // 后台生成摘要，不阻塞UI
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
         fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
             characterId,
             userId: user?.id,
             characterName: character?.name,
             characterPersona: character?.persona,
+            authSource,
           }),
         }).then(res => {
           if (res.ok) {

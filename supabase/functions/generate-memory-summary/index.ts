@@ -146,7 +146,7 @@ serve(async (req) => {
   }
 
   try {
-    const { characterId, userId, characterName, characterPersona } = await req.json();
+    const { characterId, userId, characterName, characterPersona, authSource } = await req.json();
 
     if (!characterId || !userId) {
       return new Response(
@@ -157,13 +157,24 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const cloudSupabase = createClient(supabaseUrl, supabaseKey);
+
+    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const externalServiceKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    const externalSupabase = externalUrl && externalServiceKey
+      ? createClient(externalUrl, externalServiceKey)
+      : null;
+
+    let dataSupabase = authSource === 'external' && externalSupabase
+      ? externalSupabase
+      : cloudSupabase;
+    let dataSource: 'cloud' | 'external' = dataSupabase === externalSupabase ? 'external' : 'cloud';
 
     // Get user's API config
-    const apiConfig = await checkDefaultApiSetting(supabase, userId);
+    const apiConfig = await checkDefaultApiSetting(dataSupabase, userId);
 
     // Get recent messages
-    const { data: rawMessages, error: messagesError } = await supabase
+    let { data: rawMessages, error: messagesError } = await dataSupabase
       .from('chat_messages')
       .select('role, content, created_at')
       .eq('character_id', characterId)
@@ -171,31 +182,75 @@ serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(100);
 
+    // 云库消息不足时，自动回退到外部库（兼容旧调用方未传 authSource）
+    if ((messagesError || !rawMessages || rawMessages.length < 3) && dataSource === 'cloud' && externalSupabase) {
+      const externalResult = await externalSupabase
+        .from('chat_messages')
+        .select('role, content, created_at')
+        .eq('character_id', characterId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!externalResult.error && (externalResult.data?.length || 0) > (rawMessages?.length || 0)) {
+        rawMessages = externalResult.data;
+        messagesError = null;
+        dataSupabase = externalSupabase;
+        dataSource = 'external';
+        console.log(`Falling back to external data source for user ${userId}`);
+      }
+    }
+
     if (messagesError) {
       console.error('Error fetching messages:', messagesError);
       throw messagesError;
     }
 
-    if (!rawMessages || rawMessages.length < 3) {
-      console.log(`Not enough messages for summary: ${rawMessages?.length || 0} messages found for character ${characterId}`);
+    const messageCount = rawMessages?.length || 0;
+    if (messageCount < 3) {
+      console.log(`Not enough messages for summary: ${messageCount} messages found for character ${characterId} (source=${dataSource})`);
       return new Response(
-        JSON.stringify({ success: true, message: `消息不足（当前${rawMessages?.length || 0}条，至少需要3条）` }),
+        JSON.stringify({ success: true, message: `消息不足（当前${messageCount}条，至少需要3条）` }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const messages = rawMessages.reverse();
 
-    // Get existing memory
-    const { data: existingMemory } = await supabase
+    // Get existing memory (兼容外部旧表无 manually_edited)
+    let existingSummary = '';
+    let isManuallyEdited = false;
+
+    const { data: existingMemoryData, error: existingMemoryError } = await dataSupabase
       .from('character_memories')
       .select('summary, manually_edited')
       .eq('character_id', characterId)
       .eq('user_id', userId)
       .maybeSingle();
 
-    const isManuallyEdited = existingMemory?.manually_edited === true;
-    const existingSummary = existingMemory?.summary || '';
+    if (existingMemoryError) {
+      if (existingMemoryError.code === 'PGRST204' && String(existingMemoryError.message || '').includes('manually_edited')) {
+        const { data: legacyMemory, error: legacyError } = await dataSupabase
+          .from('character_memories')
+          .select('summary')
+          .eq('character_id', characterId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (legacyError) {
+          console.error('Error fetching legacy memory:', legacyError);
+          throw legacyError;
+        }
+
+        existingSummary = legacyMemory?.summary || '';
+      } else {
+        console.error('Error fetching existing memory:', existingMemoryError);
+        throw existingMemoryError;
+      }
+    } else {
+      existingSummary = existingMemoryData?.summary || '';
+      isManuallyEdited = existingMemoryData?.manually_edited === true;
+    }
 
     // Format messages for summary
     const conversationText = messages
@@ -244,26 +299,38 @@ ${conversationText}`;
       { role: 'user', content: userPrompt }
     ], apiConfig);
 
-    // Upsert memory - keep manually_edited flag
-    const { error: upsertError } = await supabase
+    // Upsert memory - keep manually_edited flag, fallback for legacy schema
+    const memoryPayload: Record<string, unknown> = {
+      character_id: characterId,
+      user_id: userId,
+      summary,
+      message_count: messages.length,
+      manually_edited: isManuallyEdited,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error: upsertError } = await dataSupabase
       .from('character_memories')
-      .upsert({
-        character_id: characterId,
-        user_id: userId,
-        summary: summary,
-        message_count: messages.length,
-        manually_edited: isManuallyEdited,
-        updated_at: new Date().toISOString(),
-      }, {
+      .upsert(memoryPayload as any, {
         onConflict: 'character_id,user_id'
       });
+
+    if (upsertError?.code === 'PGRST204' && String(upsertError.message || '').includes('manually_edited')) {
+      const { manually_edited, ...legacyPayload } = memoryPayload;
+      const retry = await dataSupabase
+        .from('character_memories')
+        .upsert(legacyPayload as any, {
+          onConflict: 'character_id,user_id'
+        });
+      upsertError = retry.error;
+    }
 
     if (upsertError) {
       console.error('Error upserting memory:', upsertError);
       throw upsertError;
     }
 
-    console.log(`Memory summary updated for character ${characterId}, manually_edited: ${isManuallyEdited}`);
+    console.log(`Memory summary updated for character ${characterId}, source: ${dataSource}, manually_edited: ${isManuallyEdited}`);
 
     return new Response(
       JSON.stringify({ success: true, summary }),
