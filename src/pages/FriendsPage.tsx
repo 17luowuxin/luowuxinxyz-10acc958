@@ -517,6 +517,8 @@ const FriendsPage: React.FC = () => {
           .select('summary')
           .eq('character_id', char.id)
           .eq('user_id', user?.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
           .maybeSingle(),
         supabase
           .from('api_keys')
@@ -665,29 +667,55 @@ const FriendsPage: React.FC = () => {
     if (!editingChar || !user) return;
     
     try {
-      const payload = {
+      const basePayload = {
         character_id: editingChar.id,
         user_id: user.id,
         summary: memorySummary,
-        manually_edited: true,
         updated_at: new Date().toISOString(),
       };
 
-      let { error } = await supabase
-        .from('character_memories')
-        .upsert(payload as any, {
-          onConflict: 'character_id,user_id'
-        });
+      const payload = {
+        ...basePayload,
+        manually_edited: true,
+      };
+
+      const hasMissingOnConflictConstraint = (error: any) =>
+        error?.code === '42P10' ||
+        String(error?.message || '').includes('no unique or exclusion constraint matching the ON CONFLICT specification');
+
+      const writeMemory = async (writePayload: Record<string, unknown>) => {
+        let { error } = await supabase
+          .from('character_memories')
+          .upsert(writePayload as any, {
+            onConflict: 'character_id,user_id'
+          });
+
+        if (!error) return null;
+        if (!hasMissingOnConflictConstraint(error)) return error;
+
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('character_memories')
+          .update(writePayload as any)
+          .eq('character_id', editingChar.id)
+          .eq('user_id', user.id)
+          .select('id')
+          .limit(1);
+
+        if (updateError) return updateError;
+        if ((updatedRows?.length || 0) > 0) return null;
+
+        const { error: insertError } = await supabase
+          .from('character_memories')
+          .insert(writePayload as any);
+
+        return insertError || null;
+      };
+
+      let error = await writeMemory(payload);
 
       // 兼容外部数据库旧结构（无 manually_edited 字段）
       if (error?.code === 'PGRST204' && String(error.message || '').includes('manually_edited')) {
-        const { manually_edited, ...legacyPayload } = payload;
-        const retry = await supabase
-          .from('character_memories')
-          .upsert(legacyPayload as any, {
-            onConflict: 'character_id,user_id'
-          });
-        error = retry.error;
+        error = await writeMemory(basePayload);
       }
       
       if (error) throw error;

@@ -226,6 +226,8 @@ serve(async (req) => {
       .select('summary, manually_edited')
       .eq('character_id', characterId)
       .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existingMemoryError) {
@@ -299,30 +301,56 @@ ${conversationText}`;
       { role: 'user', content: userPrompt }
     ], apiConfig);
 
-    // Upsert memory - keep manually_edited flag, fallback for legacy schema
-    const memoryPayload: Record<string, unknown> = {
+    const hasMissingOnConflictConstraint = (error: any) =>
+      error?.code === '42P10' ||
+      String(error?.message || '').includes('no unique or exclusion constraint matching the ON CONFLICT specification');
+
+    const writeMemory = async (payload: Record<string, unknown>) => {
+      let { error } = await dataSupabase
+        .from('character_memories')
+        .upsert(payload as any, {
+          onConflict: 'character_id,user_id'
+        });
+
+      if (!error) return null;
+      if (!hasMissingOnConflictConstraint(error)) return error;
+
+      const { data: updatedRows, error: updateError } = await dataSupabase
+        .from('character_memories')
+        .update(payload as any)
+        .eq('character_id', characterId)
+        .eq('user_id', userId)
+        .select('id')
+        .limit(1);
+
+      if (updateError) return updateError;
+      if ((updatedRows?.length || 0) > 0) return null;
+
+      const { error: insertError } = await dataSupabase
+        .from('character_memories')
+        .insert(payload as any);
+
+      return insertError || null;
+    };
+
+    // Upsert memory - keep manually_edited flag, fallback for legacy schema and missing unique constraint
+    const basePayload: Record<string, unknown> = {
       character_id: characterId,
       user_id: userId,
       summary,
       message_count: messages.length,
-      manually_edited: isManuallyEdited,
       updated_at: new Date().toISOString(),
     };
 
-    let { error: upsertError } = await dataSupabase
-      .from('character_memories')
-      .upsert(memoryPayload as any, {
-        onConflict: 'character_id,user_id'
-      });
+    const memoryPayload: Record<string, unknown> = {
+      ...basePayload,
+      manually_edited: isManuallyEdited,
+    };
+
+    let upsertError = await writeMemory(memoryPayload);
 
     if (upsertError?.code === 'PGRST204' && String(upsertError.message || '').includes('manually_edited')) {
-      const { manually_edited, ...legacyPayload } = memoryPayload;
-      const retry = await dataSupabase
-        .from('character_memories')
-        .upsert(legacyPayload as any, {
-          onConflict: 'character_id,user_id'
-        });
-      upsertError = retry.error;
+      upsertError = await writeMemory(basePayload);
     }
 
     if (upsertError) {
