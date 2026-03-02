@@ -26,83 +26,89 @@ interface SpaceImageConfig {
 interface UnsplashConfig {
   enabled: boolean;
   accessKey: string;
-  category: string; // 'auto' | 'nature' | 'city' | 'people' | 'food' | 'animals' | 'art' | 'travel' | 'minimal'
+  category: string;
+}
+
+// 从 Cloud 和 External 两个数据库获取 api_keys，合并结果（外部优先）
+async function fetchApiSettings(userId: string) {
+  if (!userId) return null;
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const cloudClient = createClient(supabaseUrl, supabaseKey);
+
+  const { data: cloudSettings } = await cloudClient
+    .from('api_keys')
+    .select('provider, api_key')
+    .eq('user_id', userId);
+
+  const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+  const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+  let externalSettings: any[] | null = null;
+  if (extUrl && extKey) {
+    try {
+      const extClient = createClient(extUrl, extKey);
+      const { data } = await extClient
+        .from('api_keys')
+        .select('provider, api_key')
+        .eq('user_id', userId);
+      externalSettings = data;
+    } catch (e) {
+      console.warn('Failed to read external api_keys:', e);
+    }
+  }
+
+  const merged = new Map<string, string>();
+  if (cloudSettings) {
+    for (const s of cloudSettings) merged.set(s.provider, s.api_key);
+  }
+  if (externalSettings) {
+    for (const s of externalSettings) merged.set(s.provider, s.api_key);
+  }
+
+  if (merged.size === 0) return null;
+  return merged;
 }
 
 async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
   if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
   
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  
-  const { data: apiSettings } = await supabase
-    .from('api_keys')
-    .select('provider, api_key')
-    .eq('user_id', userId);
-  
+  const settings = await fetchApiSettings(userId);
   let useDefault = false;
   let defaultModel = 'deepseek-chat';
   
-  if (apiSettings) {
-    const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
-    if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
-      useDefault = true;
-    }
-    const defaultModelSetting = apiSettings.find(s => s.provider === 'default_model');
-    if (defaultModelSetting) {
-      defaultModel = defaultModelSetting.api_key;
-    }
+  if (settings) {
+    if (settings.get('use_default_api') === 'true') useDefault = true;
+    const dm = settings.get('default_model');
+    if (dm) defaultModel = dm;
   }
   return { useDefault, defaultModel };
 }
 
-// 获取空间图片生成API配置
 async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | null> {
   if (!userId) return null;
+  const settings = await fetchApiSettings(userId);
+  if (!settings) return null;
   
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  
-  const { data: apiSettings } = await supabase
-    .from('api_keys')
-    .select('provider, api_key')
-    .eq('user_id', userId);
-  
-  if (!apiSettings) return null;
-  
-  const enabled = apiSettings.find(s => s.provider === 'space_image_enabled')?.api_key === 'true';
-  const apiKey = apiSettings.find(s => s.provider === 'space_image_api_key')?.api_key || '';
-  const apiUrl = apiSettings.find(s => s.provider === 'space_image_api_url')?.api_key || '';
-  const model = apiSettings.find(s => s.provider === 'space_image_model')?.api_key || '';
+  const enabled = settings.get('space_image_enabled') === 'true';
+  const apiKey = settings.get('space_image_api_key') || '';
+  const apiUrl = settings.get('space_image_api_url') || '';
+  const model = settings.get('space_image_model') || '';
   
   if (!enabled || !apiKey || !apiUrl) return null;
-  
   return { enabled, apiKey, apiUrl, model };
 }
 
-// 获取 Unsplash 配置
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
   if (!userId) return null;
+  const settings = await fetchApiSettings(userId);
+  if (!settings) return null;
   
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  
-  const { data: apiSettings } = await supabase
-    .from('api_keys')
-    .select('provider, api_key')
-    .eq('user_id', userId);
-  
-  if (!apiSettings) return null;
-  
-  const enabled = apiSettings.find(s => s.provider === 'unsplash_enabled')?.api_key === 'true';
-  const accessKey = apiSettings.find(s => s.provider === 'unsplash_access_key')?.api_key || '';
-  const category = apiSettings.find(s => s.provider === 'unsplash_category')?.api_key || 'auto';
+  const enabled = settings.get('unsplash_enabled') === 'true';
+  const accessKey = settings.get('unsplash_access_key') || '';
+  const category = settings.get('unsplash_category') || 'auto';
   
   if (!enabled || !accessKey) return null;
-  
   return { enabled, accessKey, category };
 }
 
@@ -126,9 +132,7 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   try {
     const categoryModifier = getCategoryModifier(config.category);
     
-    // 依次尝试每个关键词
     for (const keyword of keywords) {
-      // 如果不是自动模式，将分类修饰词加入搜索
       const searchQuery = config.category !== 'auto' && categoryModifier 
         ? `${keyword} ${categoryModifier}` 
         : keyword;
@@ -152,7 +156,6 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
-        // 随机选择一张图片增加多样性
         const randomIndex = Math.floor(Math.random() * Math.min(data.results.length, 5));
         const photo = data.results[randomIndex];
         console.log('Found Unsplash image for keyword:', keyword, 'category:', config.category);
@@ -173,7 +176,6 @@ async function generateImage(prompt: string, config: SpaceImageConfig): Promise<
   try {
     console.log('Generating image with prompt:', prompt.slice(0, 100));
     
-    // 自动补全API路径
     let apiUrl = config.apiUrl.replace(/\/+$/, '');
     if (!apiUrl.includes('/images/generations')) {
       apiUrl = `${apiUrl}/images/generations`;
@@ -203,7 +205,6 @@ async function generateImage(prompt: string, config: SpaceImageConfig): Promise<
     const data = await response.json();
     console.log('Image API response keys:', Object.keys(data));
     
-    // 尝试多种格式提取图片URL
     if (data.data?.[0]?.url) {
       return data.data[0].url;
     } else if (data.data?.[0]?.b64_json) {
@@ -234,7 +235,6 @@ async function getAICompletion(
   };
   let model: string;
 
-  // 【关键修复】优先检查用户传递的自定义API配置
   if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
     if (!baseUrl.endsWith('/chat/completions')) {
@@ -255,7 +255,6 @@ async function getAICompletion(
     model = 'gpt-4o-mini';
     console.log('Using OpenAI API');
   } else if (config.useDefaultApi) {
-    // 只有在用户没有配置自定义API时才检查默认API设置
     const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
     if (defaultKey) {
       apiUrl = 'https://api.deepseek.com/v1/chat/completions';
@@ -266,11 +265,9 @@ async function getAICompletion(
       throw new Error("默认API暂不可用，请配置自定义API");
     }
   } else {
-    // 没有任何配置，提示用户
     throw new Error("请先在设置中配置API密钥");
   }
 
-  // 尝试流式和非流式
   let response = await fetch(apiUrl, {
     method: "POST",
     headers,
@@ -282,7 +279,6 @@ async function getAICompletion(
     }),
   });
   
-  // 如果返回400错误，可能是模型不支持某些参数，重试
   if (response.status === 400) {
     console.log("First request failed with 400, retrying with minimal params...");
     response = await fetch(apiUrl, {
@@ -308,7 +304,6 @@ async function getAICompletion(
 
   const data = await response.json();
   
-  // 检测是否被截断
   const finishReason = data.choices?.[0]?.finish_reason;
   console.log("Finish reason:", finishReason);
   if (finishReason === 'length') {
@@ -318,7 +313,6 @@ async function getAICompletion(
   console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
   
   let content = '';
-  // 尝试多种格式提取内容
   if (data.choices?.[0]?.message?.content) {
     content = data.choices[0].message.content;
   } else if (data.choices?.[0]?.delta?.content) {
@@ -351,7 +345,6 @@ async function getAICompletion(
   
   if (!content || content.trim() === '') {
     console.error("Empty content from API. Full response:", JSON.stringify(data));
-    // 返回一个默认的有趣内容而不是错误提示
     const fallbackContents = [
       '今天也是元气满满的一天呢~ ✨',
       '刚刚看到了很美的风景，想分享给你们！🌸',
@@ -362,11 +355,9 @@ async function getAICompletion(
     return fallbackContents[Math.floor(Math.random() * fallbackContents.length)];
   }
   
-  // 清理内容 - 移除前后空白和多余换行
   return content.trim().replace(/^\n+|\n+$/g, '');
 }
 
-// 用视觉能力识别图片内容（优先使用用户自定义/OpenAI配置；不行再用 Lovable AI 网关）
 async function getImageDescription(imageUrl: string, config: AIConfig): Promise<string> {
   const visionPrompt = '用一句话(15字以内)描述这张图片的主要内容，只说核心内容。';
 
@@ -381,7 +372,6 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
       if (!r.ok) return null;
       const ct = r.headers.get('content-type') || 'image/jpeg';
       const buf = new Uint8Array(await r.arrayBuffer());
-      // 防止拉取过大的图片导致函数超时/内存飙升
       if (buf.byteLength > 2_500_000) return null;
       return `data:${ct};base64,${encodeBase64(buf.buffer)}`;
     } catch {
@@ -412,7 +402,6 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
     });
 
     if (response.status === 400) {
-      // 某些 OpenAI 兼容实现不支持 max_tokens/stream 或 content 结构，最小参数重试
       response = await fetch(apiUrl, {
         method: 'POST',
         headers,
@@ -438,7 +427,6 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
     return content;
   };
 
-  // 1) 优先走用户配置（你填的“可识别图片”的模型就能真正派上用场）
   try {
     const canUseUserVision =
       !!config.apiKey &&
@@ -463,13 +451,9 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
 
       console.log('Vision via user provider:', config.provider, 'model:', model);
 
-      // A) 先按 OpenAI 官方结构尝试（image_url: { url }）
       let content = await callVision(apiUrl, headers, model, imageUrl, 'object');
-
-      // B) 有些兼容实现需要 image_url 直接是字符串
       if (!content) content = await callVision(apiUrl, headers, model, imageUrl, 'string');
 
-      // C) 如果对方模型无法抓取公网 URL，则转 data URL 再试一次
       if (!content) {
         const dataUrl = await toDataUrl(imageUrl);
         if (dataUrl) {
@@ -484,7 +468,6 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
     console.error('User vision error:', err);
   }
 
-  // 2) 兜底：Lovable AI 网关（如果额度不足会返回 402）
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
     console.log('No LOVABLE_API_KEY, skip image recognition');
@@ -535,10 +518,16 @@ serve(async (req) => {
   try {
     const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
-    // 用服务端权限读取动态/评论上下文（用于“接话”）
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 构建数据库客户端 - 优先使用外部数据库（外部用户的数据在那里）
+    const cloudUrl = Deno.env.get('SUPABASE_URL')!;
+    const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const cloudDb = createClient(cloudUrl, cloudKey);
+    
+    const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    const extDb = (extUrl && extKey) ? createClient(extUrl, extKey) : null;
+    // 外部用户的 moments/comments 存在外部数据库
+    const supabase = extDb || cloudDb;
 
     // 检查是否使用默认API
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
@@ -575,12 +564,11 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
     } else if (type === "reply") {
       const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
       
-      // 如果有图片，识别图片内容
       let imageDescriptions = '';
       if (userImages && userImages.length > 0) {
         console.log("Recognizing user images:", userImages.length);
         const descriptions = [];
-        for (const imgUrl of userImages.slice(0, 3)) { // 最多识别3张
+        for (const imgUrl of userImages.slice(0, 3)) {
           const desc = await getImageDescription(imgUrl, config);
           if (desc) descriptions.push(desc);
         }
@@ -589,7 +577,6 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
         }
       }
       
-      // 【核心】拉取该动态下的历史评论，构建上下文
       let conversationContext = '';
       if (momentId) {
         const { data: comments } = await supabase
@@ -597,11 +584,10 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
           .select('content, is_character_reply, created_at')
           .eq('moment_id', momentId)
           .order('created_at', { ascending: true })
-          .limit(20); // 最多20条历史
+          .limit(20);
         
         if (comments && comments.length > 0) {
           const history = comments.map(c => {
-            // 角色回复格式: [角色名] 内容
             const charMatch = c.content.match(/^\[([^\]]+)\]\s*/);
             if (c.is_character_reply && charMatch) {
               const charName = charMatch[1];
@@ -634,7 +620,6 @@ ${conversationContext}
 - 可以使用emoji
 - 1-2句话`;
     } else if (type === "guestbook-reply") {
-      // 留言板回复 - 更简短亲切
       const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
       
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
@@ -651,7 +636,6 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 - 1-2句话`;
     }
 
-    // 日志：显示实际使用的API
     const usingCustom = userApiKey && (provider === 'custom' || provider === 'deepseek' || provider === 'openai');
     console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl });
     console.log(`Using provider: ${usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : 'lovable-ai')}`);
@@ -662,15 +646,12 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       config
     );
 
-    // 如果是发动态类型，尝试生成配图
     let imageUrl: string | undefined;
     if (type === "moment") {
-      // 优先检查空间图片生成API
       const spaceImageConfig = await getSpaceImageConfig(userId);
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        // 基于角色和动态内容生成图片提示词
         const imagePrompt = `${character.persona || character.name}, ${content}, anime style, high quality, beautiful`;
         const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig);
         
@@ -682,13 +663,11 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         }
       }
       
-      // 如果没有生成图片，尝试使用 Unsplash
       if (!imageUrl) {
         const unsplashConfig = await getUnsplashConfig(userId);
         if (unsplashConfig) {
           console.log("Unsplash enabled, extracting keywords from content...");
           
-          // 使用AI提取关键词
           const keywordPrompt = `请从以下动态内容中提取2-4个适合搜索图片的英文关键词，用逗号分隔。
 要求：
 - 关键词要具体、可视化，适合搜索摄影图片
@@ -703,7 +682,6 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
               config
             );
             
-            // 解析关键词
             const keywords = keywordsResponse
               .split(/[,，、\s]+/)
               .map(k => k.trim())
