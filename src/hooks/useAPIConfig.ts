@@ -26,6 +26,8 @@ export interface ImageConfig {
   apiKey?: string;
   apiUrl?: string;
   model?: string;
+  imageSize?: string;
+  stylePrompt?: string;
 }
 
 export const useAPIConfig = () => {
@@ -97,6 +99,8 @@ export const useAPIConfig = () => {
         const imageKey = data.find(k => k.provider === 'space_image_api_key');
         const imageUrl = data.find(k => k.provider === 'space_image_api_url');
         const imageModel = data.find(k => k.provider === 'space_image_model');
+        const imageSize = data.find(k => k.provider === 'space_image_size');
+        const imageStyle = data.find(k => k.provider === 'space_image_style_prompt');
 
         if (imageKey || imageUrl) {
           setImageConfig({
@@ -104,6 +108,8 @@ export const useAPIConfig = () => {
             apiKey: imageKey?.api_key,
             apiUrl: imageUrl?.api_key,
             model: imageModel?.api_key,
+            imageSize: imageSize?.api_key,
+            stylePrompt: imageStyle?.api_key,
           });
         } else {
           setImageConfig(null);

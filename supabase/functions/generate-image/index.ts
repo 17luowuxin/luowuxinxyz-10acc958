@@ -18,30 +18,56 @@ async function getImageConfig(userId: string): Promise<ImageConfig | null> {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
   
-  const { data: apiSettings } = await supabase
+  // Try external DB first, then cloud
+  const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+  const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+  
+  let allSettings: any[] = [];
+  
+  // Cloud DB
+  const { data: cloudData } = await supabase
     .from('api_keys')
     .select('provider, api_key')
     .eq('user_id', userId);
+  if (cloudData) allSettings = [...cloudData];
   
-  if (!apiSettings) return null;
+  // External DB (overrides cloud)
+  if (externalUrl && externalKey) {
+    const extClient = createClient(externalUrl, externalKey);
+    const { data: extData } = await extClient
+      .from('api_keys')
+      .select('provider, api_key')
+      .eq('user_id', userId);
+    if (extData) {
+      const extMap = new Map(extData.map(s => [s.provider, s.api_key]));
+      // Merge: external overrides cloud
+      const merged = new Map(allSettings.map(s => [s.provider, s.api_key]));
+      extMap.forEach((v, k) => merged.set(k, v));
+      allSettings = Array.from(merged.entries()).map(([provider, api_key]) => ({ provider, api_key }));
+    }
+  }
   
-  const enabled = apiSettings.find(s => s.provider === 'space_image_enabled')?.api_key === 'true';
-  const apiKey = apiSettings.find(s => s.provider === 'space_image_api_key')?.api_key || '';
-  const apiUrl = apiSettings.find(s => s.provider === 'space_image_api_url')?.api_key || '';
-  const model = apiSettings.find(s => s.provider === 'space_image_model')?.api_key || '';
+  if (!allSettings.length) return null;
+  
+  const get = (p: string) => allSettings.find(s => s.provider === p)?.api_key || '';
+  
+  const enabled = get('space_image_enabled') === 'true';
+  const apiKey = get('space_image_api_key');
+  const apiUrl = get('space_image_api_url');
+  const model = get('space_image_model');
   
   if (!apiKey || !apiUrl) return null;
   
   return { enabled, apiKey, apiUrl, model };
 }
 
-async function generateImage(prompt: string, config: ImageConfig): Promise<string | null> {
+async function generateImage(prompt: string, config: ImageConfig, size?: string): Promise<{ url?: string; b64?: string }> {
   let apiUrl = config.apiUrl.replace(/\/+$/, '');
   if (!apiUrl.includes('/images/generations')) {
     apiUrl = `${apiUrl}/images/generations`;
   }
   
-  console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default');
+  console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
   
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -51,7 +77,7 @@ async function generateImage(prompt: string, config: ImageConfig): Promise<strin
     },
     body: JSON.stringify({
       model: config.model || 'dall-e-3',
-      size: '1024x1024',
+      size: size || '1024x1024',
       prompt: prompt,
       n: 1,
     }),
@@ -65,23 +91,93 @@ async function generateImage(prompt: string, config: ImageConfig): Promise<strin
   
   const data = await response.json();
   
-  // 支持多种返回格式
+  // Support multiple response formats
   if (data.data?.[0]?.url) {
-    return data.data[0].url;
+    return { url: data.data[0].url };
   } else if (data.data?.[0]?.b64_json) {
-    return `data:image/png;base64,${data.data[0].b64_json}`;
+    return { b64: data.data[0].b64_json };
   } else if (data.url) {
-    return data.url;
+    return { url: data.url };
   } else if (data.images?.[0]?.url) {
-    return data.images[0].url;
+    return { url: data.images[0].url };
   } else if (data.images?.[0]?.b64_json) {
-    return `data:image/png;base64,${data.images[0].b64_json}`;
+    return { b64: data.images[0].b64_json };
   } else if (data.image) {
-    return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+    return { url: data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}` };
   }
   
   console.error('Unknown response format:', JSON.stringify(data).slice(0, 500));
   throw new Error('API返回格式无法识别');
+}
+
+async function editImage(prompt: string, config: ImageConfig, referenceImageBase64: string, size?: string): Promise<{ url?: string; b64?: string }> {
+  let apiUrl = config.apiUrl.replace(/\/+$/, '');
+  
+  // Method 1: Try OpenAI-compatible /images/edits endpoint
+  try {
+    const editsUrl = apiUrl.includes('/images/') ? apiUrl.replace(/\/images\/.*$/, '/images/edits') : `${apiUrl}/images/edits`;
+    console.log('Trying edit endpoint:', editsUrl);
+    
+    const base64Data = referenceImageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    const blob = new Blob([binaryData], { type: 'image/png' });
+    
+    const formData = new FormData();
+    formData.append('image', blob, 'image.png');
+    formData.append('prompt', prompt || 'enhance this image');
+    formData.append('model', config.model || 'dall-e-3');
+    formData.append('n', '1');
+    if (size) formData.append('size', size);
+    
+    const editResponse = await fetch(editsUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${config.apiKey}` },
+      body: formData,
+    });
+    
+    if (editResponse.ok) {
+      const editData = await editResponse.json();
+      const imageUrl = editData.data?.[0]?.url || null;
+      const b64 = editData.data?.[0]?.b64_json || null;
+      return { url: imageUrl || undefined, b64: b64 || undefined };
+    }
+    console.log('Edits endpoint returned:', editResponse.status, '- trying fallback');
+  } catch (e) {
+    console.log('Edits endpoint error, trying fallback:', e);
+  }
+  
+  // Method 2: Fallback to /images/generations with image parameter (some Chinese APIs support this)
+  if (!apiUrl.includes('/images/generations')) {
+    apiUrl = `${apiUrl}/images/generations`;
+  }
+  
+  const genBody: Record<string, unknown> = {
+    model: config.model || 'dall-e-3',
+    prompt: prompt || 'enhance this image',
+    n: 1,
+    size: size || '512x512',
+    image: referenceImageBase64,
+  };
+  
+  const genResponse = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(genBody),
+  });
+  
+  if (genResponse.ok) {
+    const genData = await genResponse.json();
+    return {
+      url: genData.data?.[0]?.url || undefined,
+      b64: genData.data?.[0]?.b64_json || undefined,
+    };
+  }
+  
+  const errText = await genResponse.text();
+  throw new Error(`图片编辑失败 (${genResponse.status}): ${errText.slice(0, 200)}`);
 }
 
 serve(async (req) => {
@@ -90,9 +186,13 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, userId, testMode, apiKey, apiUrl, model } = await req.json();
+    const body = await req.json();
+    const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt, referenceImageBase64, action } = body;
     
-    if (!prompt) {
+    // Determine effective action
+    const effectiveAction = action || (referenceImageBase64 ? 'edit-image' : 'generate-image');
+    
+    if (!prompt && effectiveAction !== 'edit-image') {
       return new Response(JSON.stringify({ error: '请提供绘图提示词' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -101,7 +201,7 @@ serve(async (req) => {
 
     let config: ImageConfig;
     
-    // 测试模式：直接使用传入的配置
+    // Test mode: use provided config directly
     if (testMode && apiKey && apiUrl) {
       config = {
         apiKey,
@@ -110,7 +210,6 @@ serve(async (req) => {
         enabled: true,
       };
     } else if (userId) {
-      // 正常模式：从数据库获取配置
       const userConfig = await getImageConfig(userId);
       if (!userConfig) {
         return new Response(JSON.stringify({ error: '未配置图片生成API，请在设置中配置' }), {
@@ -126,9 +225,24 @@ serve(async (req) => {
       });
     }
 
-    console.log('Generating image for prompt:', prompt.slice(0, 100));
+    // Build final prompt with style prefix
+    let finalPrompt = prompt || '';
+    if (stylePrompt) {
+      finalPrompt = `${stylePrompt}, ${finalPrompt}`;
+    }
+
+    console.log(`[${effectiveAction}] prompt: ${finalPrompt.slice(0, 100)}, size: ${size || 'default'}`);
     
-    const imageUrl = await generateImage(prompt, config);
+    let result: { url?: string; b64?: string };
+    
+    if (effectiveAction === 'edit-image' && referenceImageBase64) {
+      result = await editImage(finalPrompt, config, referenceImageBase64, size);
+    } else {
+      const genResult = await generateImage(finalPrompt, config, size);
+      result = genResult;
+    }
+    
+    const imageUrl = result.url || (result.b64 ? `data:image/png;base64,${result.b64}` : null);
     
     if (!imageUrl) {
       return new Response(JSON.stringify({ error: '图片生成失败' }), {
@@ -140,7 +254,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       success: true, 
       imageUrl,
-      prompt 
+      b64: result.b64 || null,
+      prompt: finalPrompt,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

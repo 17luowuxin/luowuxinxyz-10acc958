@@ -121,6 +121,8 @@ const SettingsPage: React.FC = () => {
   const [spaceImageApiKey, setSpaceImageApiKey] = useState('');
   const [spaceImageApiUrl, setSpaceImageApiUrl] = useState('');
   const [spaceImageModel, setSpaceImageModel] = useState('');
+  const [spaceImageSize, setSpaceImageSize] = useState('512x512');
+  const [spaceImageStylePrompt, setSpaceImageStylePrompt] = useState('');
   const [showSpaceImageKey, setShowSpaceImageKey] = useState(false);
   const [spaceImageConfigured, setSpaceImageConfigured] = useState(false);
   const [testingSpaceImage, setTestingSpaceImage] = useState(false);
@@ -131,6 +133,7 @@ const SettingsPage: React.FC = () => {
   const [testDrawPrompt, setTestDrawPrompt] = useState('');
   const [testDrawing, setTestDrawing] = useState(false);
   const [testDrawResult, setTestDrawResult] = useState<string | null>(null);
+  const [testDrawRefImage, setTestDrawRefImage] = useState<string | null>(null);
 
   // Unsplash 免费配图 state
   const [unsplashEnabled, setUnsplashEnabled] = useState(false);
@@ -257,6 +260,8 @@ const SettingsPage: React.FC = () => {
       const spaceImageApiKeySetting = data.find(k => k.provider === 'space_image_api_key');
       const spaceImageApiUrlSetting = data.find(k => k.provider === 'space_image_api_url');
       const spaceImageModelSetting = data.find(k => k.provider === 'space_image_model');
+      const spaceImageSizeSetting = data.find(k => k.provider === 'space_image_size');
+      const spaceImageStyleSetting = data.find(k => k.provider === 'space_image_style_prompt');
       
       if (spaceImageEnabledSetting) setSpaceImageEnabled(spaceImageEnabledSetting.api_key === 'true');
       if (spaceImageApiKeySetting) {
@@ -265,6 +270,8 @@ const SettingsPage: React.FC = () => {
       }
       if (spaceImageApiUrlSetting) setSpaceImageApiUrl(spaceImageApiUrlSetting.api_key);
       if (spaceImageModelSetting) setSpaceImageModel(spaceImageModelSetting.api_key);
+      if (spaceImageSizeSetting) setSpaceImageSize(spaceImageSizeSetting.api_key);
+      if (spaceImageStyleSetting) setSpaceImageStylePrompt(spaceImageStyleSetting.api_key);
       
       // Unsplash 免费配图配置
       const unsplashEnabledSetting = data.find(k => k.provider === 'unsplash_enabled');
@@ -893,7 +900,7 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    const providersToReplace = ['space_image_enabled', 'space_image_api_key', 'space_image_api_url', 'space_image_model'];
+    const providersToReplace = ['space_image_enabled', 'space_image_api_key', 'space_image_api_url', 'space_image_model', 'space_image_size', 'space_image_style_prompt'];
     
     await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
     
@@ -905,6 +912,12 @@ const SettingsPage: React.FC = () => {
     
     if (spaceImageModel.trim()) {
       rows.push({ user_id: user.id, provider: 'space_image_model', api_key: spaceImageModel.trim() });
+    }
+    if (spaceImageSize) {
+      rows.push({ user_id: user.id, provider: 'space_image_size', api_key: spaceImageSize });
+    }
+    if (spaceImageStylePrompt.trim()) {
+      rows.push({ user_id: user.id, provider: 'space_image_style_prompt', api_key: spaceImageStylePrompt.trim() });
     }
     
     const { error } = await supabase.from('api_keys').insert(rows);
@@ -952,14 +965,14 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  // 测试绘图功能 - 输入提示词生成图片
+  // 测试绘图功能 - 输入提示词生成图片（支持垫图）
   const testDrawImage = async () => {
     if (!spaceImageApiKey || !spaceImageApiUrl) {
       toast.error('请先填写并保存API配置');
       return;
     }
-    if (!testDrawPrompt.trim()) {
-      toast.error('请输入绘图提示词');
+    if (!testDrawPrompt.trim() && !testDrawRefImage) {
+      toast.error('请输入绘图提示词或上传参考图');
       return;
     }
 
@@ -973,6 +986,9 @@ const SettingsPage: React.FC = () => {
           apiKey: spaceImageApiKey,
           apiUrl: spaceImageApiUrl,
           model: spaceImageModel,
+          size: spaceImageSize,
+          stylePrompt: spaceImageStylePrompt,
+          ...(testDrawRefImage ? { referenceImageBase64: testDrawRefImage, action: 'edit-image' } : {}),
         },
       });
 
@@ -983,7 +999,7 @@ const SettingsPage: React.FC = () => {
 
       if (data.success && data.imageUrl) {
         setTestDrawResult(data.imageUrl);
-        toast.success('绘图成功！');
+        toast.success(testDrawRefImage ? '垫图生成成功！' : '绘图成功！');
       } else {
         toast.error(data.error || '绘图失败');
       }
@@ -992,6 +1008,19 @@ const SettingsPage: React.FC = () => {
     } finally {
       setTestDrawing(false);
     }
+  };
+
+  // 处理垫图上传
+  const handleRefImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('请上传图片文件');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setTestDrawRefImage(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   // 获取图片API可用模型
@@ -2380,6 +2409,45 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
+            {/* Image Size */}
+            <div>
+              <label className="text-sm font-medium text-emerald-600 mb-2 block">
+                图片尺寸
+              </label>
+              <select
+                value={spaceImageSize}
+                onChange={(e) => setSpaceImageSize(e.target.value)}
+                className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                style={{ 
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '20px'
+                }}
+              >
+                <option value="512x512">正方形 (512×512)</option>
+                <option value="1024x1024">正方形 (1024×1024)</option>
+                <option value="1024x768">横版 (1024×768)</option>
+                <option value="768x1024">竖版 (768×1024)</option>
+              </select>
+            </div>
+
+            {/* Style Prompt */}
+            <div>
+              <label className="text-sm font-medium text-emerald-600 mb-2 block">
+                固定画风提示词 (可选)
+              </label>
+              <Input
+                placeholder="例如: anime style, watercolor, oil painting"
+                value={spaceImageStylePrompt}
+                onChange={(e) => setSpaceImageStylePrompt(e.target.value)}
+                className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                设置后每次生成图片都会自动添加此画风前缀
+              </p>
+            </div>
+
             {/* Test Connection Button */}
             <button
               onClick={testSpaceImageApi}
@@ -2403,19 +2471,42 @@ const SettingsPage: React.FC = () => {
               保存图片API配置
             </Button>
 
-            {/* 测试绘图功能 */}
+            {/* 测试绘图功能（支持垫图） */}
             <div className="mt-6 pt-6 border-t border-emerald-100">
               <div className="flex items-center gap-2 mb-3">
                 <Brush className="w-4 h-4 text-emerald-500" />
-                <span className="text-sm font-medium text-gray-700">测试绘图</span>
+                <span className="text-sm font-medium text-gray-700">测试绘图 / 垫图</span>
               </div>
               <p className="text-xs text-gray-500 mb-3">
-                输入提示词测试图片生成效果
+                输入提示词文生图，或上传参考图进行垫图（图生图）
               </p>
               
+              {/* 垫图参考图上传 */}
+              <div className="mb-3">
+                <label className="text-xs font-medium text-gray-600 mb-1.5 block">参考图（垫图，可选）</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-sm font-medium flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-100 transition-colors">
+                    <ImageIcon className="w-4 h-4" />
+                    {testDrawRefImage ? '更换参考图' : '上传参考图'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleRefImageUpload} />
+                  </label>
+                  {testDrawRefImage && (
+                    <button
+                      onClick={() => setTestDrawRefImage(null)}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      清除
+                    </button>
+                  )}
+                </div>
+                {testDrawRefImage && (
+                  <img src={testDrawRefImage} alt="参考图" className="mt-2 w-20 h-20 rounded-xl object-cover border border-emerald-200" />
+                )}
+              </div>
+
               <div className="flex gap-2">
                 <Input
-                  placeholder="输入绘图提示词，如：一只可爱的猫咪"
+                  placeholder={testDrawRefImage ? "描述你想要的效果..." : "输入绘图提示词，如：一只可爱的猫咪"}
                   value={testDrawPrompt}
                   onChange={(e) => setTestDrawPrompt(e.target.value)}
                   className="flex-1 rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
@@ -2427,7 +2518,7 @@ const SettingsPage: React.FC = () => {
                 />
                 <Button
                   onClick={testDrawImage}
-                  disabled={testDrawing || !spaceImageApiKey || !spaceImageApiUrl || !testDrawPrompt.trim()}
+                  disabled={testDrawing || !spaceImageApiKey || !spaceImageApiUrl || (!testDrawPrompt.trim() && !testDrawRefImage)}
                   className="px-6 h-12 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium"
                 >
                   {testDrawing ? (
