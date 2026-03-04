@@ -211,7 +211,7 @@ serve(async (req) => {
         console.log('World books loaded:', allWorldBooks.length);
       }
       
-      // 获取角色记忆摘要
+      // 获取角色记忆摘要（旧系统）
       const { data: memory } = await supabase
         .from('character_memories')
         .select('summary')
@@ -222,6 +222,55 @@ serve(async (req) => {
       if (memory?.summary) {
         memoryContent = `\n【关于用户的记忆】\n${memory.summary}`;
         console.log('Memory loaded for character:', characterId);
+      }
+
+      // 获取提取的分类记忆（新系统）
+      const { data: extractedMemories } = await supabase
+        .from('character_extracted_memories')
+        .select('content, category')
+        .eq('character_id', characterId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // 获取对话摘要（新系统）
+      const { data: summaries } = await supabase
+        .from('character_summaries')
+        .select('summary')
+        .eq('character_id', characterId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if ((extractedMemories && extractedMemories.length > 0) || (summaries && summaries.length > 0)) {
+        let advancedMemory = '\n\n【长期记忆】\n';
+        
+        if (summaries && summaries.length > 0) {
+          advancedMemory += '历史对话摘要：\n';
+          summaries.forEach((s: any, i: number) => { advancedMemory += `${i + 1}. ${s.summary}\n`; });
+        }
+        
+        if (extractedMemories && extractedMemories.length > 0) {
+          const grouped: Record<string, string[]> = {};
+          extractedMemories.forEach((m: any) => {
+            const cat = m.category || 'other';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(m.content);
+          });
+          const categoryNames: Record<string, string> = {
+            personal: '用户个人信息', preference: '用户喜好',
+            event: '重要事件', relationship: '关系记忆', other: '其他记忆',
+          };
+          advancedMemory += '\n关键记忆：\n';
+          for (const [cat, items] of Object.entries(grouped)) {
+            advancedMemory += `[${categoryNames[cat] || cat}]\n`;
+            items.forEach(item => { advancedMemory += `- ${item}\n`; });
+          }
+        }
+        
+        advancedMemory += '\n请在对话中自然地运用这些记忆，但不要直接说"根据我的记忆"，要表现得像自然想起来的一样。\n';
+        memoryContent += advancedMemory;
+        console.log('Advanced memory loaded:', extractedMemories?.length || 0, 'memories,', summaries?.length || 0, 'summaries');
       }
       
       // 检查最近的拉黑历史（检查最近30分钟内是否有取消拉黑的记录）

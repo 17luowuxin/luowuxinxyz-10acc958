@@ -3047,6 +3047,18 @@ const ChatPage: React.FC = () => {
           console.error('Memory summary error:', err);
         });
       }
+
+      // 每20条消息触发分类记忆提取和对话摘要（新系统）
+      if (totalMessages > 0 && totalMessages % 20 === 0) {
+        console.log('Triggering advanced memory extraction at message count:', totalMessages);
+        const recentForMemory = messages.slice(-40).map(m => ({ role: m.role, content: m.content }));
+        
+        // 后台并行触发提取和摘要
+        import('@/services/memoryService').then(({ triggerMemoryExtraction, triggerSummarize }) => {
+          triggerMemoryExtraction(characterId, user?.id || '', recentForMemory, authSource);
+          triggerSummarize(characterId, user?.id || '', recentForMemory, authSource);
+        }).catch(err => console.error('Memory service import error:', err));
+      }
     } catch (err: any) {
       console.error('Chat error:', err);
       toast.error('发送失败，请检查网络或API设置');
