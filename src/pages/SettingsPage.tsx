@@ -971,8 +971,8 @@ const SettingsPage: React.FC = () => {
       toast.error('请先填写并保存API配置');
       return;
     }
-    if (!testDrawPrompt.trim() && !testDrawRefImage) {
-      toast.error('请输入绘图提示词或上传参考图');
+    if (!testDrawPrompt.trim()) {
+      toast.error('请输入绘图提示词');
       return;
     }
 
@@ -988,7 +988,6 @@ const SettingsPage: React.FC = () => {
           model: spaceImageModel,
           size: spaceImageSize,
           stylePrompt: spaceImageStylePrompt,
-          ...(testDrawRefImage ? { referenceImageBase64: testDrawRefImage, action: 'edit-image' } : {}),
         },
       });
 
@@ -999,7 +998,7 @@ const SettingsPage: React.FC = () => {
 
       if (data.success && data.imageUrl) {
         setTestDrawResult(data.imageUrl);
-        toast.success(testDrawRefImage ? '垫图生成成功！' : '绘图成功！');
+        toast.success('绘图成功！');
       } else {
         toast.error(data.error || '绘图失败');
       }
@@ -2419,7 +2418,7 @@ const SettingsPage: React.FC = () => {
 
               <div className="flex gap-2">
                 <Input
-                  placeholder={testDrawRefImage ? "描述你想要的效果..." : "输入绘图提示词，如：一只可爱的猫咪"}
+                  placeholder="输入绘图提示词，如：一只可爱的猫咪"
                   value={testDrawPrompt}
                   onChange={(e) => setTestDrawPrompt(e.target.value)}
                   className="flex-1 rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
@@ -2431,7 +2430,7 @@ const SettingsPage: React.FC = () => {
                 />
                 <Button
                   onClick={testDrawImage}
-                  disabled={testDrawing || !spaceImageApiKey || !spaceImageApiUrl || (!testDrawPrompt.trim() && !testDrawRefImage)}
+                  disabled={testDrawing || !spaceImageApiKey || !spaceImageApiUrl || !testDrawPrompt.trim()}
                   className="px-6 h-12 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 text-white font-medium"
                 >
                   {testDrawing ? (
