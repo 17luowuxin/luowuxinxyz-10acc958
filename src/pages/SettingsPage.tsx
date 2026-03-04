@@ -133,7 +133,7 @@ const SettingsPage: React.FC = () => {
   const [testDrawPrompt, setTestDrawPrompt] = useState('');
   const [testDrawing, setTestDrawing] = useState(false);
   const [testDrawResult, setTestDrawResult] = useState<string | null>(null);
-  const [testDrawRefImage, setTestDrawRefImage] = useState<string | null>(null);
+  
 
   // Unsplash 免费配图 state
   const [unsplashEnabled, setUnsplashEnabled] = useState(false);
@@ -1009,18 +1009,6 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  // 处理垫图上传
-  const handleRefImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('请上传图片文件');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setTestDrawRefImage(reader.result as string);
-    reader.readAsDataURL(file);
-  };
 
   // 获取图片API可用模型
   const fetchSpaceImageModels = async () => {
