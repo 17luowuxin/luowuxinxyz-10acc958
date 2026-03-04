@@ -2013,71 +2013,7 @@ const SettingsPage: React.FC = () => {
                 />
               </div>
 
-              {/* 垫图功能 (img2img) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">垫图 (img2img)</label>
-                  {novelaiTestRefImage && (
-                    <button
-                      onClick={() => setNovelaiTestRefImage(null)}
-                      className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
-                      title="移除垫图"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                
-                <input
-                  ref={novelaiRefInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleNovelaiRefImageUpload}
-                  className="hidden"
-                />
-                
-                {novelaiTestRefImage ? (
-                  <div className="relative">
-                    <img
-                      src={novelaiTestRefImage}
-                      alt="垫图预览"
-                      className="w-full h-32 object-contain rounded-xl border border-gray-200 bg-gray-50"
-                    />
-                    <button
-                      onClick={() => novelaiRefInputRef.current?.click()}
-                      className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-white/90 text-gray-700 text-xs font-medium hover:bg-white transition-colors shadow-sm"
-                    >
-                      更换图片
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => novelaiRefInputRef.current?.click()}
-                    className="w-full h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-purple-400 hover:text-purple-500 transition-colors"
-                  >
-                    <ImagePlus className="w-6 h-6" />
-                    <span className="text-sm">点击上传垫图</span>
-                  </button>
-                )}
-                
-                {/* 垫图强度 */}
-                {novelaiTestRefImage && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <label className="text-xs text-gray-500 whitespace-nowrap">重绘强度:</label>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="0.9"
-                      step="0.05"
-                      value={novelaiTestRefStrength}
-                      onChange={(e) => setNovelaiTestRefStrength(parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                    <span className="text-xs text-gray-600 w-8">{novelaiTestRefStrength}</span>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400">上传图片后将以该图为基础进行重绘，强度越高变化越大</p>
-              </div>
+              {/* 垫图已移至角色编辑页面 */}
 
               {/* 生成按钮 */}
               <Button
@@ -2478,31 +2414,8 @@ const SettingsPage: React.FC = () => {
                 <span className="text-sm font-medium text-gray-700">测试绘图 / 垫图</span>
               </div>
               <p className="text-xs text-gray-500 mb-3">
-                输入提示词文生图，或上传参考图进行垫图（图生图）
+                输入提示词进行文生图测试
               </p>
-              
-              {/* 垫图参考图上传 */}
-              <div className="mb-3">
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block">参考图（垫图，可选）</label>
-                <div className="flex items-center gap-3">
-                  <label className="flex-1 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-sm font-medium flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-100 transition-colors">
-                    <ImageIcon className="w-4 h-4" />
-                    {testDrawRefImage ? '更换参考图' : '上传参考图'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleRefImageUpload} />
-                  </label>
-                  {testDrawRefImage && (
-                    <button
-                      onClick={() => setTestDrawRefImage(null)}
-                      className="text-xs text-red-400 hover:text-red-600"
-                    >
-                      清除
-                    </button>
-                  )}
-                </div>
-                {testDrawRefImage && (
-                  <img src={testDrawRefImage} alt="参考图" className="mt-2 w-20 h-20 rounded-xl object-cover border border-emerald-200" />
-                )}
-              </div>
 
               <div className="flex gap-2">
                 <Input

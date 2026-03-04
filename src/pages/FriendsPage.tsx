@@ -1138,6 +1138,87 @@ const FriendsPage: React.FC = () => {
                     )}
                   </div>
                   
+                  {/* 垫图设置 - 直接在角色编辑页显示 */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🖼️</span>
+                        <div>
+                          <p className="font-medium text-gray-700 text-sm">垫图 (Reference Image)</p>
+                          <p className="text-xs text-gray-400">AI绘图时以此图为基础重绘</p>
+                        </div>
+                      </div>
+                      {naiReferenceImage && (
+                        <button
+                          onClick={() => setNaiReferenceImage('')}
+                          className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
+                        >
+                          移除
+                        </button>
+                      )}
+                    </div>
+                    
+                    <input
+                      ref={naiRefImageInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleRefImageUpload}
+                    />
+                    
+                    {naiReferenceImage ? (
+                      <div className="relative">
+                        <img
+                          src={naiReferenceImage}
+                          alt="Reference"
+                          className="w-full max-h-32 object-contain rounded-xl border border-gray-200"
+                        />
+                        <button
+                          onClick={() => naiRefImageInputRef.current?.click()}
+                          disabled={uploadingRefImage}
+                          className="absolute bottom-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-lg text-xs font-medium text-gray-700 hover:bg-white shadow"
+                        >
+                          {uploadingRefImage ? '上传中...' : '更换'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => naiRefImageInputRef.current?.click()}
+                        disabled={uploadingRefImage}
+                        className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {uploadingRefImage ? (
+                          <>上传中...</>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4" />
+                            点击上传垫图
+                          </>
+                        )}
+                      </button>
+                    )}
+                    
+                    {naiReferenceImage && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-gray-500">重绘强度</label>
+                          <span className="text-xs text-purple-600 font-medium">{naiReferenceStrength.toFixed(1)}</span>
+                        </div>
+                        <Slider
+                          value={[naiReferenceStrength]}
+                          onValueChange={([v]) => setNaiReferenceStrength(v)}
+                          min={0.1}
+                          max={0.9}
+                          step={0.1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-gray-400">
+                          越低越接近原图，越高越自由发挥（推荐 0.4-0.7）
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   {/* NAI 角色专属提示词 */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -1153,11 +1234,11 @@ const FriendsPage: React.FC = () => {
                       onClick={() => setNaiPromptOpen(true)}
                     >
                       <Brush className="w-4 h-4 mr-2" />
-                      配置NAI绘图
+                      配置NAI提示词
                     </Button>
-                    {(naiPositivePrompt || naiNegativePrompt || naiReferenceImage) && (
+                    {(naiPositivePrompt || naiNegativePrompt) && (
                       <p className="text-xs text-green-500">
-                        ✓ 已配置{naiPositivePrompt || naiNegativePrompt ? '提示词' : ''}{(naiPositivePrompt || naiNegativePrompt) && naiReferenceImage ? ' + ' : ''}{naiReferenceImage ? '垫图' : ''}
+                        ✓ 已配置提示词
                       </p>
                     )}
                   </div>
@@ -1258,84 +1339,7 @@ const FriendsPage: React.FC = () => {
                 <p className="text-xs text-gray-400">描述你希望避免的元素</p>
               </div>
               
-              {/* 垫图设置 */}
-              <div className="space-y-3 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">垫图 (Reference Image)</label>
-                  {naiReferenceImage && (
-                    <button
-                      onClick={() => setNaiReferenceImage('')}
-                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
-                    >
-                      移除
-                    </button>
-                  )}
-                </div>
-                
-                <input
-                  ref={naiRefImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleRefImageUpload}
-                />
-                
-                {naiReferenceImage ? (
-                  <div className="relative">
-                    <img
-                      src={naiReferenceImage}
-                      alt="Reference"
-                      className="w-full max-h-32 object-contain rounded-xl border border-gray-200"
-                    />
-                    <button
-                      onClick={() => naiRefImageInputRef.current?.click()}
-                      disabled={uploadingRefImage}
-                      className="absolute bottom-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-lg text-xs font-medium text-gray-700 hover:bg-white shadow"
-                    >
-                      {uploadingRefImage ? '上传中...' : '更换'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => naiRefImageInputRef.current?.click()}
-                    disabled={uploadingRefImage}
-                    className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors flex items-center justify-center gap-2"
-                  >
-                    {uploadingRefImage ? (
-                      <>上传中...</>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4" />
-                        点击上传垫图
-                      </>
-                    )}
-                  </button>
-                )}
-                
-                <p className="text-xs text-gray-400">
-                  垫图会作为图像生成的参考基础，AI将在此基础上进行重绘
-                </p>
-                
-                {naiReferenceImage && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700">重绘强度</label>
-                      <span className="text-sm text-purple-600 font-medium">{naiReferenceStrength.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      value={[naiReferenceStrength]}
-                      onValueChange={([v]) => setNaiReferenceStrength(v)}
-                      min={0.1}
-                      max={0.9}
-                      step={0.1}
-                      className="w-full"
-                    />
-                    <p className="text-xs text-gray-400">
-                      越低越接近原图，越高越自由发挥（推荐 0.4-0.7）
-                    </p>
-                  </div>
-                )}
-              </div>
+              {/* 垫图已移至角色编辑页面的设置标签 */}
               
               <div className="flex gap-3 pt-2">
                 <button
