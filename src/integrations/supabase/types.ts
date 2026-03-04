@@ -169,6 +169,36 @@ export type Database = {
           },
         ]
       }
+      character_extracted_memories: {
+        Row: {
+          category: string | null
+          character_id: string
+          content: string
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          character_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          character_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       character_memories: {
         Row: {
           character_id: string
@@ -247,6 +277,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      character_summaries: {
+        Row: {
+          character_id: string
+          created_at: string | null
+          id: string
+          message_count: number | null
+          summary: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string | null
+          id?: string
+          message_count?: number | null
+          summary: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string | null
+          id?: string
+          message_count?: number | null
+          summary?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       characters: {
         Row: {
