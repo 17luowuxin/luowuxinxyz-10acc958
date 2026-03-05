@@ -1352,7 +1352,7 @@ const FriendsPage: React.FC = () => {
                   清空全部
                 </button>
                 <button
-                  onClick={saveNaiPrompts}
+                  onClick={() => saveNaiPrompts()}
                   className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium hover:shadow-lg transition-all"
                 >
                   保存
