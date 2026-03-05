@@ -598,7 +598,7 @@ const FriendsPage: React.FC = () => {
   };
 
   // 保存角色专属NAI设置（提示词+垫图）
-  const saveNaiPrompts = async () => {
+  const saveNaiPrompts = async (silent = false) => {
     if (!editingChar || !user) return;
     
     try {
@@ -626,8 +626,8 @@ const FriendsPage: React.FC = () => {
         await supabase.from('api_keys').insert(rows);
       }
       
-      setNaiPromptOpen(false);
-      toast.success('角色NAI设置已保存');
+      if (!silent) setNaiPromptOpen(false);
+      if (!silent) toast.success('角色NAI设置已保存');
     } catch (err) {
       console.error('Save NAI prompts error:', err);
       toast.error('保存失败');
