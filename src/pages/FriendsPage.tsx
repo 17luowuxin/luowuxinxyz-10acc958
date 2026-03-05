@@ -454,6 +454,9 @@ const FriendsPage: React.FC = () => {
       })
       .eq('id', editingChar.id);
     
+    // 同时保存角色专属NAI设置（垫图、提示词）
+    await saveNaiPrompts(true);
+    
     toast.success('角色已更新');
     resetForm();
     setEditingChar(null);
