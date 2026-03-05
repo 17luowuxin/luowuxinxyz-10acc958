@@ -3010,15 +3010,29 @@ const ChatPage: React.FC = () => {
         }
       }
       
-      // 触发记忆摘要生成（每10条消息，使用数据库计数而非内存计数）
+      // 触发记忆摘要生成 - 基于上次摘要以来的新消息数
       const { count: dbMessageCount } = await supabase
         .from('chat_messages')
         .select('id', { count: 'exact', head: true })
         .eq('character_id', characterId)
         .eq('user_id', user?.id);
       const totalMessages = dbMessageCount || 0;
-      if (totalMessages > 0 && totalMessages % 10 === 0) {
-        console.log('Triggering memory summary generation at message count:', totalMessages);
+      
+      // 获取上次摘要时的消息数，判断是否积累了足够新消息
+      const { data: lastSummary } = await supabase
+        .from('character_summaries')
+        .select('message_count, created_at')
+        .eq('character_id', characterId)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      const lastSummaryMsgCount = lastSummary?.[0]?.message_count || 0;
+      const messagesSinceLastSummary = totalMessages - lastSummaryMsgCount;
+      
+      // 每积累10条新消息就触发记忆总结
+      if (totalMessages > 0 && messagesSinceLastSummary >= 10) {
+        console.log('Triggering memory summary generation, total:', totalMessages, 'since last summary:', messagesSinceLastSummary);
         // 后台生成摘要，不阻塞UI
         const { data: { session } } = await supabase.auth.getSession();
         const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -3046,14 +3060,11 @@ const ChatPage: React.FC = () => {
         }).catch(err => {
           console.error('Memory summary error:', err);
         });
-      }
-
-      // 每20条消息触发分类记忆提取和对话摘要（新系统）
-      if (totalMessages > 0 && totalMessages % 20 === 0) {
-        console.log('Triggering advanced memory extraction at message count:', totalMessages);
+        
+        // 同时触发分类记忆提取和对话摘要（新系统）
+        console.log('Triggering advanced memory extraction');
         const recentForMemory = messages.slice(-40).map(m => ({ role: m.role, content: m.content }));
         
-        // 后台并行触发提取和摘要
         import('@/services/memoryService').then(({ triggerMemoryExtraction, triggerSummarize }) => {
           triggerMemoryExtraction(characterId, user?.id || '', recentForMemory, authSource);
           triggerSummarize(characterId, user?.id || '', recentForMemory, authSource);
