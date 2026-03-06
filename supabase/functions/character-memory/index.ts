@@ -198,11 +198,19 @@ serve(async (req) => {
       ], apiConfig, 512);
 
       if (summary) {
+        // 获取数据库中的实际消息总数作为 message_count
+        const { count: dbCount } = await dataClient
+          .from('chat_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('character_id', characterId)
+          .eq('user_id', userId);
+        const totalMessageCount = dbCount || (messages || []).length;
+        
         const { error } = await dataClient.from('character_summaries').insert({
           user_id: userId,
           character_id: characterId,
           summary,
-          message_count: (messages || []).length,
+          message_count: totalMessageCount,
         });
         if (error) console.error('Insert summary error:', error);
       }
