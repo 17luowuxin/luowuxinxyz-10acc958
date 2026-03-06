@@ -21,6 +21,8 @@ interface SpaceImageConfig {
   apiKey: string;
   apiUrl: string;
   model: string;
+  stylePrompt: string;
+  size: string;
 }
 
 interface UnsplashConfig {
@@ -94,9 +96,24 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   const apiKey = settings.get('space_image_api_key') || '';
   const apiUrl = settings.get('space_image_api_url') || '';
   const model = settings.get('space_image_model') || '';
+  const stylePrompt = settings.get('space_image_style_prompt') || '';
+  const size = settings.get('space_image_size') || '1024x1024';
   
   if (!enabled || !apiKey || !apiUrl) return null;
-  return { enabled, apiKey, apiUrl, model };
+  return { enabled, apiKey, apiUrl, model, stylePrompt, size };
+}
+
+// 获取角色专属垫图设置
+async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string; refStrength: number } | null> {
+  if (!userId || !characterId) return null;
+  const settings = await fetchApiSettings(userId);
+  if (!settings) return null;
+  
+  const refUrl = settings.get(`nai_ref_image_${characterId}`) || '';
+  const refStrength = parseFloat(settings.get(`nai_ref_strength_${characterId}`) || '0.6') || 0.6;
+  
+  if (!refUrl) return null;
+  return { refImageUrl: refUrl, refStrength };
 }
 
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
