@@ -333,12 +333,19 @@ ${conversationText}`;
       return insertError || null;
     };
 
-    // Upsert memory - keep manually_edited flag, fallback for legacy schema and missing unique constraint
+    // 获取数据库中的实际消息总数
+    const { count: totalDbCount } = await dataSupabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('character_id', characterId)
+      .eq('user_id', userId);
+    const actualMessageCount = totalDbCount || messages.length;
+
     const basePayload: Record<string, unknown> = {
       character_id: characterId,
       user_id: userId,
       summary,
-      message_count: messages.length,
+      message_count: actualMessageCount,
       updated_at: new Date().toISOString(),
     };
 

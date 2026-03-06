@@ -21,6 +21,8 @@ interface SpaceImageConfig {
   apiKey: string;
   apiUrl: string;
   model: string;
+  stylePrompt: string;
+  size: string;
 }
 
 interface UnsplashConfig {
@@ -94,9 +96,24 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   const apiKey = settings.get('space_image_api_key') || '';
   const apiUrl = settings.get('space_image_api_url') || '';
   const model = settings.get('space_image_model') || '';
+  const stylePrompt = settings.get('space_image_style_prompt') || '';
+  const size = settings.get('space_image_size') || '1024x1024';
   
   if (!enabled || !apiKey || !apiUrl) return null;
-  return { enabled, apiKey, apiUrl, model };
+  return { enabled, apiKey, apiUrl, model, stylePrompt, size };
+}
+
+// 获取角色专属垫图设置
+async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string; refStrength: number } | null> {
+  if (!userId || !characterId) return null;
+  const settings = await fetchApiSettings(userId);
+  if (!settings) return null;
+  
+  const refUrl = settings.get(`nai_ref_image_${characterId}`) || '';
+  const refStrength = parseFloat(settings.get(`nai_ref_strength_${characterId}`) || '0.6') || 0.6;
+  
+  if (!refUrl) return null;
+  return { refImageUrl: refUrl, refStrength };
 }
 
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
@@ -171,12 +188,90 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
-// 生成图片
-async function generateImage(prompt: string, config: SpaceImageConfig): Promise<string | null> {
+// 生成图片（支持垫图 img2img）
+async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string, refStrength?: number): Promise<string | null> {
   try {
-    console.log('Generating image with prompt:', prompt.slice(0, 100));
+    // 添加画风提示词前缀
+    let finalPrompt = prompt;
+    if (config.stylePrompt) {
+      finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
+    }
+    console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
     
     let apiUrl = config.apiUrl.replace(/\/+$/, '');
+    
+    // 如果有垫图，先尝试图生图
+    if (refImageUrl) {
+      try {
+        // 下载垫图为 base64
+        const imgResp = await fetch(refImageUrl);
+        if (imgResp.ok) {
+          const buf = await imgResp.arrayBuffer();
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          const refBase64 = `data:image/png;base64,${b64}`;
+          
+          // 尝试 /images/edits 端点
+          const editsUrl = apiUrl.includes('/images/') ? apiUrl.replace(/\/images\/.*$/, '/images/edits') : `${apiUrl}/images/edits`;
+          console.log('Trying img2img edit endpoint:', editsUrl);
+          
+          const binaryData = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          const blob = new Blob([binaryData], { type: 'image/png' });
+          
+          const formData = new FormData();
+          formData.append('image', blob, 'image.png');
+          formData.append('prompt', finalPrompt);
+          formData.append('model', config.model || 'dall-e-3');
+          formData.append('n', '1');
+          formData.append('size', config.size || '1024x1024');
+          
+          const editResponse = await fetch(editsUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${config.apiKey}` },
+            body: formData,
+          });
+          
+          if (editResponse.ok) {
+            const editData = await editResponse.json();
+            const imageUrl = editData.data?.[0]?.url || editData.data?.[0]?.b64_json;
+            if (imageUrl) {
+              console.log('img2img edit succeeded');
+              return editData.data[0].b64_json ? `data:image/png;base64,${editData.data[0].b64_json}` : imageUrl;
+            }
+          }
+          console.log('Edit endpoint failed, trying generations with image param');
+          
+          // 回退：用 /images/generations + image 参数
+          if (!apiUrl.includes('/images/generations')) {
+            apiUrl = `${apiUrl}/images/generations`;
+          }
+          const genResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: config.model || 'dall-e-3',
+              size: config.size || '1024x1024',
+              prompt: finalPrompt,
+              n: 1,
+              image: refBase64,
+            }),
+          });
+          
+          if (genResponse.ok) {
+            const genData = await genResponse.json();
+            if (genData.data?.[0]?.url) return genData.data[0].url;
+            if (genData.data?.[0]?.b64_json) return `data:image/png;base64,${genData.data[0].b64_json}`;
+          }
+          console.log('img2img with generations also failed, falling back to pure text2img');
+        }
+      } catch (e) {
+        console.error('img2img attempt failed:', e);
+      }
+    }
+    
+    // 纯文生图
     if (!apiUrl.includes('/images/generations')) {
       apiUrl = `${apiUrl}/images/generations`;
     }
@@ -190,8 +285,8 @@ async function generateImage(prompt: string, config: SpaceImageConfig): Promise<
       },
       body: JSON.stringify({
         model: config.model || 'dall-e-3',
-        size: '1024x1024',
-        prompt: prompt,
+        size: config.size || '1024x1024',
+        prompt: finalPrompt,
         n: 1,
       }),
     });
@@ -653,7 +748,14 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         console.log("Space image generation enabled, generating image...");
         
         const imagePrompt = `${character.persona || character.name}, ${content}, anime style, high quality, beautiful`;
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig);
+        
+        // 加载角色垫图设置
+        const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
+        if (charRef) {
+          console.log("Using character reference image for space moment, strength:", charRef.refStrength);
+        }
+        
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl, charRef?.refStrength);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");
