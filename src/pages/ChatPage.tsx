@@ -976,10 +976,12 @@ const ChatPage: React.FC = () => {
         }
       } else {
         setApiConfig({});
+        setHasUnifiedImageConfig(false);
       }
     } catch (err) {
       console.error('获取API配置失败:', err);
       setApiConfig({});
+      setHasUnifiedImageConfig(false);
     } finally {
       setApiConfigLoading(false);
     }
@@ -1622,12 +1624,11 @@ const ChatPage: React.FC = () => {
     userInput: string,
     aiResponse: string,
   ): { should: boolean; prompt: string } => {
-    // 检查画图功能是否启用（显式设为 false 才关闭）
-    if (novelaiConfig?.enabled === false) {
+    // 检查画图功能是否可用（NovelAI 或 统一图片API 任一可用）
+    if (novelaiConfig?.enabled === false && !hasUnifiedImageConfig) {
       return { should: false, prompt: '' };
     }
-    // 没有配 API Key 则也视为关闭
-    if (!novelaiConfig?.apiKey) {
+    if (!novelaiConfig?.apiKey && !hasUnifiedImageConfig) {
       return { should: false, prompt: '' };
     }
     
