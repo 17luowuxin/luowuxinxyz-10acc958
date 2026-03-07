@@ -303,6 +303,7 @@ const ChatPage: React.FC = () => {
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
   const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
   const [charNaiRefStrength, setCharNaiRefStrength] = useState<number>(0.6);
+  const [hasUnifiedImageConfig, setHasUnifiedImageConfig] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
