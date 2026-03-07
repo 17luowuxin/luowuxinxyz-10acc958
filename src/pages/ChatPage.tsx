@@ -303,6 +303,7 @@ const ChatPage: React.FC = () => {
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
   const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
   const [charNaiRefStrength, setCharNaiRefStrength] = useState<number>(0.6);
+  const [hasUnifiedImageConfig, setHasUnifiedImageConfig] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
@@ -874,36 +875,49 @@ const ChatPage: React.FC = () => {
     try {
       const { data: apiKeys } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
       if (apiKeys && apiKeys.length > 0) {
-        const customKey = apiKeys.find(k => k.provider === 'custom');
-        const deepseekKey = apiKeys.find(k => k.provider === 'deepseek');
-        const openaiKey = apiKeys.find(k => k.provider === 'openai');
-        const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
-        const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
-        const customModel = apiKeys.find(k => k.provider === 'custom_model');
-        
+        const pickLatest = (provider: string) =>
+          apiKeys
+            .filter((k) => k.provider === provider)
+            .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
+            .at(-1);
+
+        const customKey = pickLatest('custom');
+        const deepseekKey = pickLatest('deepseek');
+        const openaiKey = pickLatest('openai');
+        const anthropicKey = pickLatest('anthropic');
+        const customBaseUrl = pickLatest('custom_base_url');
+        const customModel = pickLatest('custom_model');
+
+        // 统一图片API配置（即梦/OpenAI兼容）
+        const spaceImageEnabledSetting = pickLatest('space_image_enabled');
+        const spaceImageApiKeySetting = pickLatest('space_image_api_key');
+        const spaceImageApiUrlSetting = pickLatest('space_image_api_url');
+        const unifiedImageEnabled = spaceImageEnabledSetting ? spaceImageEnabledSetting.api_key !== 'false' : true;
+        setHasUnifiedImageConfig(Boolean(unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key));
+
         // NovelAI config
-        const novelaiKey = apiKeys.find(k => k.provider === 'novelai');
-        const novelaiModel = apiKeys.find(k => k.provider === 'novelai_model');
-        const novelaiAutoGenerate = apiKeys.find(k => k.provider === 'novelai_auto_generate');
-        const novelaiStyle = apiKeys.find(k => k.provider === 'novelai_style');
-        const novelaiCustomStylePrompt = apiKeys.find(k => k.provider === 'novelai_custom_style_prompt');
-        const novelaiTriggerKeywords = apiKeys.find(k => k.provider === 'novelai_trigger_keywords');
+        const novelaiKey = pickLatest('novelai');
+        const novelaiModel = pickLatest('novelai_model');
+        const novelaiAutoGenerate = pickLatest('novelai_auto_generate');
+        const novelaiStyle = pickLatest('novelai_style');
+        const novelaiCustomStylePrompt = pickLatest('novelai_custom_style_prompt');
+        const novelaiTriggerKeywords = pickLatest('novelai_trigger_keywords');
         
         if (novelaiKey) {
-          const enabledSetting = apiKeys.find(k => k.provider === 'novelai_enabled');
-          const genderSetting = apiKeys.find(k => k.provider === 'novelai_gender');
-          const customGenderSetting = apiKeys.find(k => k.provider === 'novelai_custom_gender');
-          const actionSetting = apiKeys.find(k => k.provider === 'novelai_action');
-          const customActionSetting = apiKeys.find(k => k.provider === 'novelai_custom_action');
-          const expressionSetting = apiKeys.find(k => k.provider === 'novelai_expression');
-          const customExpressionSetting = apiKeys.find(k => k.provider === 'novelai_custom_expression');
-          const nsfwSetting = apiKeys.find(k => k.provider === 'novelai_nsfw');
-          const characterPromptSetting = apiKeys.find(k => k.provider === 'novelai_character_prompt');
-          const refImageSetting = apiKeys.find(k => k.provider === 'novelai_reference_image');
-          const refStrengthSetting = apiKeys.find(k => k.provider === 'novelai_reference_strength');
-          const vibeTransferSetting = apiKeys.find(k => k.provider === 'novelai_vibe_transfer');
-          const vibeImageSetting = apiKeys.find(k => k.provider === 'novelai_vibe_image');
-          const vibeStrengthSetting = apiKeys.find(k => k.provider === 'novelai_vibe_strength');
+          const enabledSetting = pickLatest('novelai_enabled');
+          const genderSetting = pickLatest('novelai_gender');
+          const customGenderSetting = pickLatest('novelai_custom_gender');
+          const actionSetting = pickLatest('novelai_action');
+          const customActionSetting = pickLatest('novelai_custom_action');
+          const expressionSetting = pickLatest('novelai_expression');
+          const customExpressionSetting = pickLatest('novelai_custom_expression');
+          const nsfwSetting = pickLatest('novelai_nsfw');
+          const characterPromptSetting = pickLatest('novelai_character_prompt');
+          const refImageSetting = pickLatest('novelai_reference_image');
+          const refStrengthSetting = pickLatest('novelai_reference_strength');
+          const vibeTransferSetting = pickLatest('novelai_vibe_transfer');
+          const vibeImageSetting = pickLatest('novelai_vibe_image');
+          const vibeStrengthSetting = pickLatest('novelai_vibe_strength');
           
           setNovelaiConfig({
             enabled: enabledSetting?.api_key !== 'false',
@@ -962,10 +976,12 @@ const ChatPage: React.FC = () => {
         }
       } else {
         setApiConfig({});
+        setHasUnifiedImageConfig(false);
       }
     } catch (err) {
       console.error('获取API配置失败:', err);
       setApiConfig({});
+      setHasUnifiedImageConfig(false);
     } finally {
       setApiConfigLoading(false);
     }
@@ -1608,12 +1624,11 @@ const ChatPage: React.FC = () => {
     userInput: string,
     aiResponse: string,
   ): { should: boolean; prompt: string } => {
-    // 检查画图功能是否启用（显式设为 false 才关闭）
-    if (novelaiConfig?.enabled === false) {
+    // 检查画图功能是否可用（NovelAI 或 统一图片API 任一可用）
+    if (novelaiConfig?.enabled === false && !hasUnifiedImageConfig) {
       return { should: false, prompt: '' };
     }
-    // 没有配 API Key 则也视为关闭
-    if (!novelaiConfig?.apiKey) {
+    if (!novelaiConfig?.apiKey && !hasUnifiedImageConfig) {
       return { should: false, prompt: '' };
     }
     
@@ -2019,41 +2034,49 @@ const ChatPage: React.FC = () => {
   };
 
   const generateNovelAIImage = async (prompt: string) => {
-    if (!novelaiConfig?.apiKey || !user?.id) return;
-    
-    setGeneratingImage(true);
-    
-    try {
-      // 构建请求体，包含角色专属设置
-      const requestBody: any = {
-        prompt,
-        userId: user.id,
-        characterName: character?.name,
-        characterId: characterId,
-        apiKey: novelaiConfig?.apiKey,
-      };
-      
-      // 如果有角色专属负面提示词，传递给edge function
-      if (charNaiNegative.trim()) {
-        requestBody.negativePrompt = charNaiNegative.trim();
-        console.log('Using character-specific negative prompt:', charNaiNegative.slice(0, 50));
-      }
-      
-      // 如果有角色专属垫图，传递给edge function
-      if (charNaiRefImage.trim()) {
-        requestBody.referenceImage = charNaiRefImage.trim();
-        requestBody.referenceStrength = charNaiRefStrength;
-        console.log('Using character-specific reference image, strength:', charNaiRefStrength);
-      }
-      
-      const { data, error } = await supabase.functions.invoke('novelai-generate', {
-        body: requestBody,
-      });
-      
-      if (error) {
-        console.error('NovelAI error:', error);
+    if (!user?.id) return;
 
-        // 尽量把后端返回的具体错误展示给用户（例如：密钥无效/额度不足/请求过频/模型错误）
+    const canUseNovelAI = Boolean(novelaiConfig?.apiKey);
+    const canUseUnifiedImage = hasUnifiedImageConfig;
+    if (!canUseNovelAI && !canUseUnifiedImage) return;
+
+    setGeneratingImage(true);
+
+    try {
+      let data: any = null;
+      let error: any = null;
+
+      if (canUseNovelAI) {
+        const requestBody: any = {
+          prompt,
+          userId: user.id,
+          characterName: character?.name,
+          characterId,
+          apiKey: novelaiConfig?.apiKey,
+        };
+
+        if (charNaiNegative.trim()) requestBody.negativePrompt = charNaiNegative.trim();
+        if (charNaiRefImage.trim()) {
+          requestBody.referenceImage = charNaiRefImage.trim();
+          requestBody.referenceStrength = charNaiRefStrength;
+        }
+
+        const result = await supabase.functions.invoke('novelai-generate', { body: requestBody });
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await supabase.functions.invoke('generate-image', {
+          body: {
+            prompt,
+            userId: user.id,
+            characterId,
+          },
+        });
+        data = result.data;
+        error = result.error;
+      }
+
+      if (error) {
         let detail = error.message;
         const resp = (error as any)?.context?.response as Response | undefined;
         if (resp) {
@@ -2064,34 +2087,28 @@ const ChatPage: React.FC = () => {
             // ignore
           }
         }
-
         toast.error('画图失败: ' + detail);
         return;
       }
-      
+
       if (data?.success && data?.imageUrl) {
-        // 图片消息 - 只发图片，不显示提示词
-        const imageContent = '';
-        
-        // 添加图片消息
         const imageMsg = {
           id: Date.now() + 1000,
           role: 'assistant',
-          content: imageContent,
+          content: '',
           image_url: data.imageUrl,
         };
-        
+
         setMessages(prev => [...prev, imageMsg]);
-        
-        // 保存到数据库 - content为空，只保存图片URL
+
         await supabase.from('chat_messages').insert({
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
-          content: imageContent,
+          content: '',
           image_url: data.imageUrl,
         });
-        
+
         toast.success('图片生成完成~');
       } else if (data?.error) {
         toast.error(data.error);
@@ -2764,7 +2781,7 @@ const ChatPage: React.FC = () => {
             await markCurrentChatRead();
           
           // 线上模式画图：在消息全部显示完后执行
-          if (novelaiConfig?.apiKey) {
+          if (novelaiConfig?.apiKey || hasUnifiedImageConfig) {
             const combinedForImage = multiMessages
               .map((m) => removeTransferCommand(m))
               .join(' ')
@@ -3000,8 +3017,9 @@ const ChatPage: React.FC = () => {
       await markCurrentChatRead();
       
       // 检查是否需要生成图片（小说模式和线上单消息模式）
-      console.log('[ImageGen] Mode:', replyMode, 'hasApiKey:', !!novelaiConfig?.apiKey, 'contentLen:', cleanContent?.length);
-      if (novelaiConfig?.apiKey && cleanContent && cleanContent.trim()) {
+      const canGenerateImage = Boolean(novelaiConfig?.apiKey || hasUnifiedImageConfig);
+      console.log('[ImageGen] Mode:', replyMode, 'canGenerateImage:', canGenerateImage, 'contentLen:', cleanContent?.length);
+      if (canGenerateImage && cleanContent && cleanContent.trim()) {
         const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
         console.log('[ImageGen] shouldGenerate:', should, 'prompt:', prompt?.slice(0, 80));
         if (should) {
