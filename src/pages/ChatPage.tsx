@@ -2034,41 +2034,49 @@ const ChatPage: React.FC = () => {
   };
 
   const generateNovelAIImage = async (prompt: string) => {
-    if (!novelaiConfig?.apiKey || !user?.id) return;
-    
-    setGeneratingImage(true);
-    
-    try {
-      // 构建请求体，包含角色专属设置
-      const requestBody: any = {
-        prompt,
-        userId: user.id,
-        characterName: character?.name,
-        characterId: characterId,
-        apiKey: novelaiConfig?.apiKey,
-      };
-      
-      // 如果有角色专属负面提示词，传递给edge function
-      if (charNaiNegative.trim()) {
-        requestBody.negativePrompt = charNaiNegative.trim();
-        console.log('Using character-specific negative prompt:', charNaiNegative.slice(0, 50));
-      }
-      
-      // 如果有角色专属垫图，传递给edge function
-      if (charNaiRefImage.trim()) {
-        requestBody.referenceImage = charNaiRefImage.trim();
-        requestBody.referenceStrength = charNaiRefStrength;
-        console.log('Using character-specific reference image, strength:', charNaiRefStrength);
-      }
-      
-      const { data, error } = await supabase.functions.invoke('novelai-generate', {
-        body: requestBody,
-      });
-      
-      if (error) {
-        console.error('NovelAI error:', error);
+    if (!user?.id) return;
 
-        // 尽量把后端返回的具体错误展示给用户（例如：密钥无效/额度不足/请求过频/模型错误）
+    const canUseNovelAI = Boolean(novelaiConfig?.apiKey);
+    const canUseUnifiedImage = hasUnifiedImageConfig;
+    if (!canUseNovelAI && !canUseUnifiedImage) return;
+
+    setGeneratingImage(true);
+
+    try {
+      let data: any = null;
+      let error: any = null;
+
+      if (canUseNovelAI) {
+        const requestBody: any = {
+          prompt,
+          userId: user.id,
+          characterName: character?.name,
+          characterId,
+          apiKey: novelaiConfig?.apiKey,
+        };
+
+        if (charNaiNegative.trim()) requestBody.negativePrompt = charNaiNegative.trim();
+        if (charNaiRefImage.trim()) {
+          requestBody.referenceImage = charNaiRefImage.trim();
+          requestBody.referenceStrength = charNaiRefStrength;
+        }
+
+        const result = await supabase.functions.invoke('novelai-generate', { body: requestBody });
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await supabase.functions.invoke('generate-image', {
+          body: {
+            prompt,
+            userId: user.id,
+            characterId,
+          },
+        });
+        data = result.data;
+        error = result.error;
+      }
+
+      if (error) {
         let detail = error.message;
         const resp = (error as any)?.context?.response as Response | undefined;
         if (resp) {
@@ -2079,34 +2087,28 @@ const ChatPage: React.FC = () => {
             // ignore
           }
         }
-
         toast.error('画图失败: ' + detail);
         return;
       }
-      
+
       if (data?.success && data?.imageUrl) {
-        // 图片消息 - 只发图片，不显示提示词
-        const imageContent = '';
-        
-        // 添加图片消息
         const imageMsg = {
           id: Date.now() + 1000,
           role: 'assistant',
-          content: imageContent,
+          content: '',
           image_url: data.imageUrl,
         };
-        
+
         setMessages(prev => [...prev, imageMsg]);
-        
-        // 保存到数据库 - content为空，只保存图片URL
+
         await supabase.from('chat_messages').insert({
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
-          content: imageContent,
+          content: '',
           image_url: data.imageUrl,
         });
-        
+
         toast.success('图片生成完成~');
       } else if (data?.error) {
         toast.error(data.error);
