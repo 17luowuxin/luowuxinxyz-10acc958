@@ -904,20 +904,20 @@ const ChatPage: React.FC = () => {
         const novelaiTriggerKeywords = pickLatest('novelai_trigger_keywords');
         
         if (novelaiKey) {
-          const enabledSetting = apiKeys.find(k => k.provider === 'novelai_enabled');
-          const genderSetting = apiKeys.find(k => k.provider === 'novelai_gender');
-          const customGenderSetting = apiKeys.find(k => k.provider === 'novelai_custom_gender');
-          const actionSetting = apiKeys.find(k => k.provider === 'novelai_action');
-          const customActionSetting = apiKeys.find(k => k.provider === 'novelai_custom_action');
-          const expressionSetting = apiKeys.find(k => k.provider === 'novelai_expression');
-          const customExpressionSetting = apiKeys.find(k => k.provider === 'novelai_custom_expression');
-          const nsfwSetting = apiKeys.find(k => k.provider === 'novelai_nsfw');
-          const characterPromptSetting = apiKeys.find(k => k.provider === 'novelai_character_prompt');
-          const refImageSetting = apiKeys.find(k => k.provider === 'novelai_reference_image');
-          const refStrengthSetting = apiKeys.find(k => k.provider === 'novelai_reference_strength');
-          const vibeTransferSetting = apiKeys.find(k => k.provider === 'novelai_vibe_transfer');
-          const vibeImageSetting = apiKeys.find(k => k.provider === 'novelai_vibe_image');
-          const vibeStrengthSetting = apiKeys.find(k => k.provider === 'novelai_vibe_strength');
+          const enabledSetting = pickLatest('novelai_enabled');
+          const genderSetting = pickLatest('novelai_gender');
+          const customGenderSetting = pickLatest('novelai_custom_gender');
+          const actionSetting = pickLatest('novelai_action');
+          const customActionSetting = pickLatest('novelai_custom_action');
+          const expressionSetting = pickLatest('novelai_expression');
+          const customExpressionSetting = pickLatest('novelai_custom_expression');
+          const nsfwSetting = pickLatest('novelai_nsfw');
+          const characterPromptSetting = pickLatest('novelai_character_prompt');
+          const refImageSetting = pickLatest('novelai_reference_image');
+          const refStrengthSetting = pickLatest('novelai_reference_strength');
+          const vibeTransferSetting = pickLatest('novelai_vibe_transfer');
+          const vibeImageSetting = pickLatest('novelai_vibe_image');
+          const vibeStrengthSetting = pickLatest('novelai_vibe_strength');
           
           setNovelaiConfig({
             enabled: enabledSetting?.api_key !== 'false',
