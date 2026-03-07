@@ -11,6 +11,8 @@ interface ImageConfig {
   apiUrl: string;
   model: string;
   enabled: boolean;
+  imageSize?: string;
+  stylePrompt?: string;
 }
 
 async function getImageConfig(userId: string): Promise<ImageConfig | null> {
@@ -55,10 +57,12 @@ async function getImageConfig(userId: string): Promise<ImageConfig | null> {
   const apiKey = get('space_image_api_key');
   const apiUrl = get('space_image_api_url');
   const model = get('space_image_model');
+  const imageSize = get('space_image_size');
+  const stylePrompt = get('space_image_style_prompt');
   
   if (!apiKey || !apiUrl) return null;
   
-  return { enabled, apiKey, apiUrl, model };
+  return { enabled, apiKey, apiUrl, model, imageSize, stylePrompt };
 }
 
 async function generateImage(prompt: string, config: ImageConfig, size?: string): Promise<{ url?: string; b64?: string }> {
@@ -282,18 +286,21 @@ serve(async (req) => {
 
     // Build final prompt with style prefix
     let finalPrompt = prompt || '';
-    if (stylePrompt) {
-      finalPrompt = `${stylePrompt}, ${finalPrompt}`;
+    const mergedStylePrompt = stylePrompt || config.stylePrompt || '';
+    if (mergedStylePrompt) {
+      finalPrompt = `${mergedStylePrompt}, ${finalPrompt}`;
     }
 
     console.log(`[${effectiveAction}] prompt: ${finalPrompt.slice(0, 100)}, size: ${size || 'default'}`);
     
     let result: { url?: string; b64?: string };
     
+    const finalSize = size || config.imageSize || '1024x1024';
+
     if (effectiveAction === 'edit-image' && effectiveRefBase64) {
-      result = await editImage(finalPrompt, config, effectiveRefBase64, size);
+      result = await editImage(finalPrompt, config, effectiveRefBase64, finalSize);
     } else {
-      const genResult = await generateImage(finalPrompt, config, size);
+      const genResult = await generateImage(finalPrompt, config, finalSize);
       result = genResult;
     }
     
