@@ -875,20 +875,33 @@ const ChatPage: React.FC = () => {
     try {
       const { data: apiKeys } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
       if (apiKeys && apiKeys.length > 0) {
-        const customKey = apiKeys.find(k => k.provider === 'custom');
-        const deepseekKey = apiKeys.find(k => k.provider === 'deepseek');
-        const openaiKey = apiKeys.find(k => k.provider === 'openai');
-        const anthropicKey = apiKeys.find(k => k.provider === 'anthropic');
-        const customBaseUrl = apiKeys.find(k => k.provider === 'custom_base_url');
-        const customModel = apiKeys.find(k => k.provider === 'custom_model');
-        
+        const pickLatest = (provider: string) =>
+          apiKeys
+            .filter((k) => k.provider === provider)
+            .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
+            .at(-1);
+
+        const customKey = pickLatest('custom');
+        const deepseekKey = pickLatest('deepseek');
+        const openaiKey = pickLatest('openai');
+        const anthropicKey = pickLatest('anthropic');
+        const customBaseUrl = pickLatest('custom_base_url');
+        const customModel = pickLatest('custom_model');
+
+        // 统一图片API配置（即梦/OpenAI兼容）
+        const spaceImageEnabledSetting = pickLatest('space_image_enabled');
+        const spaceImageApiKeySetting = pickLatest('space_image_api_key');
+        const spaceImageApiUrlSetting = pickLatest('space_image_api_url');
+        const unifiedImageEnabled = spaceImageEnabledSetting ? spaceImageEnabledSetting.api_key !== 'false' : true;
+        setHasUnifiedImageConfig(Boolean(unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key));
+
         // NovelAI config
-        const novelaiKey = apiKeys.find(k => k.provider === 'novelai');
-        const novelaiModel = apiKeys.find(k => k.provider === 'novelai_model');
-        const novelaiAutoGenerate = apiKeys.find(k => k.provider === 'novelai_auto_generate');
-        const novelaiStyle = apiKeys.find(k => k.provider === 'novelai_style');
-        const novelaiCustomStylePrompt = apiKeys.find(k => k.provider === 'novelai_custom_style_prompt');
-        const novelaiTriggerKeywords = apiKeys.find(k => k.provider === 'novelai_trigger_keywords');
+        const novelaiKey = pickLatest('novelai');
+        const novelaiModel = pickLatest('novelai_model');
+        const novelaiAutoGenerate = pickLatest('novelai_auto_generate');
+        const novelaiStyle = pickLatest('novelai_style');
+        const novelaiCustomStylePrompt = pickLatest('novelai_custom_style_prompt');
+        const novelaiTriggerKeywords = pickLatest('novelai_trigger_keywords');
         
         if (novelaiKey) {
           const enabledSetting = apiKeys.find(k => k.provider === 'novelai_enabled');
