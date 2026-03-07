@@ -2781,7 +2781,7 @@ const ChatPage: React.FC = () => {
             await markCurrentChatRead();
           
           // 线上模式画图：在消息全部显示完后执行
-          if (novelaiConfig?.apiKey) {
+          if (novelaiConfig?.apiKey || hasUnifiedImageConfig) {
             const combinedForImage = multiMessages
               .map((m) => removeTransferCommand(m))
               .join(' ')
@@ -3017,8 +3017,9 @@ const ChatPage: React.FC = () => {
       await markCurrentChatRead();
       
       // 检查是否需要生成图片（小说模式和线上单消息模式）
-      console.log('[ImageGen] Mode:', replyMode, 'hasApiKey:', !!novelaiConfig?.apiKey, 'contentLen:', cleanContent?.length);
-      if (novelaiConfig?.apiKey && cleanContent && cleanContent.trim()) {
+      const canGenerateImage = Boolean(novelaiConfig?.apiKey || hasUnifiedImageConfig);
+      console.log('[ImageGen] Mode:', replyMode, 'canGenerateImage:', canGenerateImage, 'contentLen:', cleanContent?.length);
+      if (canGenerateImage && cleanContent && cleanContent.trim()) {
         const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
         console.log('[ImageGen] shouldGenerate:', should, 'prompt:', prompt?.slice(0, 80));
         if (should) {
