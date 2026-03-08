@@ -2454,6 +2454,22 @@ const ChatPage: React.FC = () => {
       // 检查最近消息中是否有图片（用于上下文），排除表情包
       const hasImageInHistory = recentMessages.some(m => m.image_url && !m.content?.startsWith('[STICKER:'));
       
+      // 预检测：用户消息是否会触发画图（在发给AI之前判断，让AI知道自己会发图）
+      const canGenerateImagePrecheck = Boolean(novelaiConfig?.apiKey || hasUnifiedImageConfig);
+      let willSendImage = false;
+      if (canGenerateImagePrecheck) {
+        const inputLower = messageContent.trim().toLowerCase();
+        const configKeywords = novelaiConfig?.triggerKeywords || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子,图片,拍照,画画,绘画,出图,生成,来张,看你,见你,图,给我看,让我看,能看,想看,拍个,来个,发一张,给一张,秀一下,秀秀,show,pic,photo,image';
+        const keywordList = configKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+        const alwaysTrigger = keywordList.includes('*') || keywordList.includes('任意') || keywordList.includes('全部');
+        const isWhatDoingTrigger = /(看看你?在干嘛|在干嘛|你在做什么|你在干什么|现在在做什么|现在在干嘛|你现在干嘛|看看你现在|你现在在干嘛)/.test(messageContent);
+        willSendImage = alwaysTrigger || isWhatDoingTrigger ||
+          keywordList.some((kw) => kw && inputLower.includes(kw)) ||
+          /(画|发|来|给|要|想看|看|拍|秀|展示|show).*?(图|图片|照片|自拍|一下|你|pic|photo)/.test(messageContent) ||
+          /(给|让|能|可以).{0,4}(我|偶).{0,4}(看|见)/.test(messageContent) ||
+          /^\s*(\/draw|\/pic|\/image|\/img)\b/i.test(messageContent);
+      }
+
       const body: any = { 
         messages: [...recentMessages, userMessage], 
         characterName: character?.name, 
@@ -2467,6 +2483,7 @@ const ChatPage: React.FC = () => {
         historyLimit: historyLimit,
         useNovelFormat: useNovelFormat,
         hasImageInHistory: hasImageInHistory,
+        willSendImage: willSendImage, // 告诉AI它将会发送图片
         // 传递客户端本地时间信息
         clientTime: {
           timestamp: Date.now(),
