@@ -140,47 +140,8 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
   
   console.log('img2img edit, scene:', scenePrompt.slice(0, 80));
 
-  // Strategy 1: Lovable AI (Gemini flash-image) - best quality for P图
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (LOVABLE_API_KEY) {
-    try {
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: editPrompt },
-              { type: 'image_url', image_url: { url: imageUrl } },
-            ],
-          }],
-          modalities: ['image', 'text'],
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const editedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        if (editedImageUrl) {
-          console.log('Lovable AI P图 success');
-          return { url: editedImageUrl };
-        }
-      } else {
-        const errText = await response.text();
-        console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 200));
-      }
-    } catch (e) {
-      console.error('Lovable AI error:', e);
-    }
-  }
-
-  // Strategy 2: User's own API - try /images/edits (FormData) first
-  console.log('Falling back to user API for img2img');
+  // Strategy 1: User's own API - try /images/edits (FormData) first
+  console.log('Using user API for img2img');
   try {
     let editApiUrl = _config.apiUrl.replace(/\/+$/, '');
     // Try /images/edits endpoint with FormData

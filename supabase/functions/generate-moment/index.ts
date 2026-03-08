@@ -202,53 +202,7 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
 // 角色特征保持指令
 const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
 
-// 使用 Lovable AI 进行 P图编辑（垫图 + 文字描述）
-async function editImageWithAI(prompt: string, refImageBase64: string): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) return null;
-
-  let imageUrl = refImageBase64;
-  if (!imageUrl.startsWith('data:')) {
-    imageUrl = `data:image/png;base64,${imageUrl}`;
-  }
-
-  const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n\nScene instruction: ${prompt}\n\nBased on the reference image, generate a new image of this exact same character in the described scene. Keep the character's appearance identical.`;
-
-  try {
-    console.log('Using Lovable AI for img2img P图, scene:', prompt.slice(0, 100));
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: editPrompt },
-            { type: 'image_url', image_url: { url: imageUrl } },
-          ],
-        }],
-        modalities: ['image', 'text'],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Lovable AI img2img failed:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
-  } catch (e) {
-    console.error('Lovable AI img2img error:', e);
-    return null;
-  }
-}
-
-// 生成图片（支持垫图 img2img via Lovable AI P图）
+// 生成图片（支持垫图 img2img via 用户自己的 API）
 async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string, _refStrength?: number): Promise<string | null> {
   try {
     // 添加画风提示词前缀
@@ -258,7 +212,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
     
-    // 如果有垫图，优先使用 Lovable AI P图编辑
+    // 如果有垫图，使用用户 API 进行 img2img
     if (refImageUrl) {
       try {
         const imgResp = await fetch(refImageUrl);
@@ -266,11 +220,75 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
           const buf = await imgResp.arrayBuffer();
           const b64 = uint8ToBase64(new Uint8Array(buf));
           const refBase64 = `data:image/png;base64,${b64}`;
-          console.log('Loaded ref image, size:', buf.byteLength, '- using Lovable AI P图');
+          console.log('Loaded ref image, size:', buf.byteLength, '- using user API img2img');
           
-          const editResult = await editImageWithAI(finalPrompt, refBase64);
-          if (editResult) return editResult;
-          console.log('Lovable AI P图 failed, falling back to text2img');
+          // Try /images/edits (FormData) first
+          try {
+            let editApiUrl = config.apiUrl.replace(/\/+$/, '');
+            const editsUrl = editApiUrl.replace(/\/images\/generations\/?$/, '') + '/images/edits';
+            
+            const base64Data = refBase64.replace(/^data:image\/\w+;base64,/, '');
+            const binaryStr = atob(base64Data);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'image/png' });
+
+            const formData = new FormData();
+            formData.append('image', blob, 'reference.png');
+            formData.append('prompt', finalPrompt);
+            if (config.model) formData.append('model', config.model);
+            formData.append('n', '1');
+            if (config.size) formData.append('size', config.size);
+
+            const editResp = await fetch(editsUrl, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${config.apiKey}` },
+              body: formData,
+            });
+
+            if (editResp.ok) {
+              const data = await editResp.json();
+              if (data.data?.[0]?.url) return data.data[0].url;
+              if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+            }
+          } catch (e) {
+            console.log('/images/edits failed, trying JSON fallback:', e);
+          }
+
+          // Try /images/generations with image field (即梦/通义兼容)
+          try {
+            let apiUrl = config.apiUrl.replace(/\/+$/, '');
+            if (!apiUrl.includes('/images/generations')) {
+              apiUrl = `${apiUrl}/images/generations`;
+            }
+            const genResp = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${config.apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: config.model || 'dall-e-3',
+                size: config.size || '1024x1024',
+                prompt: finalPrompt,
+                n: 1,
+                image: refBase64,
+                reference_image: refBase64,
+              }),
+            });
+
+            if (genResp.ok) {
+              const data = await genResp.json();
+              if (data.data?.[0]?.url) return data.data[0].url;
+              if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+              if (data.url) return data.url;
+              if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+            }
+          } catch (e) {
+            console.log('JSON img2img also failed:', e);
+          }
+
+          console.log('All img2img methods failed, falling back to text2img');
         }
       } catch (e) {
         console.error('Failed to load ref image:', e);
