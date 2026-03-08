@@ -124,60 +124,143 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
   throw new Error('API返回格式无法识别');
 }
 
-async function editImage(prompt: string, _config: ImageConfig, referenceImageBase64: string, _size?: string): Promise<{ url?: string; b64?: string }> {
-  // Use Lovable AI (Gemini flash-image) for native image editing - like Jimeng P图
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.error('LOVABLE_API_KEY not configured, cannot do img2img');
-    throw new Error('图片编辑功能需要内置AI支持');
-  }
+// 角色特征保持指令 - 确保垫图P图时角色外貌一致
+const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
 
+async function editImage(prompt: string, _config: ImageConfig, referenceImageBase64: string, _size?: string): Promise<{ url?: string; b64?: string }> {
   // Ensure the reference image has proper data URI format
   let imageUrl = referenceImageBase64;
   if (!imageUrl.startsWith('data:')) {
     imageUrl = `data:image/png;base64,${imageUrl}`;
   }
 
-  const editPrompt = prompt || '基于这张图片，保持角色外貌和风格不变，生成一张自然的新图片';
-  console.log('Using Lovable AI for img2img edit, prompt:', editPrompt.slice(0, 100));
+  // Build enhanced prompt with character consistency instructions
+  const scenePrompt = prompt || '生成一张自然的日常场景图片';
+  const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n\nScene instruction: ${scenePrompt}\n\nBased on the reference image, generate a new image of this exact same character in the described scene. Keep the character's appearance identical.`;
+  
+  console.log('img2img edit, scene:', scenePrompt.slice(0, 80));
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-image',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: editPrompt },
-            { type: 'image_url', image_url: { url: imageUrl } },
-          ],
+  // Strategy 1: Lovable AI (Gemini flash-image) - best quality for P图
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (LOVABLE_API_KEY) {
+    try {
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-      ],
-      modalities: ['image', 'text'],
-    }),
-  });
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-image',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: editPrompt },
+              { type: 'image_url', image_url: { url: imageUrl } },
+            ],
+          }],
+          modalities: ['image', 'text'],
+        }),
+      });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 200));
-    // Fallback to text2img with user's own API
-    console.log('Falling back to text2img');
-    return await generateImage(prompt, _config, _size);
+      if (response.ok) {
+        const data = await response.json();
+        const editedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        if (editedImageUrl) {
+          console.log('Lovable AI P图 success');
+          return { url: editedImageUrl };
+        }
+      } else {
+        const errText = await response.text();
+        console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 200));
+      }
+    } catch (e) {
+      console.error('Lovable AI error:', e);
+    }
   }
 
-  const data = await response.json();
-  const editedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  if (editedImageUrl) {
-    return { url: editedImageUrl };
+  // Strategy 2: User's own API - try /images/edits (FormData) first
+  console.log('Falling back to user API for img2img');
+  try {
+    let editApiUrl = _config.apiUrl.replace(/\/+$/, '');
+    // Try /images/edits endpoint with FormData
+    const editsUrl = editApiUrl.replace(/\/images\/generations\/?$/, '') + '/images/edits';
+    
+    // Convert base64 to Blob for FormData
+    const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+    const binaryStr = atob(base64Data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/png' });
+
+    const formData = new FormData();
+    formData.append('image', blob, 'reference.png');
+    formData.append('prompt', scenePrompt);
+    if (_config.model) formData.append('model', _config.model);
+    formData.append('n', '1');
+    if (_size) formData.append('size', _size);
+
+    console.log('Trying /images/edits (FormData):', editsUrl);
+    const editResp = await fetch(editsUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${_config.apiKey}` },
+      body: formData,
+    });
+
+    if (editResp.ok) {
+      const data = await editResp.json();
+      if (data.data?.[0]?.url) return { url: data.data[0].url };
+      if (data.data?.[0]?.b64_json) return { b64: data.data[0].b64_json };
+    } else {
+      console.log('/images/edits failed:', editResp.status, '- trying JSON fallback');
+    }
+  } catch (e) {
+    console.log('/images/edits error, trying JSON fallback:', e);
   }
 
-  console.log('Lovable AI returned no image, falling back to text2img');
-  return await generateImage(prompt, _config, _size);
+  // Strategy 3: /images/generations with image field in JSON body (即梦/通义兼容)
+  try {
+    let apiUrl = _config.apiUrl.replace(/\/+$/, '');
+    if (!apiUrl.includes('/images/generations')) {
+      apiUrl = `${apiUrl}/images/generations`;
+    }
+
+    const jsonBody: Record<string, unknown> = {
+      model: _config.model || 'dall-e-3',
+      size: _size || '1024x1024',
+      prompt: scenePrompt,
+      n: 1,
+      image: imageUrl,
+      reference_image: imageUrl,
+    };
+
+    console.log('Trying /images/generations with image field:', apiUrl);
+    const genResp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${_config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(jsonBody),
+    });
+
+    if (genResp.ok) {
+      const data = await genResp.json();
+      if (data.data?.[0]?.url) return { url: data.data[0].url };
+      if (data.data?.[0]?.b64_json) return { b64: data.data[0].b64_json };
+      if (data.url) return { url: data.url };
+      if (data.image) return { url: data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}` };
+      if (data.images?.[0]?.url) return { url: data.images[0].url };
+    } else {
+      console.log('JSON img2img also failed:', genResp.status);
+    }
+  } catch (e) {
+    console.log('JSON img2img error:', e);
+  }
+
+  // Final fallback: pure text2img without reference image
+  console.log('All img2img methods failed, falling back to text2img');
+  return await generateImage(scenePrompt, _config, _size);
 }
 
 serve(async (req) => {

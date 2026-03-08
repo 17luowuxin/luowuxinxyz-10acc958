@@ -199,6 +199,9 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
+// 角色特征保持指令
+const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
+
 // 使用 Lovable AI 进行 P图编辑（垫图 + 文字描述）
 async function editImageWithAI(prompt: string, refImageBase64: string): Promise<string | null> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -209,8 +212,10 @@ async function editImageWithAI(prompt: string, refImageBase64: string): Promise<
     imageUrl = `data:image/png;base64,${imageUrl}`;
   }
 
+  const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n\nScene instruction: ${prompt}\n\nBased on the reference image, generate a new image of this exact same character in the described scene. Keep the character's appearance identical.`;
+
   try {
-    console.log('Using Lovable AI for img2img P图, prompt:', prompt.slice(0, 100));
+    console.log('Using Lovable AI for img2img P图, scene:', prompt.slice(0, 100));
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -222,7 +227,7 @@ async function editImageWithAI(prompt: string, refImageBase64: string): Promise<
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: prompt },
+            { type: 'text', text: editPrompt },
             { type: 'image_url', image_url: { url: imageUrl } },
           ],
         }],
