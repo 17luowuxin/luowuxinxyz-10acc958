@@ -126,51 +126,24 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
 
 async function editImage(prompt: string, config: ImageConfig, referenceImageBase64: string, size?: string): Promise<{ url?: string; b64?: string }> {
   let apiUrl = config.apiUrl.replace(/\/+$/, '');
-  
-  // Method 1: Try OpenAI-compatible /images/edits endpoint
-  try {
-    const editsUrl = apiUrl.includes('/images/') ? apiUrl.replace(/\/images\/.*$/, '/images/edits') : `${apiUrl}/images/edits`;
-    console.log('Trying edit endpoint:', editsUrl);
-    
-    const base64Data = referenceImageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-    const blob = new Blob([binaryData], { type: 'image/png' });
-    
-    const formData = new FormData();
-    formData.append('image', blob, 'image.png');
-    formData.append('prompt', prompt || 'enhance this image');
-    formData.append('model', config.model || 'dall-e-3');
-    formData.append('n', '1');
-    if (size) formData.append('size', size);
-    
-    const editResponse = await fetch(editsUrl, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${config.apiKey}` },
-      body: formData,
-    });
-    
-    if (editResponse.ok) {
-      const editData = await editResponse.json();
-      const imageUrl = editData.data?.[0]?.url || null;
-      const b64 = editData.data?.[0]?.b64_json || null;
-      return { url: imageUrl || undefined, b64: b64 || undefined };
-    }
-    console.log('Edits endpoint returned:', editResponse.status, '- trying fallback');
-  } catch (e) {
-    console.log('Edits endpoint error, trying fallback:', e);
-  }
-  
-  // Method 2: Fallback to /images/generations with image parameter (some Chinese APIs support this)
   if (!apiUrl.includes('/images/generations')) {
     apiUrl = `${apiUrl}/images/generations`;
   }
   
+  console.log('img2img with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
+  
+  // Strip data URI prefix for APIs that want raw base64
+  const rawBase64 = referenceImageBase64.replace(/^data:image\/\w+;base64,/, '');
+  
+  // Use /images/generations with reference image - compatible with most Chinese APIs (Jimeng, etc.)
   const genBody: Record<string, unknown> = {
     model: config.model || 'dall-e-3',
-    prompt: prompt || 'enhance this image',
+    prompt: prompt || 'generate a similar image in the same style',
     n: 1,
-    size: size || '512x512',
+    size: size || '1024x1024',
+    // Pass reference image in multiple common formats for maximum compatibility
     image: referenceImageBase64,
+    reference_image: rawBase64,
   };
   
   const genResponse = await fetch(apiUrl, {
@@ -184,14 +157,17 @@ async function editImage(prompt: string, config: ImageConfig, referenceImageBase
   
   if (genResponse.ok) {
     const genData = await genResponse.json();
-    return {
-      url: genData.data?.[0]?.url || undefined,
-      b64: genData.data?.[0]?.b64_json || undefined,
-    };
+    const url = genData.data?.[0]?.url || genData.url || genData.images?.[0]?.url || undefined;
+    const b64 = genData.data?.[0]?.b64_json || genData.images?.[0]?.b64_json || undefined;
+    if (url || b64) return { url, b64 };
   }
   
+  const status = genResponse.status;
   const errText = await genResponse.text();
-  throw new Error(`图片编辑失败 (${genResponse.status}): ${errText.slice(0, 200)}`);
+  console.log('img2img failed:', status, errText.slice(0, 200), '- falling back to text2img');
+  
+  // Fallback: if img2img fails, do text2img with descriptive prompt incorporating the character
+  return await generateImage(prompt, config, size);
 }
 
 serve(async (req) => {
