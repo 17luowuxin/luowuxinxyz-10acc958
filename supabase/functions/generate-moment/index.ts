@@ -759,7 +759,25 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        const imagePrompt = `${character.persona || character.name}, ${content}, anime style, high quality, beautiful`;
+        // 从角色人设中提取性别和外观特征
+        const persona = character?.persona || '';
+        const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(persona);
+        const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(persona);
+        const genderTag = isMale && !isFemale ? '1boy, anime boy' : isFemale ? '1girl, anime girl' : '1person';
+        
+        // 提取外观关键词
+        const appearanceParts: string[] = [];
+        const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
+        if (hairMatch) appearanceParts.push(hairMatch[1]);
+        const eyeMatch = persona.match(/(?:眼睛|眼色|瞳色)[：:]\s*([^，。\n]+)/);
+        if (eyeMatch) appearanceParts.push(eyeMatch[1]);
+        // 英文外观词
+        const enAppearance = persona.match(/\b((?:pink|blue|red|green|purple|white|black|blonde|silver|golden|brown)\s+(?:hair|eyes?)|(?:long|short|twin\s*tails?|ponytail)\s+hair)\b/gi);
+        if (enAppearance) appearanceParts.push(...enAppearance);
+        
+        const appearanceStr = appearanceParts.length > 0 ? ', ' + appearanceParts.join(', ') : '';
+        const imagePrompt = `${character.name}, ${genderTag}${appearanceStr}, ${content}, anime style, high quality, beautiful, masterpiece`;
+        console.log("Image prompt:", imagePrompt.slice(0, 150));
         
         // 加载角色垫图设置
         const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
