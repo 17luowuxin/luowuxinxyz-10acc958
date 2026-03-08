@@ -179,7 +179,7 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     console.log('/images/edits error, trying JSON fallback:', e);
   }
 
-  // Strategy 3: /images/generations with image field in JSON body (即梦/通义兼容)
+  // Strategy 2: /images/generations with image field in JSON body (即梦/通义兼容)
   try {
     let apiUrl = _config.apiUrl.replace(/\/+$/, '');
     if (!apiUrl.includes('/images/generations')) {
