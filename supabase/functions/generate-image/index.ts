@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Safe base64 encoding that doesn't overflow the stack
+function uint8ToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(parts.join(''));
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -236,8 +246,9 @@ serve(async (req) => {
             const imgResp = await fetch(refUrl);
             if (imgResp.ok) {
               const buf = await imgResp.arrayBuffer();
-              const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+              const b64 = uint8ToBase64(new Uint8Array(buf));
               effectiveRefBase64 = `data:image/png;base64,${b64}`;
+              console.log('Successfully loaded character ref image, size:', buf.byteLength);
             }
           } catch (e) {
             console.error('Failed to fetch character reference image:', e);
