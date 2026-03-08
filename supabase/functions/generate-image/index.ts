@@ -246,8 +246,9 @@ serve(async (req) => {
             const imgResp = await fetch(refUrl);
             if (imgResp.ok) {
               const buf = await imgResp.arrayBuffer();
-              const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+              const b64 = uint8ToBase64(new Uint8Array(buf));
               effectiveRefBase64 = `data:image/png;base64,${b64}`;
+              console.log('Successfully loaded character ref image, size:', buf.byteLength);
             }
           } catch (e) {
             console.error('Failed to fetch character reference image:', e);

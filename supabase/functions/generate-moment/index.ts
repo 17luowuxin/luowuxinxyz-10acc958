@@ -218,8 +218,9 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
         const imgResp = await fetch(refImageUrl);
         if (imgResp.ok) {
           const buf = await imgResp.arrayBuffer();
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          const b64 = uint8ToBase64(new Uint8Array(buf));
           const refBase64 = `data:image/png;base64,${b64}`;
+          console.log('Successfully loaded ref image for img2img, size:', buf.byteLength);
           
           // 尝试 /images/edits 端点
           const editsUrl = apiUrl.includes('/images/') ? apiUrl.replace(/\/images\/.*$/, '/images/edits') : `${apiUrl}/images/edits`;
