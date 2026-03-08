@@ -210,84 +210,35 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
     
     let apiUrl = config.apiUrl.replace(/\/+$/, '');
+    if (!apiUrl.includes('/images/generations')) {
+      apiUrl = `${apiUrl}/images/generations`;
+    }
     
-    // 如果有垫图，先尝试图生图
+    const body: Record<string, unknown> = {
+      model: config.model || 'dall-e-3',
+      size: config.size || '1024x1024',
+      prompt: finalPrompt,
+      n: 1,
+    };
+    
+    // 如果有垫图，加入参考图参数
     if (refImageUrl) {
       try {
-        // 下载垫图为 base64
         const imgResp = await fetch(refImageUrl);
         if (imgResp.ok) {
           const buf = await imgResp.arrayBuffer();
           const b64 = uint8ToBase64(new Uint8Array(buf));
           const refBase64 = `data:image/png;base64,${b64}`;
-          console.log('Successfully loaded ref image for img2img, size:', buf.byteLength);
-          
-          // 尝试 /images/edits 端点
-          const editsUrl = apiUrl.includes('/images/') ? apiUrl.replace(/\/images\/.*$/, '/images/edits') : `${apiUrl}/images/edits`;
-          console.log('Trying img2img edit endpoint:', editsUrl);
-          
-          const binaryData = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-          const blob = new Blob([binaryData], { type: 'image/png' });
-          
-          const formData = new FormData();
-          formData.append('image', blob, 'image.png');
-          formData.append('prompt', finalPrompt);
-          formData.append('model', config.model || 'dall-e-3');
-          formData.append('n', '1');
-          formData.append('size', config.size || '1024x1024');
-          
-          const editResponse = await fetch(editsUrl, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${config.apiKey}` },
-            body: formData,
-          });
-          
-          if (editResponse.ok) {
-            const editData = await editResponse.json();
-            const imageUrl = editData.data?.[0]?.url || editData.data?.[0]?.b64_json;
-            if (imageUrl) {
-              console.log('img2img edit succeeded');
-              return editData.data[0].b64_json ? `data:image/png;base64,${editData.data[0].b64_json}` : imageUrl;
-            }
-          }
-          console.log('Edit endpoint failed, trying generations with image param');
-          
-          // 回退：用 /images/generations + image 参数
-          if (!apiUrl.includes('/images/generations')) {
-            apiUrl = `${apiUrl}/images/generations`;
-          }
-          const genResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${config.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: config.model || 'dall-e-3',
-              size: config.size || '1024x1024',
-              prompt: finalPrompt,
-              n: 1,
-              image: refBase64,
-            }),
-          });
-          
-          if (genResponse.ok) {
-            const genData = await genResponse.json();
-            if (genData.data?.[0]?.url) return genData.data[0].url;
-            if (genData.data?.[0]?.b64_json) return `data:image/png;base64,${genData.data[0].b64_json}`;
-          }
-          console.log('img2img with generations also failed, falling back to pure text2img');
+          console.log('Loaded ref image for img2img, size:', buf.byteLength);
+          body.image = refBase64;
+          body.reference_image = b64;
         }
       } catch (e) {
-        console.error('img2img attempt failed:', e);
+        console.error('Failed to load ref image:', e);
       }
     }
     
-    // 纯文生图
-    if (!apiUrl.includes('/images/generations')) {
-      apiUrl = `${apiUrl}/images/generations`;
-    }
-    console.log('Using image API URL:', apiUrl);
+    console.log('Using image API URL:', apiUrl, 'hasRef:', !!body.image);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -295,34 +246,43 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
         'Authorization': `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: config.size || '1024x1024',
-        prompt: finalPrompt,
-        n: 1,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const errText = await response.text();
       console.error('Image generation API error:', response.status, errText.slice(0, 300));
+      
+      // 如果带垫图失败了，回退到纯文生图
+      if (body.image) {
+        console.log('img2img failed, retrying as pure text2img');
+        delete body.image;
+        delete body.reference_image;
+        const retryResp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+        if (retryResp.ok) {
+          const retryData = await retryResp.json();
+          return retryData.data?.[0]?.url || retryData.data?.[0]?.b64_json ? `data:image/png;base64,${retryData.data[0].b64_json}` : retryData.url || null;
+        }
+      }
       return null;
     }
 
     const data = await response.json();
     console.log('Image API response keys:', Object.keys(data));
     
-    if (data.data?.[0]?.url) {
-      return data.data[0].url;
-    } else if (data.data?.[0]?.b64_json) {
-      return `data:image/png;base64,${data.data[0].b64_json}`;
-    } else if (data.url) {
-      return data.url;
-    } else if (data.image) {
-      return data.image;
-    } else if (data.output?.url) {
-      return data.output.url;
-    }
+    if (data.data?.[0]?.url) return data.data[0].url;
+    if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+    if (data.url) return data.url;
+    if (data.image) return data.image;
+    if (data.images?.[0]?.url) return data.images[0].url;
+    if (data.output?.url) return data.output.url;
     
     console.log('No image URL found in response:', JSON.stringify(data).slice(0, 500));
     return null;
