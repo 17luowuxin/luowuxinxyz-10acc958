@@ -199,8 +199,52 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
-// 生成图片（支持垫图 img2img）
-async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string, refStrength?: number): Promise<string | null> {
+// 使用 Lovable AI 进行 P图编辑（垫图 + 文字描述）
+async function editImageWithAI(prompt: string, refImageBase64: string): Promise<string | null> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) return null;
+
+  let imageUrl = refImageBase64;
+  if (!imageUrl.startsWith('data:')) {
+    imageUrl = `data:image/png;base64,${imageUrl}`;
+  }
+
+  try {
+    console.log('Using Lovable AI for img2img P图, prompt:', prompt.slice(0, 100));
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        }],
+        modalities: ['image', 'text'],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Lovable AI img2img failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+  } catch (e) {
+    console.error('Lovable AI img2img error:', e);
+    return null;
+  }
+}
+
+// 生成图片（支持垫图 img2img via Lovable AI P图）
+async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string, _refStrength?: number): Promise<string | null> {
   try {
     // 添加画风提示词前缀
     let finalPrompt = prompt;
@@ -209,6 +253,26 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
     
+    // 如果有垫图，优先使用 Lovable AI P图编辑
+    if (refImageUrl) {
+      try {
+        const imgResp = await fetch(refImageUrl);
+        if (imgResp.ok) {
+          const buf = await imgResp.arrayBuffer();
+          const b64 = uint8ToBase64(new Uint8Array(buf));
+          const refBase64 = `data:image/png;base64,${b64}`;
+          console.log('Loaded ref image, size:', buf.byteLength, '- using Lovable AI P图');
+          
+          const editResult = await editImageWithAI(finalPrompt, refBase64);
+          if (editResult) return editResult;
+          console.log('Lovable AI P图 failed, falling back to text2img');
+        }
+      } catch (e) {
+        console.error('Failed to load ref image:', e);
+      }
+    }
+    
+    // 纯文生图（用户自己的 API）
     let apiUrl = config.apiUrl.replace(/\/+$/, '');
     if (!apiUrl.includes('/images/generations')) {
       apiUrl = `${apiUrl}/images/generations`;
@@ -221,24 +285,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
       n: 1,
     };
     
-    // 如果有垫图，加入参考图参数
-    if (refImageUrl) {
-      try {
-        const imgResp = await fetch(refImageUrl);
-        if (imgResp.ok) {
-          const buf = await imgResp.arrayBuffer();
-          const b64 = uint8ToBase64(new Uint8Array(buf));
-          const refBase64 = `data:image/png;base64,${b64}`;
-          console.log('Loaded ref image for img2img, size:', buf.byteLength);
-          body.image = refBase64;
-          body.reference_image = b64;
-        }
-      } catch (e) {
-        console.error('Failed to load ref image:', e);
-      }
-    }
-    
-    console.log('Using image API URL:', apiUrl, 'hasRef:', !!body.image);
+    console.log('Using text2img API URL:', apiUrl);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -252,25 +299,6 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     if (!response.ok) {
       const errText = await response.text();
       console.error('Image generation API error:', response.status, errText.slice(0, 300));
-      
-      // 如果带垫图失败了，回退到纯文生图
-      if (body.image) {
-        console.log('img2img failed, retrying as pure text2img');
-        delete body.image;
-        delete body.reference_image;
-        const retryResp = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-        if (retryResp.ok) {
-          const retryData = await retryResp.json();
-          return retryData.data?.[0]?.url || retryData.data?.[0]?.b64_json ? `data:image/png;base64,${retryData.data[0].b64_json}` : retryData.url || null;
-        }
-      }
       return null;
     }
 
