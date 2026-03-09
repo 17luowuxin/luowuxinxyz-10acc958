@@ -562,11 +562,6 @@ async function generateImage(
   }
 }
 
-
-        const refTimeout = Math.min(10_000, msLeft() - 1_000);
-        if (refTimeout > 2_000) {
-          const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
-          if (imgResp.ok) {
             const mime = imgResp.headers.get('content-type') || 'image/png';
             const buf = new Uint8Array(await imgResp.arrayBuffer());
             const refDataUrl = bytesToDataUrl(buf, mime);
