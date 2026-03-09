@@ -2,17 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
-// Safe base64 encoding that doesn't overflow the stack
-function uint8ToBase64(bytes: Uint8Array): string {
-  const CHUNK = 0x8000;
-  const parts: string[] = [];
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
-  }
-  return btoa(parts.join(''));
-}
-
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -114,18 +103,6 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   return { enabled, apiKey, apiUrl, model, stylePrompt, size };
 }
 
-// 获取角色专属垫图设置
-async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string } | null> {
-  if (!userId || !characterId) return null;
-  const settings = await fetchApiSettings(userId);
-  if (!settings) return null;
-  
-  const refUrl = settings.get(`nai_ref_image_${characterId}`) || '';
-  
-  if (!refUrl) return null;
-  return { refImageUrl: refUrl };
-}
-
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
   if (!userId) return null;
   const settings = await fetchApiSettings(userId);
@@ -139,7 +116,6 @@ async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null>
   return { enabled, accessKey, category };
 }
 
-// 根据分类获取搜索修饰词
 function getCategoryModifier(category: string): string {
   const categoryMap: Record<string, string> = {
     nature: 'nature landscape scenery',
@@ -154,7 +130,6 @@ function getCategoryModifier(category: string): string {
   return categoryMap[category] || '';
 }
 
-// 使用 Unsplash 搜索图片
 async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): Promise<string | null> {
   try {
     const categoryModifier = getCategoryModifier(config.category);
@@ -198,9 +173,6 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
-// 角色特征保持指令（仅用于垫图/编辑场景时强化“保持脸”）
-const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
-
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -211,38 +183,11 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
-  const b64 = uint8ToBase64(bytes);
-  return `data:${mime};base64,${b64}`;
-}
-
-function dataUrlToBytes(dataUrlOrBase64: string): { bytes: Uint8Array; mime: string; dataUrl: string } {
-  let dataUrl = dataUrlOrBase64;
-  if (!dataUrl.startsWith('data:')) dataUrl = `data:image/png;base64,${dataUrl}`;
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
-    const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, mime: 'image/png', dataUrl: `data:image/png;base64,${b64}` };
-  }
-  const mime = match[1] || 'image/png';
-  const b64 = match[2];
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return { bytes, mime, dataUrl };
-}
-
-function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
+function buildImagesEndpoint(baseUrl: string): string {
   let url = baseUrl.replace(/\/+$/, '');
-
-  // If user provided the full images endpoint, normalize to requested kind.
-  url = url.replace(/\/images\/(generations|edits)\b/, `/images/${kind}`);
-
-  if (url.includes(`/images/${kind}`)) return url;
-  return `${url}/images/${kind}`;
+  url = url.replace(/\/images\/(generations|edits)\b/, '/images/generations');
+  if (url.includes('/images/generations')) return url;
+  return `${url}/images/generations`;
 }
 
 async function parseImageUrlFromResponse(response: Response): Promise<string | null> {
@@ -260,218 +205,46 @@ async function parseImageUrlFromResponse(response: Response): Promise<string | n
   return null;
 }
 
-async function tryImg2ImgMultipart(
+// 纯文生图（仅使用用户配置的即梦等外部接口）
+async function generateImage(
   prompt: string,
   config: SpaceImageConfig,
-  refDataUrl: string,
-  timeoutMs: number,
+  userId: string,
 ): Promise<string | null> {
-  const apiUrl = buildImagesEndpoint(config.apiUrl, 'edits');
-  const { bytes, mime } = dataUrlToBytes(refDataUrl);
-
-  const fd = new FormData();
-  fd.append('model', config.model || 'dall-e-3');
-  fd.append('prompt', prompt);
-  fd.append('n', '1');
-  fd.append('size', config.size || '1024x1024');
-  fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
-
-  console.log('img2img via /images/edits multipart:', apiUrl, 'timeoutMs:', timeoutMs);
   try {
+    let finalPrompt = prompt;
+    if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
+
+    console.log('Text2img with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
+
+    const apiUrl = buildImagesEndpoint(config.apiUrl);
+
     const response = await fetchWithTimeout(
       apiUrl,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-        },
-        body: fd,
-      },
-      timeoutMs,
-    );
-
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
-      return null;
-    }
-
-    return await parseImageUrlFromResponse(response);
-  } catch (e) {
-    console.error('img2img(/edits) multipart threw error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-async function tryImg2ImgJson(
-  prompt: string,
-  config: SpaceImageConfig,
-  refDataUrl: string,
-  timeoutMs: number,
-): Promise<string | null> {
-  const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-
-  console.log('img2img via /images/generations JSON:', apiUrl, 'timeoutMs:', timeoutMs);
-  try {
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
+          Authorization: `Bearer ${config.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: config.model || 'dall-e-3',
           size: config.size || '1024x1024',
-          prompt,
+          prompt: finalPrompt,
           n: 1,
-          image: refDataUrl,
-          reference_image: refDataUrl,
         }),
       },
-      timeoutMs,
+      50_000,
     );
 
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
-      return null;
-    }
-
-    return await parseImageUrlFromResponse(response);
-  } catch (e) {
-    console.error('img2img(JSON) threw error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-// 生成图片（仅使用用户配置的即梦等外部接口，不使用 Lovable AI）
-
-async function uploadImageDataUrlToPublicBucket(dataUrl: string, userId: string, prefix: string): Promise<string | null> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const sb = createClient(supabaseUrl, supabaseKey);
-
-    const { bytes, mime } = dataUrlToBytes(dataUrl);
-    const ext = mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : 'png';
-    const path = `${prefix}/${userId || 'anonymous'}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
-    const { error } = await sb.storage
-      .from('chat-images')
-      .upload(path, new Blob([bytes], { type: mime }), {
-        contentType: mime,
-        upsert: true,
-        cacheControl: '3600',
-      });
-
-    if (error) {
-      console.error('Image upload error:', error);
-      return null;
-    }
-
-    const { data } = sb.storage.from('chat-images').getPublicUrl(path);
-    return data?.publicUrl || null;
-  } catch (e) {
-    console.error('uploadImageDataUrlToPublicBucket error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-async function generateImage(
-  prompt: string,
-  config: SpaceImageConfig,
-  userId: string,
-  refImageUrl?: string,
-): Promise<string | null> {
-  // Hard cap to avoid Edge Function wall-time aborts
-  const deadline = Date.now() + 58_000;
-  const msLeft = () => Math.max(2_000, deadline - Date.now());
-
-  try {
-    // 添加画风提示词前缀
-    let finalPrompt = prompt;
-    if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
-
-    console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
-
-    // 垫图：优先 /images/edits（multipart），其次 JSON 兼容
-    if (refImageUrl) {
-      try {
-        console.log('Loading reference image for img2img...');
-
-        const refTimeout = Math.min(8_000, msLeft() - 4_000);
-        if (refTimeout > 2_000) {
-          const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
-          if (imgResp.ok) {
-            const mime = imgResp.headers.get('content-type') || 'image/png';
-            const buf = new Uint8Array(await imgResp.arrayBuffer());
-            const refDataUrl = bytesToDataUrl(buf, mime);
-
-            const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
-
-            // 给垫图接口充足时间（最多45s）
-            const editsTimeout = Math.min(45_000, msLeft() - 4_000);
-            if (editsTimeout > 4_000) {
-              const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
-              if (edits) return edits;
-            }
-
-            const jsonTimeout = Math.min(20_000, msLeft() - 4_000);
-            if (jsonTimeout > 4_000) {
-              const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
-              if (jsonEdits) return jsonEdits;
-            }
-
-            console.log('img2img failed, will try text2img fallback');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load/use ref image:', e instanceof Error ? e.message : e);
-      }
-    }
-
-    // 文生图：优先用户配置的即梦等接口，给足时间（最多50s）
-    const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-    const textTimeout = Math.min(50_000, msLeft() - 4_000);
-
-    if (textTimeout > 6_000) {
-      console.log('Trying external text2img...', apiUrl, 'timeoutMs:', textTimeout);
-      try {
-        const response = await fetchWithTimeout(
-          apiUrl,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${config.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: config.model || 'dall-e-3',
-              size: config.size || '1024x1024',
-              prompt: finalPrompt,
-              n: 1,
-            }),
-          },
-          textTimeout,
-        );
-
-        if (response.ok) {
-          const out = await parseImageUrlFromResponse(response);
-          if (out) return out;
-        } else {
-          const errText = await response.text().catch(() => '');
-          console.error('External text2img error:', response.status, errText.slice(0, 300));
-        }
-      } catch (e) {
-        console.error('External text2img threw error:', e instanceof Error ? e.message : e);
-      }
+    if (response.ok) {
+      const out = await parseImageUrlFromResponse(response);
+      if (out) return out;
     } else {
-      console.log('Skip external text2img due to low budget:', textTimeout);
+      const errText = await response.text().catch(() => '');
+      console.error('Text2img error:', response.status, errText.slice(0, 300));
     }
 
-    console.error('Image generation failed: all external API attempts exhausted');
     return null;
   } catch (error) {
     console.error('Image generation error:', error);
@@ -772,7 +545,6 @@ serve(async (req) => {
   try {
     const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
-    // 构建数据库客户端 - 优先使用外部数据库（外部用户的数据在那里）
     const cloudUrl = Deno.env.get('SUPABASE_URL')!;
     const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const cloudDb = createClient(cloudUrl, cloudKey);
@@ -780,10 +552,8 @@ serve(async (req) => {
     const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
     const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
     const extDb = (extUrl && extKey) ? createClient(extUrl, extKey) : null;
-    // 外部用户的 moments/comments 存在外部数据库
     const supabase = extDb || cloudDb;
 
-    // 检查是否使用默认API
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     
     const config: AIConfig = {
@@ -906,7 +676,6 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        // 从角色人设中提取性别和外观特征（只使用明确性别词，避免误判）
         const persona = character?.persona || '';
         const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
         const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
@@ -924,26 +693,19 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
         console.log('Gender detection:', { maleHits, femaleHits, genderDesc });
 
-        // 提取外观关键词（中文优先）
         const appearanceParts: string[] = [];
         const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
         if (hairMatch) appearanceParts.push(hairMatch[1]);
         const eyeMatch = persona.match(/(?:眼睛|眼色|瞳色)[：:]\s*([^，。\n]+)/);
         if (eyeMatch) appearanceParts.push(eyeMatch[1]);
-        // 外貌描述
         const appearanceMatch = persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
         if (appearanceMatch) appearanceParts.push(appearanceMatch[1]);
 
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
-        // 用中文自然语言构建提示词，stylePrompt 已由 generateImage 函数自动拼接
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
-        const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
-        if (charRef) {
-          console.log("Using character reference image for space moment img2img");
-        }
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId, charRef?.refImageUrl);
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");
@@ -1005,3 +767,4 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     });
   }
 });
+
