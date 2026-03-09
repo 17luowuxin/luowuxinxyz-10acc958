@@ -563,12 +563,6 @@ async function generateImage(
 }
 
 
-            const jsonTimeout = Math.min(25_000, msLeft() - 1_000);
-            if (jsonTimeout > 2_000) {
-              const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
-              if (jsonEdits) return jsonEdits;
-            }
-
             console.log('img2img failed, falling back to text2img');
           }
         }
