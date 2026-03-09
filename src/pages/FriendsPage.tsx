@@ -508,7 +508,6 @@ const FriendsPage: React.FC = () => {
     setNaiPositivePrompt('');
     setNaiNegativePrompt('');
     setNaiReferenceImage('');
-    setNaiReferenceStrength(0.6);
     setOpen(true);
     
     // 并行加载记忆摘要和NAI提示词（包括垫图设置）
