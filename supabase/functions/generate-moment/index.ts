@@ -562,22 +562,6 @@ async function generateImage(
   }
 }
 
-        apiUrl,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: config.model || 'dall-e-3',
-            size: config.size || '1024x1024',
-            prompt: finalPrompt,
-            n: 1,
-          }),
-        },
-        textTimeout,
-      );
 
       if (!response.ok) {
         const errText = await response.text();
