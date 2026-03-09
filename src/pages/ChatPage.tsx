@@ -899,8 +899,28 @@ const ChatPage: React.FC = () => {
         const spaceImageEnabledSetting = pickLatest('space_image_enabled');
         const spaceImageApiKeySetting = pickLatest('space_image_api_key');
         const spaceImageApiUrlSetting = pickLatest('space_image_api_url');
+        const spaceImageModelSetting = pickLatest('space_image_model');
+        const spaceImageSizeSetting = pickLatest('space_image_size');
+        const spaceImageStylePromptSetting = pickLatest('space_image_style_prompt');
+
         const unifiedImageEnabled = spaceImageEnabledSetting ? spaceImageEnabledSetting.api_key !== 'false' : true;
-        setHasUnifiedImageConfig(Boolean(unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key));
+        const hasUnified = Boolean(
+          unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key,
+        );
+
+        setHasUnifiedImageConfig(hasUnified);
+        setUnifiedImageConfig(
+          hasUnified
+            ? {
+                enabled: unifiedImageEnabled,
+                apiKey: spaceImageApiKeySetting!.api_key,
+                apiUrl: spaceImageApiUrlSetting!.api_key,
+                model: spaceImageModelSetting?.api_key || undefined,
+                size: spaceImageSizeSetting?.api_key || undefined,
+                stylePrompt: spaceImageStylePromptSetting?.api_key || undefined,
+              }
+            : null,
+        );
 
         // NovelAI config
         const novelaiKey = pickLatest('novelai');
