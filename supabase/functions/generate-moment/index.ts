@@ -453,8 +453,6 @@ async function generateImage(
   const deadline = Date.now() + 58_000;
   const msLeft = () => Math.max(2_000, deadline - Date.now());
 
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-
   try {
     // 添加画风提示词前缀
     let finalPrompt = prompt;
