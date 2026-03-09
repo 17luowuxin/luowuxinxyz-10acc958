@@ -562,11 +562,6 @@ async function generateImage(
   }
 }
 
-            const mime = imgResp.headers.get('content-type') || 'image/png';
-            const buf = new Uint8Array(await imgResp.arrayBuffer());
-            const refDataUrl = bytesToDataUrl(buf, mime);
-
-            const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
 
             const editsTimeout = Math.min(45_000, msLeft() - 1_000);
             if (editsTimeout > 2_000) {
