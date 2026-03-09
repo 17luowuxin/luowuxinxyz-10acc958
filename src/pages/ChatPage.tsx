@@ -2036,7 +2036,7 @@ const ChatPage: React.FC = () => {
   const generateNovelAIImage = async (prompt: string) => {
     if (!user?.id) return;
 
-    const canUseNovelAI = Boolean(novelaiConfig?.apiKey);
+    const canUseNovelAI = Boolean(novelaiConfig?.apiKey && novelaiConfig?.enabled !== false);
     const canUseUnifiedImage = hasUnifiedImageConfig;
     if (!canUseNovelAI && !canUseUnifiedImage) return;
 
