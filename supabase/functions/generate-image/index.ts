@@ -162,11 +162,15 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     if (_size) formData.append('size', _size);
 
     console.log('Trying /images/edits (FormData):', editsUrl);
+    const editController = new AbortController();
+    const editTimeout = setTimeout(() => editController.abort(), 30000);
     const editResp = await fetch(editsUrl, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${_config.apiKey}` },
       body: formData,
+      signal: editController.signal,
     });
+    clearTimeout(editTimeout);
 
     if (editResp.ok) {
       const data = await editResp.json();
@@ -196,6 +200,8 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     };
 
     console.log('Trying /images/generations with image field:', apiUrl);
+    const genController = new AbortController();
+    const genTimeout = setTimeout(() => genController.abort(), 60000);
     const genResp = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -203,7 +209,9 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(jsonBody),
+      signal: genController.signal,
     });
+    clearTimeout(genTimeout);
 
     if (genResp.ok) {
       const data = await genResp.json();

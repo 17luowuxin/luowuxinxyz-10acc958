@@ -1862,13 +1862,19 @@ const ChatPage: React.FC = () => {
 
       // 性别/角色描述 - 从人设提取
       let genderDesc = '一个人';
+      let genderGuard = '';
       if (hasTwoPeople) {
         genderDesc = '两个人';
       } else if (character?.persona) {
-        const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
-        const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(character.persona);
-        if (isMale && !isFemale) genderDesc = '一个男生';
-        else if (isFemale) genderDesc = '一个女生';
+        const maleHits = (character.persona.match(/男生|男性|男孩|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
+        const femaleHits = (character.persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
+        if (maleHits > femaleHits) {
+          genderDesc = '一个男生';
+          genderGuard = '男性角色，男性五官与体态，不要女性特征';
+        } else if (femaleHits > maleHits) {
+          genderDesc = '一个女生';
+          genderGuard = '女性角色，女性五官与体态，不要男性特征';
+        }
       }
       cnParts.push(genderDesc);
 
@@ -1948,6 +1954,7 @@ const ChatPage: React.FC = () => {
         cnParts.push(...sceneDetails.slice(0, 6));
       }
 
+      if (genderGuard) cnParts.push(genderGuard);
       const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
       console.log('Generated image prompt (unified/jimeng):', prompt);
       return { should: true, prompt };
