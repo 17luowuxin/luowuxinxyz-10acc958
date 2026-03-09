@@ -184,25 +184,30 @@ async function editImageMultipart(prompt: string, config: ImageConfig, reference
   fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
 
   console.log('img2img via /images/edits multipart:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        // NOTE: do NOT set Content-Type for multipart
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          // NOTE: do NOT set Content-Type for multipart
+        },
+        body: fd,
       },
-      body: fd,
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    throw new Error(`img2img(/edits)失败: ${response.status} ${t.slice(0, 200)}`);
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      throw new Error(`img2img(/edits)失败: ${response.status} ${t.slice(0, 200)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('img2img(/edits) multipart error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 async function editImageJson(prompt: string, config: ImageConfig, referenceDataUrl: string, size?: string) {
