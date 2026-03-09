@@ -350,7 +350,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     if (refImageUrl) {
       try {
         console.log('Loading reference image for img2img...');
-        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 15_000);
+        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 10_000);
         if (imgResp.ok) {
           const mime = imgResp.headers.get('content-type') || 'image/png';
           const buf = new Uint8Array(await imgResp.arrayBuffer());
