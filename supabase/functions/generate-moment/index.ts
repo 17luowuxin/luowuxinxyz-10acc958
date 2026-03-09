@@ -537,21 +537,7 @@ async function generateImage(
       console.log('Skip external text2img due to low budget:', textTimeout);
     }
 
-    // Lovable AI 兜底（仅在外部 API 全部失败且仍有剩余时间时使用）
-    if (LOVABLE_API_KEY) {
-      const lovableTimeout = Math.min(16_000, msLeft() - 2_000);
-      if (lovableTimeout > 4_000) {
-        console.log('All external APIs failed. Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
-        const lovableImage = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
-        if (lovableImage) {
-          if (!lovableImage.startsWith('data:')) return lovableImage;
-          const uploaded = await uploadImageDataUrlToPublicBucket(lovableImage, userId, 'space-generated');
-          if (uploaded) return uploaded;
-        }
-      }
-    }
-
-    console.error('Image generation failed: all fallbacks exhausted');
+    console.error('Image generation failed: all external API attempts exhausted');
     return null;
   } catch (error) {
     console.error('Image generation error:', error);
