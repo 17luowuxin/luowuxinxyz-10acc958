@@ -769,12 +769,24 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        // 从角色人设中提取性别和外观特征（使用中文，适配即梦等国产API）
+        // 从角色人设中提取性别和外观特征（只使用明确性别词，避免误判）
         const persona = character?.persona || '';
-        const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(persona);
-        const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(persona);
-        const genderDesc = isMale && !isFemale ? '一个男生' : isFemale ? '一个女生' : '一个人';
-        
+        const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
+        const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
+
+        let genderDesc = '一个人';
+        let genderGuard = '';
+
+        if (maleHits > femaleHits) {
+          genderDesc = '一个男生';
+          genderGuard = '男性角色，男性五官与体态，不要女性特征';
+        } else if (femaleHits > maleHits) {
+          genderDesc = '一个女生';
+          genderGuard = '女性角色，女性五官与体态，不要男性特征';
+        }
+
+        console.log('Gender detection:', { maleHits, femaleHits, genderDesc });
+
         // 提取外观关键词（中文优先）
         const appearanceParts: string[] = [];
         const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
@@ -784,10 +796,10 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         // 外貌描述
         const appearanceMatch = persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
         if (appearanceMatch) appearanceParts.push(appearanceMatch[1]);
-        
+
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
         // 用中文自然语言构建提示词，stylePrompt 已由 generateImage 函数自动拼接
-        const imagePrompt = `${genderDesc}${appearanceStr}，${content}`;
+        const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
         // 加载角色垫图设置
