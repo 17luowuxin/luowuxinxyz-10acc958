@@ -158,7 +158,7 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
           n: 1,
         }),
       },
-      30_000,
+      50_000,
     );
 
     if (!response.ok) {
@@ -200,7 +200,7 @@ async function editImageMultipart(prompt: string, config: ImageConfig, reference
         },
         body: fd,
       },
-      25_000,
+      50_000,
     );
 
     if (!response.ok) {
@@ -237,7 +237,7 @@ async function editImageJson(prompt: string, config: ImageConfig, referenceDataU
           reference_image: referenceDataUrl,
         }),
       },
-      25_000,
+      45_000,
     );
 
     if (!response.ok) {
