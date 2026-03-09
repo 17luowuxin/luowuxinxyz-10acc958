@@ -1004,11 +1004,13 @@ const ChatPage: React.FC = () => {
       } else {
         setApiConfig({});
         setHasUnifiedImageConfig(false);
+        setUnifiedImageConfig(null);
       }
     } catch (err) {
       console.error('获取API配置失败:', err);
       setApiConfig({});
       setHasUnifiedImageConfig(false);
+      setUnifiedImageConfig(null);
     } finally {
       setApiConfigLoading(false);
     }
