@@ -241,53 +241,9 @@ serve(async (req) => {
     const body = await req.json();
     const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt, referenceImageBase64, action, characterId } = body;
     
-    // Auto-load per-character reference image if characterId provided and no explicit referenceImageBase64
+    // Only use explicitly provided reference image (don't auto-load from DB)
+    // Auto img2img disabled: 即梦等国产API不支持img2img，且会导致超时
     let effectiveRefBase64 = referenceImageBase64 || null;
-    if (!effectiveRefBase64 && characterId && userId && !testMode) {
-      try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const sb = createClient(supabaseUrl, supabaseKey);
-        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
-        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
-        
-        let refUrl = '';
-        
-        // Check cloud first
-        const { data: cloudRef } = await sb.from('api_keys').select('provider, api_key')
-          .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
-        if (cloudRef) {
-          const img = cloudRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
-          if (img) refUrl = img.api_key;
-        }
-        
-        // Check external (override)
-        if (externalUrl && externalKey) {
-          const ext = createClient(externalUrl, externalKey);
-          const { data: extRef } = await ext.from('api_keys').select('provider, api_key')
-            .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
-          if (extRef) {
-            const img = extRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
-            if (img) refUrl = img.api_key;
-          }
-        }
-        
-        if (refUrl) {
-          console.log('Auto-loaded character reference image for', characterId);
-          // Fetch the image as base64
-          try {
-            const imgResp = await fetch(refUrl);
-            if (imgResp.ok) {
-              const buf = await imgResp.arrayBuffer();
-              const b64 = uint8ToBase64(new Uint8Array(buf));
-              effectiveRefBase64 = `data:image/png;base64,${b64}`;
-              console.log('Successfully loaded character ref image, size:', buf.byteLength);
-            }
-          } catch (e) {
-            console.error('Failed to fetch character reference image:', e);
-          }
-        }
-      } catch (e) {
         console.error('Error loading character reference image:', e);
       }
     }
