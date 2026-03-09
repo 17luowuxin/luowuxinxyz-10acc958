@@ -211,86 +211,58 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
     
-    // 如果有垫图，使用用户 API 进行 img2img
+    // 如果有垫图，直接使用 JSON body img2img（跳过 /images/edits，即梦不支持）
     if (refImageUrl) {
       try {
-        const imgResp = await fetch(refImageUrl);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const imgResp = await fetch(refImageUrl, { signal: controller.signal });
+        clearTimeout(timeout);
         if (imgResp.ok) {
           const buf = await imgResp.arrayBuffer();
           const b64 = uint8ToBase64(new Uint8Array(buf));
           const refBase64 = `data:image/png;base64,${b64}`;
-          console.log('Loaded ref image, size:', buf.byteLength, '- using user API img2img');
+          console.log('Loaded ref image, size:', buf.byteLength, '- using JSON img2img');
           
-          // Try /images/edits (FormData) first
-          try {
-            let editApiUrl = config.apiUrl.replace(/\/+$/, '');
-            const editsUrl = editApiUrl.replace(/\/images\/generations\/?$/, '') + '/images/edits';
-            
-            const base64Data = refBase64.replace(/^data:image\/\w+;base64,/, '');
-            const binaryStr = atob(base64Data);
-            const bytes = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-            const blob = new Blob([bytes], { type: 'image/png' });
+          let apiUrl = config.apiUrl.replace(/\/+$/, '');
+          if (!apiUrl.includes('/images/generations')) {
+            apiUrl = `${apiUrl}/images/generations`;
+          }
+          const genController = new AbortController();
+          const genTimeout = setTimeout(() => genController.abort(), 60000);
+          const genResp = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: config.model || 'dall-e-3',
+              size: config.size || '1024x1024',
+              prompt: finalPrompt,
+              n: 1,
+              image: refBase64,
+              reference_image: refBase64,
+            }),
+            signal: genController.signal,
+          });
+          clearTimeout(genTimeout);
 
-            const formData = new FormData();
-            formData.append('image', blob, 'reference.png');
-            formData.append('prompt', finalPrompt);
-            if (config.model) formData.append('model', config.model);
-            formData.append('n', '1');
-            if (config.size) formData.append('size', config.size);
-
-            const editResp = await fetch(editsUrl, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${config.apiKey}` },
-              body: formData,
-            });
-
-            if (editResp.ok) {
-              const data = await editResp.json();
-              if (data.data?.[0]?.url) return data.data[0].url;
-              if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
-            }
-          } catch (e) {
-            console.log('/images/edits failed, trying JSON fallback:', e);
+          if (genResp.ok) {
+            const data = await genResp.json();
+            if (data.data?.[0]?.url) return data.data[0].url;
+            if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+            if (data.url) return data.url;
+            if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+          } else {
+            const errText = await genResp.text().catch(() => '');
+            console.log('img2img failed:', genResp.status, errText.slice(0, 200));
           }
 
-          // Try /images/generations with image field (即梦/通义兼容)
-          try {
-            let apiUrl = config.apiUrl.replace(/\/+$/, '');
-            if (!apiUrl.includes('/images/generations')) {
-              apiUrl = `${apiUrl}/images/generations`;
-            }
-            const genResp = await fetch(apiUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${config.apiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: config.model || 'dall-e-3',
-                size: config.size || '1024x1024',
-                prompt: finalPrompt,
-                n: 1,
-                image: refBase64,
-                reference_image: refBase64,
-              }),
-            });
-
-            if (genResp.ok) {
-              const data = await genResp.json();
-              if (data.data?.[0]?.url) return data.data[0].url;
-              if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
-              if (data.url) return data.url;
-              if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
-            }
-          } catch (e) {
-            console.log('JSON img2img also failed:', e);
-          }
-
-          console.log('All img2img methods failed, falling back to text2img');
+          console.log('img2img failed, falling back to text2img');
         }
       } catch (e) {
-        console.error('Failed to load ref image:', e);
+        console.error('Failed to load/use ref image:', e);
       }
     }
     
@@ -802,8 +774,12 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
-        // 纯文生图（不使用垫图，即梦等API不支持img2img且效果差）
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig);
+        // 加载角色垫图 - 保持脸部一致，通过提示词控制场景/服装
+        const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
+        if (charRef) {
+          console.log("Using character reference image for space moment img2img");
+        }
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");

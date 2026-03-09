@@ -134,56 +134,11 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     imageUrl = `data:image/png;base64,${imageUrl}`;
   }
 
-  // Build enhanced prompt with character consistency instructions
   const scenePrompt = prompt || '生成一张自然的日常场景图片';
-  const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n\nScene instruction: ${scenePrompt}\n\nBased on the reference image, generate a new image of this exact same character in the described scene. Keep the character's appearance identical.`;
-  
-  console.log('img2img edit, scene:', scenePrompt.slice(0, 80));
+  console.log('img2img edit (JSON only), scene:', scenePrompt.slice(0, 80));
 
-  // Strategy 1: User's own API - try /images/edits (FormData) first
-  console.log('Using user API for img2img');
-  try {
-    let editApiUrl = _config.apiUrl.replace(/\/+$/, '');
-    // Try /images/edits endpoint with FormData
-    const editsUrl = editApiUrl.replace(/\/images\/generations\/?$/, '') + '/images/edits';
-    
-    // Convert base64 to Blob for FormData
-    const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
-    const binaryStr = atob(base64Data);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-    const blob = new Blob([bytes], { type: 'image/png' });
-
-    const formData = new FormData();
-    formData.append('image', blob, 'reference.png');
-    formData.append('prompt', scenePrompt);
-    if (_config.model) formData.append('model', _config.model);
-    formData.append('n', '1');
-    if (_size) formData.append('size', _size);
-
-    console.log('Trying /images/edits (FormData):', editsUrl);
-    const editController = new AbortController();
-    const editTimeout = setTimeout(() => editController.abort(), 30000);
-    const editResp = await fetch(editsUrl, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${_config.apiKey}` },
-      body: formData,
-      signal: editController.signal,
-    });
-    clearTimeout(editTimeout);
-
-    if (editResp.ok) {
-      const data = await editResp.json();
-      if (data.data?.[0]?.url) return { url: data.data[0].url };
-      if (data.data?.[0]?.b64_json) return { b64: data.data[0].b64_json };
-    } else {
-      console.log('/images/edits failed:', editResp.status, '- trying JSON fallback');
-    }
-  } catch (e) {
-    console.log('/images/edits error, trying JSON fallback:', e);
-  }
-
-  // Strategy 2: /images/generations with image field in JSON body (即梦/通义兼容)
+  // 直接使用 /images/generations + JSON body 带图（即梦/通义兼容）
+  // 跳过 /images/edits FormData 方式（即梦不支持，会超时）
   try {
     let apiUrl = _config.apiUrl.replace(/\/+$/, '');
     if (!apiUrl.includes('/images/generations')) {
@@ -199,9 +154,9 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
       reference_image: imageUrl,
     };
 
-    console.log('Trying /images/generations with image field:', apiUrl);
-    const genController = new AbortController();
-    const genTimeout = setTimeout(() => genController.abort(), 60000);
+    console.log('img2img via /images/generations JSON:', apiUrl);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
     const genResp = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -209,9 +164,9 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(jsonBody),
-      signal: genController.signal,
+      signal: controller.signal,
     });
-    clearTimeout(genTimeout);
+    clearTimeout(timeout);
 
     if (genResp.ok) {
       const data = await genResp.json();
@@ -221,14 +176,15 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
       if (data.image) return { url: data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}` };
       if (data.images?.[0]?.url) return { url: data.images[0].url };
     } else {
-      console.log('JSON img2img also failed:', genResp.status);
+      const errText = await genResp.text().catch(() => '');
+      console.log('img2img failed:', genResp.status, errText.slice(0, 200));
     }
   } catch (e) {
-    console.log('JSON img2img error:', e);
+    console.log('img2img error (timeout or network):', e);
   }
 
-  // Final fallback: pure text2img without reference image
-  console.log('All img2img methods failed, falling back to text2img');
+  // Fallback: pure text2img
+  console.log('img2img failed, falling back to text2img');
   return await generateImage(scenePrompt, _config, _size);
 }
 
@@ -241,9 +197,56 @@ serve(async (req) => {
     const body = await req.json();
     const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt, referenceImageBase64, action, characterId } = body;
     
-    // Only use explicitly provided reference image (don't auto-load from DB)
-    // Auto img2img disabled: 即梦等国产API不支持img2img，且会导致超时
+    // Auto-load per-character reference image if characterId provided
     let effectiveRefBase64 = referenceImageBase64 || null;
+    if (!effectiveRefBase64 && characterId && userId && !testMode) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const sb = createClient(supabaseUrl, supabaseKey);
+        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+        
+        let refUrl = '';
+        
+        const { data: cloudRef } = await sb.from('api_keys').select('provider, api_key')
+          .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
+        if (cloudRef) {
+          const img = cloudRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
+          if (img) refUrl = img.api_key;
+        }
+        
+        if (externalUrl && externalKey) {
+          const ext = createClient(externalUrl, externalKey);
+          const { data: extRef } = await ext.from('api_keys').select('provider, api_key')
+            .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
+          if (extRef) {
+            const img = extRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
+            if (img) refUrl = img.api_key;
+          }
+        }
+        
+        if (refUrl) {
+          console.log('Auto-loaded character reference image for', characterId);
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            const imgResp = await fetch(refUrl, { signal: controller.signal });
+            clearTimeout(timeout);
+            if (imgResp.ok) {
+              const buf = await imgResp.arrayBuffer();
+              const b64 = uint8ToBase64(new Uint8Array(buf));
+              effectiveRefBase64 = `data:image/png;base64,${b64}`;
+              console.log('Loaded character ref image, size:', buf.byteLength);
+            }
+          } catch (e) {
+            console.error('Failed to fetch character reference image:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading character reference image:', e);
+      }
+    }
     
     // Determine effective action
     const effectiveAction = action || (effectiveRefBase64 ? 'edit-image' : 'generate-image');
