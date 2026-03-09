@@ -496,7 +496,6 @@ const ChatPage: React.FC = () => {
         positive: positiveRow?.api_key?.slice(0, 30),
         negative: negativeRow?.api_key?.slice(0, 30),
         refImage: refImageRow?.api_key ? 'set' : 'none',
-        refStrength: refStrengthRow?.api_key
       });
     }
   }, [user?.id, characterId]);
