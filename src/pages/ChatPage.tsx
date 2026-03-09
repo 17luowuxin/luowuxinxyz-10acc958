@@ -2205,6 +2205,13 @@ const ChatPage: React.FC = () => {
             prompt,
             userId: user.id,
             characterId,
+            // 对于 external 认证来源：优先用本地读取到的配置直接测试调用，避免函数侧读不到外部数据库配置
+            testMode: Boolean(unifiedImageConfig?.apiKey && unifiedImageConfig?.apiUrl),
+            apiKey: unifiedImageConfig?.apiKey,
+            apiUrl: unifiedImageConfig?.apiUrl,
+            model: unifiedImageConfig?.model,
+            size: unifiedImageConfig?.size,
+            stylePrompt: unifiedImageConfig?.stylePrompt,
           },
         });
         data = result.data;
