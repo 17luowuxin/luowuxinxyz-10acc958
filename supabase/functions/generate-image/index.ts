@@ -237,7 +237,7 @@ async function editImageJson(prompt: string, config: ImageConfig, referenceDataU
           reference_image: referenceDataUrl,
         }),
       },
-      25_000,
+      45_000,
     );
 
     if (!response.ok) {
