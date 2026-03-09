@@ -2,17 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
-// Safe base64 encoding that doesn't overflow the stack
-function uint8ToBase64(bytes: Uint8Array): string {
-  const CHUNK = 0x8000;
-  const parts: string[] = [];
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
-  }
-  return btoa(parts.join(''));
-}
-
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -114,7 +103,6 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   return { enabled, apiKey, apiUrl, model, stylePrompt, size };
 }
 
-
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
   if (!userId) return null;
   const settings = await fetchApiSettings(userId);
@@ -128,7 +116,6 @@ async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null>
   return { enabled, accessKey, category };
 }
 
-// 根据分类获取搜索修饰词
 function getCategoryModifier(category: string): string {
   const categoryMap: Record<string, string> = {
     nature: 'nature landscape scenery',
@@ -143,7 +130,6 @@ function getCategoryModifier(category: string): string {
   return categoryMap[category] || '';
 }
 
-// 使用 Unsplash 搜索图片
 async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): Promise<string | null> {
   try {
     const categoryModifier = getCategoryModifier(config.category);
@@ -187,9 +173,6 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
-// 角色特征保持指令（仅用于垫图/编辑场景时强化“保持脸”）
-const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
-
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -222,125 +205,7 @@ async function parseImageUrlFromResponse(response: Response): Promise<string | n
   return null;
 }
 
-async function tryImg2ImgMultipart(
-  prompt: string,
-  config: SpaceImageConfig,
-  refDataUrl: string,
-  timeoutMs: number,
-): Promise<string | null> {
-  const apiUrl = buildImagesEndpoint(config.apiUrl, 'edits');
-  const { bytes, mime } = dataUrlToBytes(refDataUrl);
-
-  const fd = new FormData();
-  fd.append('model', config.model || 'dall-e-3');
-  fd.append('prompt', prompt);
-  fd.append('n', '1');
-  fd.append('size', config.size || '1024x1024');
-  fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
-
-  console.log('img2img via /images/edits multipart:', apiUrl, 'timeoutMs:', timeoutMs);
-  try {
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-        },
-        body: fd,
-      },
-      timeoutMs,
-    );
-
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
-      return null;
-    }
-
-    return await parseImageUrlFromResponse(response);
-  } catch (e) {
-    console.error('img2img(/edits) multipart threw error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-async function tryImg2ImgJson(
-  prompt: string,
-  config: SpaceImageConfig,
-  refDataUrl: string,
-  timeoutMs: number,
-): Promise<string | null> {
-  const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-
-  console.log('img2img via /images/generations JSON:', apiUrl, 'timeoutMs:', timeoutMs);
-  try {
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: config.model || 'dall-e-3',
-          size: config.size || '1024x1024',
-          prompt,
-          n: 1,
-          image: refDataUrl,
-          reference_image: refDataUrl,
-        }),
-      },
-      timeoutMs,
-    );
-
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
-      return null;
-    }
-
-    return await parseImageUrlFromResponse(response);
-  } catch (e) {
-    console.error('img2img(JSON) threw error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-// 生成图片（仅使用用户配置的即梦等外部接口，不使用 Lovable AI）
-
-async function uploadImageDataUrlToPublicBucket(dataUrl: string, userId: string, prefix: string): Promise<string | null> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const sb = createClient(supabaseUrl, supabaseKey);
-
-    const { bytes, mime } = dataUrlToBytes(dataUrl);
-    const ext = mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : 'png';
-    const path = `${prefix}/${userId || 'anonymous'}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
-    const { error } = await sb.storage
-      .from('chat-images')
-      .upload(path, new Blob([bytes], { type: mime }), {
-        contentType: mime,
-        upsert: true,
-        cacheControl: '3600',
-      });
-
-    if (error) {
-      console.error('Image upload error:', error);
-      return null;
-    }
-
-    const { data } = sb.storage.from('chat-images').getPublicUrl(path);
-    return data?.publicUrl || null;
-  } catch (e) {
-    console.error('uploadImageDataUrlToPublicBucket error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
+// 纯文生图（仅使用用户配置的即梦等外部接口）
 async function generateImage(
   prompt: string,
   config: SpaceImageConfig,
@@ -680,7 +545,6 @@ serve(async (req) => {
   try {
     const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
     
-    // 构建数据库客户端 - 优先使用外部数据库（外部用户的数据在那里）
     const cloudUrl = Deno.env.get('SUPABASE_URL')!;
     const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const cloudDb = createClient(cloudUrl, cloudKey);
@@ -688,10 +552,8 @@ serve(async (req) => {
     const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
     const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
     const extDb = (extUrl && extKey) ? createClient(extUrl, extKey) : null;
-    // 外部用户的 moments/comments 存在外部数据库
     const supabase = extDb || cloudDb;
 
-    // 检查是否使用默认API
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     
     const config: AIConfig = {
@@ -814,7 +676,6 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        // 从角色人设中提取性别和外观特征（只使用明确性别词，避免误判）
         const persona = character?.persona || '';
         const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
         const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
@@ -832,18 +693,15 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
         console.log('Gender detection:', { maleHits, femaleHits, genderDesc });
 
-        // 提取外观关键词（中文优先）
         const appearanceParts: string[] = [];
         const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
         if (hairMatch) appearanceParts.push(hairMatch[1]);
         const eyeMatch = persona.match(/(?:眼睛|眼色|瞳色)[：:]\s*([^，。\n]+)/);
         if (eyeMatch) appearanceParts.push(eyeMatch[1]);
-        // 外貌描述
         const appearanceMatch = persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
         if (appearanceMatch) appearanceParts.push(appearanceMatch[1]);
 
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
-        // 用中文自然语言构建提示词，stylePrompt 已由 generateImage 函数自动拼接
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
@@ -909,3 +767,4 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     });
   }
 });
+
