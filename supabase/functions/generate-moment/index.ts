@@ -198,77 +198,131 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
   }
 }
 
-// 角色特征保持指令
+// 角色特征保持指令（仅用于垫图/编辑场景时强化“保持脸”）
 const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
 
-// 使用 Lovable AI Gateway (Gemini) 进行真正的图生图（垫图P图）
-async function editImageWithLovableAI(prompt: string, referenceImageBase64: string): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.error('LOVABLE_API_KEY not configured for img2img');
-    return null;
-  }
-
-  // Ensure the reference image has proper data URI format
-  let imageUrl = referenceImageBase64;
-  if (!imageUrl.startsWith('data:')) {
-    imageUrl = `data:image/png;base64,${imageUrl}`;
-  }
-
-  const editInstruction = `${CHARACTER_CONSISTENCY_PROMPT}
-
-Based on this reference image, generate a new image with the following scene/changes while KEEPING THE CHARACTER'S FACE AND APPEARANCE EXACTLY THE SAME:
-${prompt || '保持角色形象，生成一张自然的日常场景图片'}
-
-Remember: The character's face, features, hairstyle must remain identical to the reference.`;
-
-  console.log('Using Lovable AI Gateway (Gemini) for img2img, prompt:', prompt?.slice(0, 80));
-
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: editInstruction },
-              { type: 'image_url', image_url: { url: imageUrl } }
-            ]
-          }
-        ],
-        modalities: ['image', 'text']
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 300));
-      return null;
-    }
-
-    const data = await response.json();
-    const generatedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
-    if (generatedImageUrl) {
-      console.log('Lovable AI img2img success');
-      return generatedImageUrl;
-    }
-
-    console.error('No image in Lovable AI response');
-    return null;
-  } catch (e) {
-    console.error('Lovable AI img2img error:', e);
-    return null;
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-// 生成图片（支持垫图 img2img via Lovable AI Gateway）
+function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
+  const b64 = uint8ToBase64(bytes);
+  return `data:${mime};base64,${b64}`;
+}
+
+function dataUrlToBytes(dataUrlOrBase64: string): { bytes: Uint8Array; mime: string; dataUrl: string } {
+  let dataUrl = dataUrlOrBase64;
+  if (!dataUrl.startsWith('data:')) dataUrl = `data:image/png;base64,${dataUrl}`;
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime: 'image/png', dataUrl: `data:image/png;base64,${b64}` };
+  }
+  const mime = match[1] || 'image/png';
+  const b64 = match[2];
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { bytes, mime, dataUrl };
+}
+
+function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
+  let url = baseUrl.replace(/\/+$/, '');
+  if (url.includes('/images/')) return url;
+  return `${url}/images/${kind}`;
+}
+
+async function parseImageUrlFromResponse(response: Response): Promise<string | null> {
+  const data = await response.json();
+
+  if (data.data?.[0]?.url) return data.data[0].url;
+  if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+  if (data.url) return data.url;
+  if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+  if (data.images?.[0]?.url) return data.images[0].url;
+  if (data.images?.[0]?.b64_json) return `data:image/png;base64,${data.images[0].b64_json}`;
+  if (data.output?.url) return data.output.url;
+
+  console.log('No image URL found in response:', JSON.stringify(data).slice(0, 500));
+  return null;
+}
+
+async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
+  const apiUrl = buildImagesEndpoint(config.apiUrl, 'edits');
+  const { bytes, mime } = dataUrlToBytes(refDataUrl);
+
+  const fd = new FormData();
+  fd.append('model', config.model || 'dall-e-3');
+  fd.append('prompt', prompt);
+  fd.append('n', '1');
+  fd.append('size', config.size || '1024x1024');
+  fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
+
+  console.log('img2img via /images/edits multipart:', apiUrl);
+  const response = await fetchWithTimeout(
+    apiUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: fd,
+    },
+    45_000,
+  );
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
+    return null;
+  }
+
+  return await parseImageUrlFromResponse(response);
+}
+
+async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
+  const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+
+  console.log('img2img via /images/generations JSON:', apiUrl);
+  const response = await fetchWithTimeout(
+    apiUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model || 'dall-e-3',
+        size: config.size || '1024x1024',
+        prompt,
+        n: 1,
+        image: refDataUrl,
+        reference_image: refDataUrl,
+      }),
+    },
+    45_000,
+  );
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
+    return null;
+  }
+
+  return await parseImageUrlFromResponse(response);
+}
+
+// 生成图片（垫图仅走用户配置的即梦/OpenAI兼容接口，不使用其它模型）
 async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string): Promise<string | null> {
   try {
     // 添加画风提示词前缀
@@ -277,57 +331,52 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
       finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
     }
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
-    
-    // 如果有垫图，使用 Lovable AI Gateway (Gemini) 进行真正的图生图
+
+    // 垫图：先 /images/edits (multipart) → 再 JSON 兼容 → 再降级文生图
     if (refImageUrl) {
       try {
         console.log('Loading reference image for img2img...');
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        const imgResp = await fetch(refImageUrl, { signal: controller.signal });
-        clearTimeout(timeout);
-        
+        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 15_000);
         if (imgResp.ok) {
-          const buf = await imgResp.arrayBuffer();
-          const b64 = uint8ToBase64(new Uint8Array(buf));
-          const refBase64 = `data:image/png;base64,${b64}`;
-          console.log('Loaded ref image, size:', buf.byteLength, '- using Lovable AI img2img');
-          
-          const img2imgResult = await editImageWithLovableAI(finalPrompt, refBase64);
-          if (img2imgResult) {
-            console.log('img2img with Lovable AI success');
-            return img2imgResult;
-          }
-          console.log('img2img failed, falling back to text2img with user API');
+          const mime = imgResp.headers.get('content-type') || 'image/png';
+          const buf = new Uint8Array(await imgResp.arrayBuffer());
+          const refDataUrl = bytesToDataUrl(buf, mime);
+
+          const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
+
+          const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl);
+          if (edits) return edits;
+
+          const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl);
+          if (jsonEdits) return jsonEdits;
+
+          console.log('img2img failed, falling back to text2img');
         }
       } catch (e) {
         console.error('Failed to load ref image:', e);
       }
     }
-    
-    // 纯文生图（用户自己的 API）
-    let apiUrl = config.apiUrl.replace(/\/+$/, '');
-    if (!apiUrl.includes('/images/generations')) {
-      apiUrl = `${apiUrl}/images/generations`;
-    }
-    
-    const body: Record<string, unknown> = {
-      model: config.model || 'dall-e-3',
-      size: config.size || '1024x1024',
-      prompt: finalPrompt,
-      n: 1,
-    };
-    
-    console.log('Using text2img API URL:', apiUrl);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+
+    // 纯文生图
+    const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: config.size || '1024x1024',
+          prompt: finalPrompt,
+          n: 1,
+        }),
       },
-      body: JSON.stringify(body),
-    });
+      45_000,
+    );
 
     if (!response.ok) {
       const errText = await response.text();
@@ -335,18 +384,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
       return null;
     }
 
-    const data = await response.json();
-    console.log('Image API response keys:', Object.keys(data));
-    
-    if (data.data?.[0]?.url) return data.data[0].url;
-    if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
-    if (data.url) return data.url;
-    if (data.image) return data.image;
-    if (data.images?.[0]?.url) return data.images[0].url;
-    if (data.output?.url) return data.output.url;
-    
-    console.log('No image URL found in response:', JSON.stringify(data).slice(0, 500));
-    return null;
+    return await parseImageUrlFromResponse(response);
   } catch (error) {
     console.error('Image generation error:', error);
     return null;

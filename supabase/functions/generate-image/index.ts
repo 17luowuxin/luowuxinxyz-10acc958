@@ -75,139 +75,179 @@ async function getImageConfig(userId: string): Promise<ImageConfig | null> {
   return { enabled, apiKey, apiUrl, model, imageSize, stylePrompt };
 }
 
-async function generateImage(prompt: string, config: ImageConfig, size?: string): Promise<{ url?: string; b64?: string }> {
-  let apiUrl = config.apiUrl.replace(/\/+$/, '');
-  if (!apiUrl.includes('/images/generations')) {
-    apiUrl = `${apiUrl}/images/generations`;
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
   }
-  
-  console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
-  
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: config.model || 'dall-e-3',
-      size: size || '1024x1024',
-      prompt: prompt,
-      n: 1,
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Image generation failed:', response.status, errorText);
-    throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 100)}`);
+}
+
+function dataUrlToBytes(dataUrlOrBase64: string): { bytes: Uint8Array; mime: string; dataUrl: string } {
+  let dataUrl = dataUrlOrBase64;
+  if (!dataUrl.startsWith('data:')) {
+    dataUrl = `data:image/png;base64,${dataUrl}`;
   }
-  
+
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    // Fallback: treat as base64
+    const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime: 'image/png', dataUrl: `data:image/png;base64,${b64}` };
+  }
+
+  const mime = match[1] || 'image/png';
+  const b64 = match[2];
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { bytes, mime, dataUrl };
+}
+
+async function parseImageApiResponse(response: Response): Promise<{ url?: string; b64?: string }> {
   const data = await response.json();
-  
-  // Support multiple response formats
-  if (data.data?.[0]?.url) {
-    return { url: data.data[0].url };
-  } else if (data.data?.[0]?.b64_json) {
-    return { b64: data.data[0].b64_json };
-  } else if (data.url) {
-    return { url: data.url };
-  } else if (data.images?.[0]?.url) {
-    return { url: data.images[0].url };
-  } else if (data.images?.[0]?.b64_json) {
-    return { b64: data.images[0].b64_json };
-  } else if (data.image) {
+
+  if (data.data?.[0]?.url) return { url: data.data[0].url };
+  if (data.data?.[0]?.b64_json) return { b64: data.data[0].b64_json };
+  if (data.url) return { url: data.url };
+  if (data.images?.[0]?.url) return { url: data.images[0].url };
+  if (data.images?.[0]?.b64_json) return { b64: data.images[0].b64_json };
+  if (data.image) {
     return { url: data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}` };
   }
-  
+
   console.error('Unknown response format:', JSON.stringify(data).slice(0, 500));
   throw new Error('API返回格式无法识别');
 }
 
-// 角色特征保持指令 - 确保垫图P图时角色外貌一致
-const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
+function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
+  let url = baseUrl.replace(/\/+$/, '');
+  // If user provided full endpoint already, keep it.
+  if (url.includes('/images/')) return url;
+  return `${url}/images/${kind}`;
+}
 
-// 使用 Lovable AI Gateway (Gemini) 进行真正的图生图（垫图P图）
-async function editImageWithLovableAI(prompt: string, referenceImageBase64: string): Promise<{ url?: string; b64?: string }> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.error('LOVABLE_API_KEY not configured');
-    throw new Error('图生图服务未配置');
-  }
+async function generateImage(prompt: string, config: ImageConfig, size?: string): Promise<{ url?: string; b64?: string }> {
+  const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+  console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
 
-  // Ensure the reference image has proper data URI format
-  let imageUrl = referenceImageBase64;
-  if (!imageUrl.startsWith('data:')) {
-    imageUrl = `data:image/png;base64,${imageUrl}`;
-  }
-
-  const editInstruction = `${CHARACTER_CONSISTENCY_PROMPT}
-
-Based on this reference image, generate a new image with the following scene/changes while KEEPING THE CHARACTER'S FACE AND APPEARANCE EXACTLY THE SAME:
-${prompt || '保持角色形象，生成一张自然的日常场景图片'}
-
-Remember: The character's face, features, hairstyle must remain identical to the reference.`;
-
-  console.log('Using Lovable AI Gateway (Gemini) for img2img, prompt:', prompt?.slice(0, 80));
-
-  try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const response = await fetchWithTimeout(
+    apiUrl,
+    {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: editInstruction },
-              { type: 'image_url', image_url: { url: imageUrl } }
-            ]
-          }
-        ],
-        modalities: ['image', 'text']
+        model: config.model || 'dall-e-3',
+        size: size || '1024x1024',
+        prompt,
+        n: 1,
       }),
-    });
+    },
+    45_000,
+  );
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 300));
-      throw new Error(`图生图失败: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const generatedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
-    if (generatedImageUrl) {
-      console.log('Lovable AI img2img success, got image URL');
-      // 返回 base64 URL（Gemini返回的是data:image格式）
-      if (generatedImageUrl.startsWith('data:image')) {
-        const base64Part = generatedImageUrl.split(',')[1];
-        return { b64: base64Part, url: generatedImageUrl };
-      }
-      return { url: generatedImageUrl };
-    }
-
-    console.error('No image in Lovable AI response:', JSON.stringify(data).slice(0, 500));
-    throw new Error('图生图返回无图片');
-  } catch (e) {
-    console.error('Lovable AI img2img error:', e);
-    throw e;
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Image generation failed:', response.status, errorText);
+    throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
   }
+
+  return await parseImageApiResponse(response);
 }
 
-// 保留旧函数签名用于兼容，但内部调用新函数
-async function editImage(prompt: string, _config: ImageConfig, referenceImageBase64: string, _size?: string): Promise<{ url?: string; b64?: string }> {
-  try {
-    return await editImageWithLovableAI(prompt, referenceImageBase64);
-  } catch (e) {
-    // Fallback: pure text2img using user's API
-    console.log('img2img failed, falling back to text2img');
-    return await generateImage(prompt || '生成一张自然的日常场景图片', _config, _size);
+// 角色特征保持指令 - 垫图/P图时强化“保持脸”
+const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
+
+async function editImageMultipart(prompt: string, config: ImageConfig, referenceDataUrl: string, size?: string) {
+  const apiUrl = buildImagesEndpoint(config.apiUrl, 'edits');
+  const { bytes, mime } = dataUrlToBytes(referenceDataUrl);
+
+  const fd = new FormData();
+  fd.append('model', config.model || 'dall-e-3');
+  fd.append('prompt', prompt);
+  fd.append('n', '1');
+  fd.append('size', size || '1024x1024');
+  fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
+
+  console.log('img2img via /images/edits multipart:', apiUrl);
+  const response = await fetchWithTimeout(
+    apiUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        // NOTE: do NOT set Content-Type for multipart
+      },
+      body: fd,
+    },
+    45_000,
+  );
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    throw new Error(`img2img(/edits)失败: ${response.status} ${t.slice(0, 200)}`);
   }
+
+  return await parseImageApiResponse(response);
+}
+
+async function editImageJson(prompt: string, config: ImageConfig, referenceDataUrl: string, size?: string) {
+  const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+  console.log('img2img via /images/generations JSON:', apiUrl);
+
+  const response = await fetchWithTimeout(
+    apiUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model || 'dall-e-3',
+        size: size || '1024x1024',
+        prompt,
+        n: 1,
+        image: referenceDataUrl,
+        reference_image: referenceDataUrl,
+      }),
+    },
+    45_000,
+  );
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    throw new Error(`img2img(JSON)失败: ${response.status} ${t.slice(0, 200)}`);
+  }
+
+  return await parseImageApiResponse(response);
+}
+
+async function editImage(prompt: string, config: ImageConfig, referenceImageBase64: string, size?: string): Promise<{ url?: string; b64?: string }> {
+  const ref = dataUrlToBytes(referenceImageBase64).dataUrl;
+  const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${prompt || '保持角色形象，生成一张自然的日常场景图片'}`;
+
+  try {
+    return await editImageMultipart(editPrompt, config, ref, size);
+  } catch (e) {
+    console.log('img2img multipart failed, try JSON fallback:', e instanceof Error ? e.message : e);
+  }
+
+  try {
+    return await editImageJson(editPrompt, config, ref, size);
+  } catch (e) {
+    console.log('img2img JSON failed, falling back to text2img');
+  }
+
+  return await generateImage(prompt || '生成一张自然的日常场景图片', config, size);
 }
 
 serve(async (req) => {
