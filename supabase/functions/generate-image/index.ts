@@ -158,7 +158,7 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
           n: 1,
         }),
       },
-      30_000,
+      50_000,
     );
 
     if (!response.ok) {
