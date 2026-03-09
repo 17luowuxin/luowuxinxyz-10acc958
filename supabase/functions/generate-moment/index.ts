@@ -260,7 +260,12 @@ async function parseImageUrlFromResponse(response: Response): Promise<string | n
   return null;
 }
 
-async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
+async function tryImg2ImgMultipart(
+  prompt: string,
+  config: SpaceImageConfig,
+  refDataUrl: string,
+  timeoutMs: number,
+): Promise<string | null> {
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'edits');
   const { bytes, mime } = dataUrlToBytes(refDataUrl);
 
@@ -271,7 +276,7 @@ async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, ref
   fd.append('size', config.size || '1024x1024');
   fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
 
-  console.log('img2img via /images/edits multipart:', apiUrl);
+  console.log('img2img via /images/edits multipart:', apiUrl, 'timeoutMs:', timeoutMs);
   try {
     const response = await fetchWithTimeout(
       apiUrl,
@@ -282,7 +287,7 @@ async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, ref
         },
         body: fd,
       },
-      25_000, // Reduced to 25s so we have time for fallback
+      timeoutMs,
     );
 
     if (!response.ok) {
@@ -298,10 +303,15 @@ async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, ref
   }
 }
 
-async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
+async function tryImg2ImgJson(
+  prompt: string,
+  config: SpaceImageConfig,
+  refDataUrl: string,
+  timeoutMs: number,
+): Promise<string | null> {
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
-  console.log('img2img via /images/generations JSON:', apiUrl);
+  console.log('img2img via /images/generations JSON:', apiUrl, 'timeoutMs:', timeoutMs);
   try {
     const response = await fetchWithTimeout(
       apiUrl,
@@ -320,7 +330,7 @@ async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataU
           reference_image: refDataUrl,
         }),
       },
-      25_000,
+      timeoutMs,
     );
 
     if (!response.ok) {
@@ -338,6 +348,10 @@ async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataU
 
 // 生成图片（垫图仅走用户配置的即梦/OpenAI兼容接口，不使用其它模型）
 async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string): Promise<string | null> {
+  // Hard cap to avoid Edge Function wall-time aborts
+  const deadline = Date.now() + 58_000;
+  const msLeft = () => Math.max(2_000, deadline - Date.now());
+
   try {
     // 添加画风提示词前缀
     let finalPrompt = prompt;
@@ -346,34 +360,50 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
 
-    // 垫图：先 /images/edits (multipart) → 再 JSON 兼容 → 再降级文生图
+    // 垫图：优先 /images/edits（即梦P图/垫图），若快速失败再走 JSON 兼容，最后再文生图
     if (refImageUrl) {
       try {
         console.log('Loading reference image for img2img...');
-        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 10_000);
-        if (imgResp.ok) {
-          const mime = imgResp.headers.get('content-type') || 'image/png';
-          const buf = new Uint8Array(await imgResp.arrayBuffer());
-          const refDataUrl = bytesToDataUrl(buf, mime);
 
-          const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
+        const refTimeout = Math.min(10_000, msLeft() - 1_000);
+        if (refTimeout > 2_000) {
+          const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
+          if (imgResp.ok) {
+            const mime = imgResp.headers.get('content-type') || 'image/png';
+            const buf = new Uint8Array(await imgResp.arrayBuffer());
+            const refDataUrl = bytesToDataUrl(buf, mime);
 
-          const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl);
-          if (edits) return edits;
+            const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
 
-          const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl);
-          if (jsonEdits) return jsonEdits;
+            const editsTimeout = Math.min(45_000, msLeft() - 1_000);
+            if (editsTimeout > 2_000) {
+              const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
+              if (edits) return edits;
+            }
 
-          console.log('img2img failed, falling back to text2img');
+            const jsonTimeout = Math.min(25_000, msLeft() - 1_000);
+            if (jsonTimeout > 2_000) {
+              const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
+              if (jsonEdits) return jsonEdits;
+            }
+
+            console.log('img2img failed, falling back to text2img');
+          }
         }
       } catch (e) {
-        console.error('Failed to load ref image:', e);
+        console.error('Failed to load/use ref image:', e instanceof Error ? e.message : e);
       }
     }
 
     // 纯文生图
     console.log('Fallback to pure text2img...');
     const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+
+    const textTimeout = Math.min(55_000, msLeft() - 1_000);
+    if (textTimeout <= 2_000) {
+      console.error('Not enough time left for text2img');
+      return null;
+    }
 
     try {
       const response = await fetchWithTimeout(
@@ -391,7 +421,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
             n: 1,
           }),
         },
-        25_000, // Reduced to 25s
+        textTimeout,
       );
 
       if (!response.ok) {
