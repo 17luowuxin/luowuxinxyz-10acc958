@@ -272,58 +272,68 @@ async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, ref
   fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
 
   console.log('img2img via /images/edits multipart:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: fd,
       },
-      body: fd,
-    },
-    45_000,
-  );
+      25_000, // Reduced to 25s so we have time for fallback
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
+      return null;
+    }
+
+    return await parseImageUrlFromResponse(response);
+  } catch (e) {
+    console.error('img2img(/edits) multipart threw error:', e instanceof Error ? e.message : e);
     return null;
   }
-
-  return await parseImageUrlFromResponse(response);
 }
 
 async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
   console.log('img2img via /images/generations JSON:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: config.size || '1024x1024',
+          prompt,
+          n: 1,
+          image: refDataUrl,
+          reference_image: refDataUrl,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: config.size || '1024x1024',
-        prompt,
-        n: 1,
-        image: refDataUrl,
-        reference_image: refDataUrl,
-      }),
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
+      return null;
+    }
+
+    return await parseImageUrlFromResponse(response);
+  } catch (e) {
+    console.error('img2img(JSON) threw error:', e instanceof Error ? e.message : e);
     return null;
   }
-
-  return await parseImageUrlFromResponse(response);
 }
 
 // 生成图片（垫图仅走用户配置的即梦/OpenAI兼容接口，不使用其它模型）
