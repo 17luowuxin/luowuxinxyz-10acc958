@@ -200,7 +200,7 @@ async function editImageMultipart(prompt: string, config: ImageConfig, reference
         },
         body: fd,
       },
-      25_000,
+      50_000,
     );
 
     if (!response.ok) {
