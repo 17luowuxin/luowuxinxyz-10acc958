@@ -200,6 +200,8 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     };
 
     console.log('Trying /images/generations with image field:', apiUrl);
+    const genController = new AbortController();
+    const genTimeout = setTimeout(() => genController.abort(), 60000);
     const genResp = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -207,7 +209,9 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(jsonBody),
+      signal: genController.signal,
     });
+    clearTimeout(genTimeout);
 
     if (genResp.ok) {
       const data = await genResp.json();
