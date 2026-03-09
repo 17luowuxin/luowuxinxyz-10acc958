@@ -1856,6 +1856,108 @@ const ChatPage: React.FC = () => {
     console.log('User intent:', userIntentParts);
     console.log('Extracted from dialogue:', dialogueContext.slice(0, 10));
 
+    // 判断使用哪个API：NovelAI还是统一图片API（即梦等）
+    const willUseNovelAI = Boolean(novelaiConfig?.apiKey && novelaiConfig?.enabled !== false);
+    const willUseUnifiedImage = !willUseNovelAI && hasUnifiedImageConfig;
+
+    if (willUseUnifiedImage) {
+      // ===== 即梦/统一图片API：使用中文自然语言提示词 =====
+      const cnParts: string[] = [];
+
+      // 性别/角色描述 - 从人设提取
+      let genderDesc = '一个人';
+      if (hasTwoPeople) {
+        genderDesc = '两个人';
+      } else if (character?.persona) {
+        const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(character.persona);
+        const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(character.persona);
+        if (isMale && !isFemale) genderDesc = '一个男生';
+        else if (isFemale) genderDesc = '一个女生';
+      }
+      cnParts.push(genderDesc);
+
+      // 从角色人设提取外貌特征（中文）
+      if (character?.persona) {
+        const cnAppearancePatterns = [
+          /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/g,
+          /(?:头发|发色|眼睛|眼色|瞳色|发型)[：:]?\s*([^，。\n]+)/g,
+        ];
+        for (const pattern of cnAppearancePatterns) {
+          const matches = character.persona.matchAll(pattern);
+          for (const m of matches) {
+            if (m[1]) cnParts.push(m[1].trim());
+          }
+        }
+      }
+
+      // 角色专属提示词
+      if (charNaiPositive.trim()) {
+        cnParts.unshift(charNaiPositive.trim());
+      }
+
+      // 从用户意图和对话中提取场景（保留中文）
+      for (const detail of [...new Set(dialogueContext)].slice(0, 8)) {
+        cnParts.push(detail);
+      }
+
+      // 用户的意图关键词（中文版）
+      const cnActionMap: Record<string, string> = {
+        '在干嘛': '正在做事', '躺': '躺着', '坐': '坐着', '站': '站着',
+        '跑': '跑步', '走': '走路', '游泳': '游泳', '洗澡': '洗澡',
+        '睡觉': '睡觉', '吃': '吃东西', '喝': '喝东西', '抱': '拥抱',
+        '看书': '看书', '听音乐': '听音乐', '玩手机': '玩手机',
+        '做饭': '做饭', '化妆': '化妆', '工作': '工作', '学习': '学习',
+        '健身': '健身', '发呆': '发呆', '想你': '思念', '等你': '等待',
+      };
+      for (const [zh, cn] of Object.entries(cnActionMap)) {
+        if (userInput.includes(zh) || reply.includes(zh)) {
+          cnParts.push(cn);
+        }
+      }
+
+      // 构图类型（中文）
+      if (/(全身|站着|站立)/.test(userInput)) cnParts.push('全身');
+      else if (/(半身|上半身)/.test(userInput)) cnParts.push('半身');
+      else if (/(特写|脸)/.test(userInput)) cnParts.push('面部特写');
+
+      // 从"看看你在干嘛"请求提取AI回复中的动作
+      if (isWhatDoingRequest && reply) {
+        const actionPatterns = [
+          /我?(?:正在|在|刚|刚刚)([^，。！？\n]{2,20})/g,
+          /(?:现在|此刻|这会儿)([^，。！？\n]{2,20})/g,
+          /(?:躺在|坐在|站在|趴在|靠在|窝在)([^，。！？\n]{2,15})/g,
+          /(?:穿着|身穿|身着|换上了?)([^，。！？\n]{2,15})/g,
+        ];
+        for (const pattern of actionPatterns) {
+          const matches = reply.matchAll(pattern);
+          for (const m of matches) {
+            if (m[1]) cnParts.push(m[1].trim());
+          }
+        }
+      }
+
+      // 用户显式描述
+      if (userRequestsImage && userInput && !alwaysTrigger) {
+        const cleaned = userInput
+          .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
+          .replace(/(画|发|来|给|要|想看|看|拍|秀|展示|出|生成).{0,6}(图|图片|照片|自拍|一下|你|出来)/g, '')
+          .replace(/(全身|半身|特写|脸|风景|场景|两个人|我们俩)/g, '')
+          .trim();
+        if (cleaned && cleaned.length > 1) cnParts.push(cleaned);
+      }
+
+      // 从AI回复提取场景描述
+      const sceneDetails = extractSceneDetails(reply);
+      if (sceneDetails.length > 0) {
+        cnParts.push(...sceneDetails.slice(0, 6));
+      }
+
+      const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
+      console.log('Generated image prompt (unified/jimeng):', prompt);
+      return { should: true, prompt };
+    }
+
+    // ===== NovelAI路径：保留原有英文tag提示词逻辑 =====
     // 性别标签 - 根据设置决定，考虑两人场景
     let genderTag = '1girl';
     let genderBase = 'anime girl';
@@ -1969,7 +2071,6 @@ const ChatPage: React.FC = () => {
         if (zhToEnMap[detail]) {
           promptParts.push(zhToEnMap[detail]);
         } else {
-          // 尝试部分匹配
           for (const [zh, en] of Object.entries(zhToEnMap)) {
             if (detail.includes(zh)) {
               promptParts.push(en);
@@ -1980,7 +2081,7 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 添加风格模板提示词（非自定义时，且用户没有明确指定构图）
+    // 添加风格模板提示词
     if (novelaiConfig?.style !== 'custom' && !userIntentParts.some(p => /(full body|upper body|close-up|scenic)/.test(p))) {
       const stylePrompts: Record<string, string> = {
         selfie: 'selfie, close-up, looking at viewer, front view',
@@ -1994,15 +2095,14 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 用户显式要图时，把用户的描述也带上（清理掉触发词）
+    // 用户显式要图时，把用户的描述也带上
     if (userRequestsImage && userInput && !alwaysTrigger) {
       const cleaned = userInput
         .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
         .replace(/(画|发|来|给|要|想看|看|拍|秀|展示|出|生成).{0,6}(图|图片|照片|自拍|一下|你|出来)/g, '')
-        .replace(/(全身|半身|特写|脸|风景|场景|两个人|我们俩)/g, '') // 这些已经处理过了
+        .replace(/(全身|半身|特写|脸|风景|场景|两个人|我们俩)/g, '')
         .trim();
       if (cleaned && cleaned.length > 1) {
-        // 尝试翻译用户描述
         let translatedCleaned = cleaned;
         for (const [zh, en] of Object.entries(zhToEnMap)) {
           if (cleaned.includes(zh)) {
@@ -2013,14 +2113,13 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // ===== 角色专属提示词优先 =====
-    // 如果有角色专属正面提示词，将其放在最前面
+    // 角色专属提示词优先
     if (charNaiPositive.trim()) {
       promptParts.unshift(charNaiPositive.trim());
       console.log('Using character-specific positive prompt:', charNaiPositive.slice(0, 50));
     }
 
-    // 基础提示词 - 根据性别动态设置，添加背景防止透明
+    // 基础提示词
     const nsfwMode = novelaiConfig?.nsfwMode || false;
     const qualityTags = nsfwMode 
       ? 'beautiful, high quality, detailed, masterpiece'
