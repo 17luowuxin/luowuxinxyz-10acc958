@@ -643,7 +643,7 @@ const FriendsPage: React.FC = () => {
       setNaiPositivePrompt('');
       setNaiNegativePrompt('');
       setNaiReferenceImage('');
-      setNaiReferenceStrength(0.6);
+      
       setNaiPromptOpen(false);
       toast.success('角色NAI设置已清空');
     } catch (err) {
