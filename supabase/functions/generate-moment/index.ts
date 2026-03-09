@@ -272,58 +272,68 @@ async function tryImg2ImgMultipart(prompt: string, config: SpaceImageConfig, ref
   fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
 
   console.log('img2img via /images/edits multipart:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: fd,
       },
-      body: fd,
-    },
-    45_000,
-  );
+      25_000, // Reduced to 25s so we have time for fallback
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      console.error('img2img(/edits) failed:', response.status, t.slice(0, 200));
+      return null;
+    }
+
+    return await parseImageUrlFromResponse(response);
+  } catch (e) {
+    console.error('img2img(/edits) multipart threw error:', e instanceof Error ? e.message : e);
     return null;
   }
-
-  return await parseImageUrlFromResponse(response);
 }
 
 async function tryImg2ImgJson(prompt: string, config: SpaceImageConfig, refDataUrl: string): Promise<string | null> {
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
   console.log('img2img via /images/generations JSON:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: config.size || '1024x1024',
+          prompt,
+          n: 1,
+          image: refDataUrl,
+          reference_image: refDataUrl,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: config.size || '1024x1024',
-        prompt,
-        n: 1,
-        image: refDataUrl,
-        reference_image: refDataUrl,
-      }),
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      console.error('img2img(JSON) failed:', response.status, t.slice(0, 200));
+      return null;
+    }
+
+    return await parseImageUrlFromResponse(response);
+  } catch (e) {
+    console.error('img2img(JSON) threw error:', e instanceof Error ? e.message : e);
     return null;
   }
-
-  return await parseImageUrlFromResponse(response);
 }
 
 // 生成图片（垫图仅走用户配置的即梦/OpenAI兼容接口，不使用其它模型）
@@ -340,7 +350,7 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     if (refImageUrl) {
       try {
         console.log('Loading reference image for img2img...');
-        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 15_000);
+        const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, 10_000);
         if (imgResp.ok) {
           const mime = imgResp.headers.get('content-type') || 'image/png';
           const buf = new Uint8Array(await imgResp.arrayBuffer());
@@ -362,33 +372,39 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
 
     // 纯文生图
+    console.log('Fallback to pure text2img...');
     const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
+    try {
+      const response = await fetchWithTimeout(
+        apiUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model || 'dall-e-3',
+            size: config.size || '1024x1024',
+            prompt: finalPrompt,
+            n: 1,
+          }),
         },
-        body: JSON.stringify({
-          model: config.model || 'dall-e-3',
-          size: config.size || '1024x1024',
-          prompt: finalPrompt,
-          n: 1,
-        }),
-      },
-      45_000,
-    );
+        25_000, // Reduced to 25s
+      );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Image generation API error:', response.status, errText.slice(0, 300));
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('Image generation API error:', response.status, errText.slice(0, 300));
+        return null;
+      }
+
+      return await parseImageUrlFromResponse(response);
+    } catch (e) {
+      console.error('text2img threw error:', e instanceof Error ? e.message : e);
       return null;
     }
-
-    return await parseImageUrlFromResponse(response);
   } catch (error) {
     console.error('Image generation error:', error);
     return null;

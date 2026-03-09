@@ -142,31 +142,36 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
   console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
 
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: size || '1024x1024',
+          prompt,
+          n: 1,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: size || '1024x1024',
-        prompt,
-        n: 1,
-      }),
-    },
-    45_000,
-  );
+      30_000,
+    );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Image generation failed:', response.status, errorText);
-    throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Image generation failed:', response.status, errorText);
+      throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('text2img error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 // 角色特征保持指令 - 垫图/P图时强化“保持脸”
@@ -184,57 +189,67 @@ async function editImageMultipart(prompt: string, config: ImageConfig, reference
   fd.append('image', new Blob([bytes], { type: mime }), 'reference.png');
 
   console.log('img2img via /images/edits multipart:', apiUrl);
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        // NOTE: do NOT set Content-Type for multipart
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          // NOTE: do NOT set Content-Type for multipart
+        },
+        body: fd,
       },
-      body: fd,
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    throw new Error(`img2img(/edits)失败: ${response.status} ${t.slice(0, 200)}`);
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      throw new Error(`img2img(/edits)失败: ${response.status} ${t.slice(0, 200)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('img2img(/edits) multipart error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 async function editImageJson(prompt: string, config: ImageConfig, referenceDataUrl: string, size?: string) {
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
   console.log('img2img via /images/generations JSON:', apiUrl);
 
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: size || '1024x1024',
+          prompt,
+          n: 1,
+          image: referenceDataUrl,
+          reference_image: referenceDataUrl,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: size || '1024x1024',
-        prompt,
-        n: 1,
-        image: referenceDataUrl,
-        reference_image: referenceDataUrl,
-      }),
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    throw new Error(`img2img(JSON)失败: ${response.status} ${t.slice(0, 200)}`);
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      throw new Error(`img2img(JSON)失败: ${response.status} ${t.slice(0, 200)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('img2img(JSON) error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 async function editImage(prompt: string, config: ImageConfig, referenceImageBase64: string, size?: string): Promise<{ url?: string; b64?: string }> {
