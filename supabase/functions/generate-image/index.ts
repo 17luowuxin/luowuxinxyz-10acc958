@@ -214,32 +214,37 @@ async function editImageJson(prompt: string, config: ImageConfig, referenceDataU
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
   console.log('img2img via /images/generations JSON:', apiUrl);
 
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: size || '1024x1024',
+          prompt,
+          n: 1,
+          image: referenceDataUrl,
+          reference_image: referenceDataUrl,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: size || '1024x1024',
-        prompt,
-        n: 1,
-        image: referenceDataUrl,
-        reference_image: referenceDataUrl,
-      }),
-    },
-    45_000,
-  );
+      25_000,
+    );
 
-  if (!response.ok) {
-    const t = await response.text().catch(() => '');
-    throw new Error(`img2img(JSON)失败: ${response.status} ${t.slice(0, 200)}`);
+    if (!response.ok) {
+      const t = await response.text().catch(() => '');
+      throw new Error(`img2img(JSON)失败: ${response.status} ${t.slice(0, 200)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('img2img(JSON) error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 async function editImage(prompt: string, config: ImageConfig, referenceImageBase64: string, size?: string): Promise<{ url?: string; b64?: string }> {
