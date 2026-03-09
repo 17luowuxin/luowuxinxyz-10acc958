@@ -127,65 +127,87 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
 // 角色特征保持指令 - 确保垫图P图时角色外貌一致
 const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
 
-async function editImage(prompt: string, _config: ImageConfig, referenceImageBase64: string, _size?: string): Promise<{ url?: string; b64?: string }> {
+// 使用 Lovable AI Gateway (Gemini) 进行真正的图生图（垫图P图）
+async function editImageWithLovableAI(prompt: string, referenceImageBase64: string): Promise<{ url?: string; b64?: string }> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.error('LOVABLE_API_KEY not configured');
+    throw new Error('图生图服务未配置');
+  }
+
   // Ensure the reference image has proper data URI format
   let imageUrl = referenceImageBase64;
   if (!imageUrl.startsWith('data:')) {
     imageUrl = `data:image/png;base64,${imageUrl}`;
   }
 
-  const scenePrompt = prompt || '生成一张自然的日常场景图片';
-  console.log('img2img edit (JSON only), scene:', scenePrompt.slice(0, 80));
+  const editInstruction = `${CHARACTER_CONSISTENCY_PROMPT}
 
-  // 直接使用 /images/generations + JSON body 带图（即梦/通义兼容）
-  // 跳过 /images/edits FormData 方式（即梦不支持，会超时）
+Based on this reference image, generate a new image with the following scene/changes while KEEPING THE CHARACTER'S FACE AND APPEARANCE EXACTLY THE SAME:
+${prompt || '保持角色形象，生成一张自然的日常场景图片'}
+
+Remember: The character's face, features, hairstyle must remain identical to the reference.`;
+
+  console.log('Using Lovable AI Gateway (Gemini) for img2img, prompt:', prompt?.slice(0, 80));
+
   try {
-    let apiUrl = _config.apiUrl.replace(/\/+$/, '');
-    if (!apiUrl.includes('/images/generations')) {
-      apiUrl = `${apiUrl}/images/generations`;
-    }
-
-    const jsonBody: Record<string, unknown> = {
-      model: _config.model || 'dall-e-3',
-      size: _size || '1024x1024',
-      prompt: scenePrompt,
-      n: 1,
-      image: imageUrl,
-      reference_image: imageUrl,
-    };
-
-    console.log('img2img via /images/generations JSON:', apiUrl);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-    const genResp = await fetch(apiUrl, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${_config.apiKey}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(jsonBody),
-      signal: controller.signal,
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: editInstruction },
+              { type: 'image_url', image_url: { url: imageUrl } }
+            ]
+          }
+        ],
+        modalities: ['image', 'text']
+      }),
     });
-    clearTimeout(timeout);
 
-    if (genResp.ok) {
-      const data = await genResp.json();
-      if (data.data?.[0]?.url) return { url: data.data[0].url };
-      if (data.data?.[0]?.b64_json) return { b64: data.data[0].b64_json };
-      if (data.url) return { url: data.url };
-      if (data.image) return { url: data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}` };
-      if (data.images?.[0]?.url) return { url: data.images[0].url };
-    } else {
-      const errText = await genResp.text().catch(() => '');
-      console.log('img2img failed:', genResp.status, errText.slice(0, 200));
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error('Lovable AI img2img failed:', response.status, errText.slice(0, 300));
+      throw new Error(`图生图失败: ${response.status}`);
     }
-  } catch (e) {
-    console.log('img2img error (timeout or network):', e);
-  }
 
-  // Fallback: pure text2img
-  console.log('img2img failed, falling back to text2img');
-  return await generateImage(scenePrompt, _config, _size);
+    const data = await response.json();
+    const generatedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (generatedImageUrl) {
+      console.log('Lovable AI img2img success, got image URL');
+      // 返回 base64 URL（Gemini返回的是data:image格式）
+      if (generatedImageUrl.startsWith('data:image')) {
+        const base64Part = generatedImageUrl.split(',')[1];
+        return { b64: base64Part, url: generatedImageUrl };
+      }
+      return { url: generatedImageUrl };
+    }
+
+    console.error('No image in Lovable AI response:', JSON.stringify(data).slice(0, 500));
+    throw new Error('图生图返回无图片');
+  } catch (e) {
+    console.error('Lovable AI img2img error:', e);
+    throw e;
+  }
+}
+
+// 保留旧函数签名用于兼容，但内部调用新函数
+async function editImage(prompt: string, _config: ImageConfig, referenceImageBase64: string, _size?: string): Promise<{ url?: string; b64?: string }> {
+  try {
+    return await editImageWithLovableAI(prompt, referenceImageBase64);
+  } catch (e) {
+    // Fallback: pure text2img using user's API
+    console.log('img2img failed, falling back to text2img');
+    return await generateImage(prompt || '生成一张自然的日常场景图片', _config, _size);
+  }
 }
 
 serve(async (req) => {
