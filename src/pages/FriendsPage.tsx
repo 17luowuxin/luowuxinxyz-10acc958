@@ -1201,25 +1201,6 @@ const FriendsPage: React.FC = () => {
                       </button>
                     )}
                     
-                    {naiReferenceImage && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs text-gray-500">重绘强度</label>
-                          <span className="text-xs text-purple-600 font-medium">{naiReferenceStrength.toFixed(1)}</span>
-                        </div>
-                        <Slider
-                          value={[naiReferenceStrength]}
-                          onValueChange={([v]) => setNaiReferenceStrength(v)}
-                          min={0.1}
-                          max={0.9}
-                          step={0.1}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-gray-400">
-                          越低越接近原图，越高越自由发挥（推荐 0.4-0.7）
-                        </p>
-                      </div>
-                    )}
                   </div>
 
                   {/* NAI 角色专属提示词 */}
