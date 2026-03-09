@@ -303,7 +303,18 @@ const ChatPage: React.FC = () => {
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
   const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
   const [charNaiRefStrength] = useState<number>(0.6); // kept for NovelAI compat only
+
+  // 统一图片API配置（即梦/OpenAI兼容）
   const [hasUnifiedImageConfig, setHasUnifiedImageConfig] = useState(false);
+  const [unifiedImageConfig, setUnifiedImageConfig] = useState<{
+    enabled: boolean;
+    apiKey: string;
+    apiUrl: string;
+    model?: string;
+    size?: string;
+    stylePrompt?: string;
+  } | null>(null);
+
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
@@ -888,8 +899,28 @@ const ChatPage: React.FC = () => {
         const spaceImageEnabledSetting = pickLatest('space_image_enabled');
         const spaceImageApiKeySetting = pickLatest('space_image_api_key');
         const spaceImageApiUrlSetting = pickLatest('space_image_api_url');
+        const spaceImageModelSetting = pickLatest('space_image_model');
+        const spaceImageSizeSetting = pickLatest('space_image_size');
+        const spaceImageStylePromptSetting = pickLatest('space_image_style_prompt');
+
         const unifiedImageEnabled = spaceImageEnabledSetting ? spaceImageEnabledSetting.api_key !== 'false' : true;
-        setHasUnifiedImageConfig(Boolean(unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key));
+        const hasUnified = Boolean(
+          unifiedImageEnabled && spaceImageApiKeySetting?.api_key && spaceImageApiUrlSetting?.api_key,
+        );
+
+        setHasUnifiedImageConfig(hasUnified);
+        setUnifiedImageConfig(
+          hasUnified
+            ? {
+                enabled: unifiedImageEnabled,
+                apiKey: spaceImageApiKeySetting!.api_key,
+                apiUrl: spaceImageApiUrlSetting!.api_key,
+                model: spaceImageModelSetting?.api_key || undefined,
+                size: spaceImageSizeSetting?.api_key || undefined,
+                stylePrompt: spaceImageStylePromptSetting?.api_key || undefined,
+              }
+            : null,
+        );
 
         // NovelAI config
         const novelaiKey = pickLatest('novelai');
@@ -973,11 +1004,13 @@ const ChatPage: React.FC = () => {
       } else {
         setApiConfig({});
         setHasUnifiedImageConfig(false);
+        setUnifiedImageConfig(null);
       }
     } catch (err) {
       console.error('获取API配置失败:', err);
       setApiConfig({});
       setHasUnifiedImageConfig(false);
+      setUnifiedImageConfig(null);
     } finally {
       setApiConfigLoading(false);
     }
@@ -2172,6 +2205,13 @@ const ChatPage: React.FC = () => {
             prompt,
             userId: user.id,
             characterId,
+            // 对于 external 认证来源：优先用本地读取到的配置直接测试调用，避免函数侧读不到外部数据库配置
+            testMode: Boolean(unifiedImageConfig?.apiKey && unifiedImageConfig?.apiUrl),
+            apiKey: unifiedImageConfig?.apiKey,
+            apiUrl: unifiedImageConfig?.apiUrl,
+            model: unifiedImageConfig?.model,
+            size: unifiedImageConfig?.size,
+            stylePrompt: unifiedImageConfig?.stylePrompt,
           },
         });
         data = result.data;
@@ -2254,7 +2294,7 @@ const ChatPage: React.FC = () => {
       const fileName = `${user.id}/${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('chat-images')
         .upload(fileName, compressedFile);
 
       if (uploadError) {
@@ -2263,7 +2303,7 @@ const ChatPage: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
+        .from('chat-images')
         .getPublicUrl(fileName);
 
       return publicUrl;

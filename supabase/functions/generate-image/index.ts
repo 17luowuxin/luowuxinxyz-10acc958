@@ -335,8 +335,8 @@ serve(async (req) => {
     const effectiveAction = action || (effectiveRefBase64 ? 'edit-image' : 'generate-image');
     
     if (!prompt && effectiveAction !== 'edit-image') {
-      return new Response(JSON.stringify({ error: '请提供绘图提示词' }), {
-        status: 400,
+      return new Response(JSON.stringify({ success: false, error: '请提供绘图提示词' }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -354,15 +354,15 @@ serve(async (req) => {
     } else if (userId) {
       const userConfig = await getImageConfig(userId);
       if (!userConfig) {
-        return new Response(JSON.stringify({ error: '未配置图片生成API，请在设置中配置' }), {
-          status: 400,
+        return new Response(JSON.stringify({ success: false, error: '未配置图片生成API，请在设置中配置' }), {
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       config = userConfig;
     } else {
-      return new Response(JSON.stringify({ error: '缺少用户ID或测试配置' }), {
-        status: 400,
+      return new Response(JSON.stringify({ success: false, error: '缺少用户ID或测试配置' }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -390,8 +390,8 @@ serve(async (req) => {
     const imageUrl = result.url || (result.b64 ? `data:image/png;base64,${result.b64}` : null);
     
     if (!imageUrl) {
-      return new Response(JSON.stringify({ error: '图片生成失败' }), {
-        status: 500,
+      return new Response(JSON.stringify({ success: false, error: '图片生成失败' }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -408,8 +408,8 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('Generate image error:', error);
     const errorMessage = error instanceof Error ? error.message : '图片生成失败';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
+    return new Response(JSON.stringify({ success: false, error: errorMessage }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
