@@ -544,9 +544,11 @@ async function generateImage(
       const lovableTimeout = Math.min(16_000, msLeft() - 1_000);
       if (lovableTimeout > 4_000) {
         console.log('Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
-        const dataUrl = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
-        if (dataUrl) {
-          const uploaded = await uploadImageDataUrlToPublicBucket(dataUrl, userId, 'space-generated');
+        const lovableImage = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
+        if (lovableImage) {
+          // If gateway returns a normal URL, we can use it directly; if it's a data URL, upload to storage.
+          if (!lovableImage.startsWith('data:')) return lovableImage;
+          const uploaded = await uploadImageDataUrlToPublicBucket(lovableImage, userId, 'space-generated');
           if (uploaded) return uploaded;
         }
       }
