@@ -614,7 +614,6 @@ const FriendsPage: React.FC = () => {
       }
       if (naiReferenceImage.trim()) {
         rows.push({ user_id: user.id, provider: `nai_ref_image_${editingChar.id}`, api_key: naiReferenceImage.trim() });
-        rows.push({ user_id: user.id, provider: `nai_ref_strength_${editingChar.id}`, api_key: naiReferenceStrength.toString() });
       }
       
       if (rows.length > 0) {
