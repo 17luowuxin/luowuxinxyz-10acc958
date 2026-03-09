@@ -2294,7 +2294,7 @@ const ChatPage: React.FC = () => {
       const fileName = `${user.id}/${Date.now()}.jpg`;
       
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('chat-images')
         .upload(fileName, compressedFile);
 
       if (uploadError) {
@@ -2303,7 +2303,7 @@ const ChatPage: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
+        .from('chat-images')
         .getPublicUrl(fileName);
 
       return publicUrl;
