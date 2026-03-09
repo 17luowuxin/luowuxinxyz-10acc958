@@ -162,11 +162,15 @@ async function editImage(prompt: string, _config: ImageConfig, referenceImageBas
     if (_size) formData.append('size', _size);
 
     console.log('Trying /images/edits (FormData):', editsUrl);
+    const editController = new AbortController();
+    const editTimeout = setTimeout(() => editController.abort(), 30000);
     const editResp = await fetch(editsUrl, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${_config.apiKey}` },
       body: formData,
+      signal: editController.signal,
     });
+    clearTimeout(editTimeout);
 
     if (editResp.ok) {
       const data = await editResp.json();

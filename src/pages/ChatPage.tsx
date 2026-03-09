@@ -1954,6 +1954,7 @@ const ChatPage: React.FC = () => {
         cnParts.push(...sceneDetails.slice(0, 6));
       }
 
+      if (genderGuard) cnParts.push(genderGuard);
       const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
       console.log('Generated image prompt (unified/jimeng):', prompt);
       return { should: true, prompt };
