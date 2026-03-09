@@ -86,7 +86,7 @@ const FriendsPage: React.FC = () => {
   const [naiNegativePrompt, setNaiNegativePrompt] = useState('');
   // NovelAI 角色专属垫图设置
   const [naiReferenceImage, setNaiReferenceImage] = useState('');
-  const [naiReferenceStrength, setNaiReferenceStrength] = useState(0.6);
+  
   const [uploadingRefImage, setUploadingRefImage] = useState(false);
   const naiRefImageInputRef = useRef<HTMLInputElement>(null);
 
