@@ -127,8 +127,14 @@ async function parseImageApiResponse(response: Response): Promise<{ url?: string
 
 function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
   let url = baseUrl.replace(/\/+$/, '');
-  // If user provided full endpoint already, keep it.
-  if (url.includes('/images/')) return url;
+
+  // If user provided the full images endpoint, normalize to requested kind.
+  url = url.replace(/\/images\/(generations|edits)\b/, `/images/${kind}`);
+
+  // If it already points to /images/{kind}, keep it.
+  if (url.includes(`/images/${kind}`)) return url;
+
+  // Otherwise append.
   return `${url}/images/${kind}`;
 }
 

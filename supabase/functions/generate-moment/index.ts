@@ -237,7 +237,11 @@ function dataUrlToBytes(dataUrlOrBase64: string): { bytes: Uint8Array; mime: str
 
 function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
   let url = baseUrl.replace(/\/+$/, '');
-  if (url.includes('/images/')) return url;
+
+  // If user provided the full images endpoint, normalize to requested kind.
+  url = url.replace(/\/images\/(generations|edits)\b/, `/images/${kind}`);
+
+  if (url.includes(`/images/${kind}`)) return url;
   return `${url}/images/${kind}`;
 }
 
