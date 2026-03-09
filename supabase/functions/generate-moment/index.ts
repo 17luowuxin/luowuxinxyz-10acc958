@@ -537,14 +537,13 @@ async function generateImage(
       console.log('Skip external text2img due to low budget:', textTimeout);
     }
 
-    // Lovable AI 兜底：生成 dataUrl → 上传到 chat-images → 返回 URL（避免把 base64 写进数据库）
+    // Lovable AI 兜底（仅在外部 API 全部失败且仍有剩余时间时使用）
     if (LOVABLE_API_KEY) {
-      const lovableTimeout = Math.min(16_000, msLeft() - 1_000);
+      const lovableTimeout = Math.min(16_000, msLeft() - 2_000);
       if (lovableTimeout > 4_000) {
-        console.log('Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
+        console.log('All external APIs failed. Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
         const lovableImage = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
         if (lovableImage) {
-          // If gateway returns a normal URL, we can use it directly; if it's a data URL, upload to storage.
           if (!lovableImage.startsWith('data:')) return lovableImage;
           const uploaded = await uploadImageDataUrlToPublicBucket(lovableImage, userId, 'space-generated');
           if (uploaded) return uploaded;
