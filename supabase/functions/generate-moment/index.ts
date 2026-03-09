@@ -847,11 +847,7 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
-        const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
-        if (charRef) {
-          console.log("Using character reference image for space moment img2img");
-        }
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId, charRef?.refImageUrl);
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");
