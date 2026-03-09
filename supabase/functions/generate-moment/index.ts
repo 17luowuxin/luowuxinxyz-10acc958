@@ -562,10 +562,6 @@ async function generateImage(
   }
 }
 
-    // 垫图：优先 /images/edits（即梦P图/垫图），若快速失败再走 JSON 兼容，最后再文生图
-    if (refImageUrl) {
-      try {
-        console.log('Loading reference image for img2img...');
 
         const refTimeout = Math.min(10_000, msLeft() - 1_000);
         if (refTimeout > 2_000) {
