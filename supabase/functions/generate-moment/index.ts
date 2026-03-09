@@ -345,95 +345,41 @@ async function generateImage(
   prompt: string,
   config: SpaceImageConfig,
   userId: string,
-  refImageUrl?: string,
 ): Promise<string | null> {
-  // Hard cap to avoid Edge Function wall-time aborts
-  const deadline = Date.now() + 58_000;
-  const msLeft = () => Math.max(2_000, deadline - Date.now());
-
   try {
-    // 添加画风提示词前缀
     let finalPrompt = prompt;
     if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
 
-    console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
+    console.log('Text2img with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
 
-    // 垫图：优先 /images/edits（multipart），其次 JSON 兼容
-    if (refImageUrl) {
-      try {
-        console.log('Loading reference image for img2img...');
+    const apiUrl = buildImagesEndpoint(config.apiUrl);
 
-        const refTimeout = Math.min(8_000, msLeft() - 4_000);
-        if (refTimeout > 2_000) {
-          const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
-          if (imgResp.ok) {
-            const mime = imgResp.headers.get('content-type') || 'image/png';
-            const buf = new Uint8Array(await imgResp.arrayBuffer());
-            const refDataUrl = bytesToDataUrl(buf, mime);
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: config.size || '1024x1024',
+          prompt: finalPrompt,
+          n: 1,
+        }),
+      },
+      50_000,
+    );
 
-            const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
-
-            // 给垫图接口充足时间（最多45s）
-            const editsTimeout = Math.min(45_000, msLeft() - 4_000);
-            if (editsTimeout > 4_000) {
-              const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
-              if (edits) return edits;
-            }
-
-            const jsonTimeout = Math.min(20_000, msLeft() - 4_000);
-            if (jsonTimeout > 4_000) {
-              const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
-              if (jsonEdits) return jsonEdits;
-            }
-
-            console.log('img2img failed, will try text2img fallback');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load/use ref image:', e instanceof Error ? e.message : e);
-      }
-    }
-
-    // 文生图：优先用户配置的即梦等接口，给足时间（最多50s）
-    const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-    const textTimeout = Math.min(50_000, msLeft() - 4_000);
-
-    if (textTimeout > 6_000) {
-      console.log('Trying external text2img...', apiUrl, 'timeoutMs:', textTimeout);
-      try {
-        const response = await fetchWithTimeout(
-          apiUrl,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${config.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: config.model || 'dall-e-3',
-              size: config.size || '1024x1024',
-              prompt: finalPrompt,
-              n: 1,
-            }),
-          },
-          textTimeout,
-        );
-
-        if (response.ok) {
-          const out = await parseImageUrlFromResponse(response);
-          if (out) return out;
-        } else {
-          const errText = await response.text().catch(() => '');
-          console.error('External text2img error:', response.status, errText.slice(0, 300));
-        }
-      } catch (e) {
-        console.error('External text2img threw error:', e instanceof Error ? e.message : e);
-      }
+    if (response.ok) {
+      const out = await parseImageUrlFromResponse(response);
+      if (out) return out;
     } else {
-      console.log('Skip external text2img due to low budget:', textTimeout);
+      const errText = await response.text().catch(() => '');
+      console.error('Text2img error:', response.status, errText.slice(0, 300));
     }
 
-    console.error('Image generation failed: all external API attempts exhausted');
     return null;
   } catch (error) {
     console.error('Image generation error:', error);
