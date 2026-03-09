@@ -770,24 +770,25 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       if (spaceImageConfig) {
         console.log("Space image generation enabled, generating image...");
         
-        // 从角色人设中提取性别和外观特征
+        // 从角色人设中提取性别和外观特征（使用中文，适配即梦等国产API）
         const persona = character?.persona || '';
         const isMale = /(男|男性|boy|male|他是|哥哥|弟弟|王子|先生|少年|青年|帅|帅气|肌肉|英俊)/i.test(persona);
         const isFemale = /(女|女性|girl|female|她是|姐姐|妹妹|公主|小姐|少女|可爱|美丽|温柔)/i.test(persona);
-        const genderTag = isMale && !isFemale ? '1boy, anime boy' : isFemale ? '1girl, anime girl' : '1person';
+        const genderDesc = isMale && !isFemale ? '一个男生' : isFemale ? '一个女生' : '一个人';
         
-        // 提取外观关键词
+        // 提取外观关键词（中文优先）
         const appearanceParts: string[] = [];
         const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
         if (hairMatch) appearanceParts.push(hairMatch[1]);
         const eyeMatch = persona.match(/(?:眼睛|眼色|瞳色)[：:]\s*([^，。\n]+)/);
         if (eyeMatch) appearanceParts.push(eyeMatch[1]);
-        // 英文外观词
-        const enAppearance = persona.match(/\b((?:pink|blue|red|green|purple|white|black|blonde|silver|golden|brown)\s+(?:hair|eyes?)|(?:long|short|twin\s*tails?|ponytail)\s+hair)\b/gi);
-        if (enAppearance) appearanceParts.push(...enAppearance);
+        // 外貌描述
+        const appearanceMatch = persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
+        if (appearanceMatch) appearanceParts.push(appearanceMatch[1]);
         
-        const appearanceStr = appearanceParts.length > 0 ? ', ' + appearanceParts.join(', ') : '';
-        const imagePrompt = `${character.name}, ${genderTag}${appearanceStr}, ${content}, anime style, high quality, beautiful, masterpiece`;
+        const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
+        // 用中文自然语言构建提示词，stylePrompt 已由 generateImage 函数自动拼接
+        const imagePrompt = `${genderDesc}${appearanceStr}，${content}`;
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
         // 加载角色垫图设置
