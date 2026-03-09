@@ -636,8 +636,7 @@ const FriendsPage: React.FC = () => {
       const providers = [
         `nai_positive_${editingChar.id}`, 
         `nai_negative_${editingChar.id}`,
-        `nai_ref_image_${editingChar.id}`,
-        `nai_ref_strength_${editingChar.id}`
+        `nai_ref_image_${editingChar.id}`
       ];
       await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
       
