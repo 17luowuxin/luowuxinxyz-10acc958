@@ -372,33 +372,39 @@ async function generateImage(prompt: string, config: SpaceImageConfig, refImageU
     }
 
     // 纯文生图
+    console.log('Fallback to pure text2img...');
     const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
+    try {
+      const response = await fetchWithTimeout(
+        apiUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.model || 'dall-e-3',
+            size: config.size || '1024x1024',
+            prompt: finalPrompt,
+            n: 1,
+          }),
         },
-        body: JSON.stringify({
-          model: config.model || 'dall-e-3',
-          size: config.size || '1024x1024',
-          prompt: finalPrompt,
-          n: 1,
-        }),
-      },
-      45_000,
-    );
+        25_000, // Reduced to 25s
+      );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Image generation API error:', response.status, errText.slice(0, 300));
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('Image generation API error:', response.status, errText.slice(0, 300));
+        return null;
+      }
+
+      return await parseImageUrlFromResponse(response);
+    } catch (e) {
+      console.error('text2img threw error:', e instanceof Error ? e.message : e);
       return null;
     }
-
-    return await parseImageUrlFromResponse(response);
   } catch (error) {
     console.error('Image generation error:', error);
     return null;
