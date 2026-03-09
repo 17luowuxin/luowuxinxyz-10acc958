@@ -142,31 +142,36 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
   const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
   console.log('Generating image with URL:', apiUrl, 'model:', config.model || 'default', 'size:', size || '1024x1024');
 
-  const response = await fetchWithTimeout(
-    apiUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await fetchWithTimeout(
+      apiUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model || 'dall-e-3',
+          size: size || '1024x1024',
+          prompt,
+          n: 1,
+        }),
       },
-      body: JSON.stringify({
-        model: config.model || 'dall-e-3',
-        size: size || '1024x1024',
-        prompt,
-        n: 1,
-      }),
-    },
-    45_000,
-  );
+      30_000,
+    );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Image generation failed:', response.status, errorText);
-    throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Image generation failed:', response.status, errorText);
+      throw new Error(`图片生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
+    }
+
+    return await parseImageApiResponse(response);
+  } catch (e) {
+    console.error('text2img error:', e instanceof Error ? e.message : e);
+    throw e;
   }
-
-  return await parseImageApiResponse(response);
 }
 
 // 角色特征保持指令 - 垫图/P图时强化“保持脸”
