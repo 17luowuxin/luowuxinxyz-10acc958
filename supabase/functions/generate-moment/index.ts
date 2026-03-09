@@ -562,24 +562,6 @@ async function generateImage(
   }
 }
 
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('Image generation API error:', response.status, errText.slice(0, 300));
-        return null;
-      }
-
-      return await parseImageUrlFromResponse(response);
-    } catch (e) {
-      console.error('text2img threw error:', e instanceof Error ? e.message : e);
-      return null;
-    }
-  } catch (error) {
-    console.error('Image generation error:', error);
-    return null;
-  }
-}
-
 async function getAICompletion(
   messages: Array<{ role: string; content: string }>,
   config: AIConfig
