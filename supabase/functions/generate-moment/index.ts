@@ -346,19 +346,219 @@ async function tryImg2ImgJson(
   }
 }
 
-// 生成图片（垫图仅走用户配置的即梦/OpenAI兼容接口，不使用其它模型）
-async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string): Promise<string | null> {
+// 生成图片（垫图优先走用户配置的 OpenAI 兼容接口；若超时/失败，使用 Lovable AI 兜底并上传到公共存储）
+function sizeToAspectHint(size?: string): string {
+  const s = (size || '').trim();
+  if (!s) return '';
+  if (s === '1024x1024') return 'square (1:1)';
+  if (s === '768x1024') return 'portrait (3:4)';
+  if (s === '1024x768') return 'landscape (4:3)';
+
+  const m = s.match(/^(\d{2,4})x(\d{2,4})$/);
+  if (!m) return '';
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '';
+  const ratio = (w / h).toFixed(2);
+  return `aspect ratio ~${ratio} (${w}x${h})`;
+}
+
+async function generateImageViaLovable(prompt: string, size: string, timeoutMs: number): Promise<string | null> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) return null;
+
+  const aspectHint = sizeToAspectHint(size);
+  const instruction = [
+    'Generate ONE high-quality image. No text overlay, no watermark.',
+    aspectHint ? `Prefer ${aspectHint}.` : '',
+    `Prompt: ${prompt}`,
+  ].filter(Boolean).join('\n');
+
+  try {
+    const resp = await fetchWithTimeout(
+      'https://ai.gateway.lovable.dev/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-image',
+          messages: [{ role: 'user', content: instruction }],
+          modalities: ['image', 'text'],
+        }),
+      },
+      timeoutMs,
+    );
+
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => '');
+      console.error('Lovable image API error:', resp.status, t.slice(0, 400));
+      return null;
+    }
+
+    const data = await resp.json();
+    const imageUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
+    if (!imageUrl) {
+      console.error('Lovable image API returned no image:', JSON.stringify(data).slice(0, 500));
+      return null;
+    }
+
+    return imageUrl;
+  } catch (e) {
+    console.error('Lovable image generation threw error:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function uploadImageDataUrlToPublicBucket(dataUrl: string, userId: string, prefix: string): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const sb = createClient(supabaseUrl, supabaseKey);
+
+    const { bytes, mime } = dataUrlToBytes(dataUrl);
+    const ext = mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : 'png';
+    const path = `${prefix}/${userId || 'anonymous'}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
+    const { error } = await sb.storage
+      .from('chat-images')
+      .upload(path, new Blob([bytes], { type: mime }), {
+        contentType: mime,
+        upsert: true,
+        cacheControl: '3600',
+      });
+
+    if (error) {
+      console.error('Image upload error:', error);
+      return null;
+    }
+
+    const { data } = sb.storage.from('chat-images').getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (e) {
+    console.error('uploadImageDataUrlToPublicBucket error:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function generateImage(
+  prompt: string,
+  config: SpaceImageConfig,
+  userId: string,
+  refImageUrl?: string,
+): Promise<string | null> {
   // Hard cap to avoid Edge Function wall-time aborts
   const deadline = Date.now() + 58_000;
   const msLeft = () => Math.max(2_000, deadline - Date.now());
 
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  // Reserve time for Lovable fallback so we don't end up with "Not enough time left".
+  const lovableReserve = LOVABLE_API_KEY ? 18_000 : 0;
+  const externalBudgetLeft = () => Math.max(0, msLeft() - lovableReserve - 1_000);
+
   try {
     // 添加画风提示词前缀
     let finalPrompt = prompt;
-    if (config.stylePrompt) {
-      finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
-    }
+    if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
+
     console.log('Generating image with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
+
+    // 垫图：优先 /images/edits（multipart），其次 JSON 兼容
+    if (refImageUrl) {
+      try {
+        console.log('Loading reference image for img2img...');
+
+        const refTimeout = Math.min(6_000, externalBudgetLeft());
+        if (refTimeout > 2_000) {
+          const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
+          if (imgResp.ok) {
+            const mime = imgResp.headers.get('content-type') || 'image/png';
+            const buf = new Uint8Array(await imgResp.arrayBuffer());
+            const refDataUrl = bytesToDataUrl(buf, mime);
+
+            const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
+
+            const editsTimeout = Math.min(30_000, externalBudgetLeft());
+            if (editsTimeout > 2_000) {
+              const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
+              if (edits) return edits;
+            }
+
+            const jsonTimeout = Math.min(12_000, externalBudgetLeft());
+            if (jsonTimeout > 2_000) {
+              const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
+              if (jsonEdits) return jsonEdits;
+            }
+
+            console.log('img2img failed, will try fallback');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load/use ref image:', e instanceof Error ? e.message : e);
+      }
+    }
+
+    // 文生图：先尝试用户配置接口（预算足够才试）
+    const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
+    const textTimeout = Math.min(28_000, externalBudgetLeft());
+
+    if (textTimeout > 6_000) {
+      console.log('Trying external text2img...', apiUrl, 'timeoutMs:', textTimeout);
+      try {
+        const response = await fetchWithTimeout(
+          apiUrl,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: config.model || 'dall-e-3',
+              size: config.size || '1024x1024',
+              prompt: finalPrompt,
+              n: 1,
+            }),
+          },
+          textTimeout,
+        );
+
+        if (response.ok) {
+          const out = await parseImageUrlFromResponse(response);
+          if (out) return out;
+        } else {
+          const errText = await response.text().catch(() => '');
+          console.error('External text2img error:', response.status, errText.slice(0, 300));
+        }
+      } catch (e) {
+        console.error('External text2img threw error:', e instanceof Error ? e.message : e);
+      }
+    } else {
+      console.log('Skip external text2img due to low budget.');
+    }
+
+    // Lovable AI 兜底：生成 dataUrl → 上传到 chat-images → 返回 URL（避免把 base64 写进数据库）
+    if (LOVABLE_API_KEY) {
+      const lovableTimeout = Math.min(16_000, msLeft() - 1_000);
+      if (lovableTimeout > 4_000) {
+        console.log('Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
+        const dataUrl = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
+        if (dataUrl) {
+          const uploaded = await uploadImageDataUrlToPublicBucket(dataUrl, userId, 'space-generated');
+          if (uploaded) return uploaded;
+        }
+      }
+    }
+
+    console.error('Image generation failed: all fallbacks exhausted');
+    return null;
+  } catch (error) {
+    console.error('Image generation error:', error);
+    return null;
+  }
+}
 
     // 垫图：优先 /images/edits（即梦P图/垫图），若快速失败再走 JSON 兼容，最后再文生图
     if (refImageUrl) {
