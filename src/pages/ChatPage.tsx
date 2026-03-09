@@ -482,19 +482,16 @@ const ChatPage: React.FC = () => {
       .in('provider', [
         `nai_positive_${characterId}`, 
         `nai_negative_${characterId}`,
-        `nai_ref_image_${characterId}`,
-        `nai_ref_strength_${characterId}`
+        `nai_ref_image_${characterId}`
       ]);
     
     if (data) {
       const positiveRow = data.find(r => r.provider === `nai_positive_${characterId}`);
       const negativeRow = data.find(r => r.provider === `nai_negative_${characterId}`);
       const refImageRow = data.find(r => r.provider === `nai_ref_image_${characterId}`);
-      const refStrengthRow = data.find(r => r.provider === `nai_ref_strength_${characterId}`);
       setCharNaiPositive(positiveRow?.api_key || '');
       setCharNaiNegative(negativeRow?.api_key || '');
       setCharNaiRefImage(refImageRow?.api_key || '');
-      setCharNaiRefStrength(refStrengthRow?.api_key ? parseFloat(refStrengthRow.api_key) : 0.6);
       console.log('Loaded char NAI config:', {
         positive: positiveRow?.api_key?.slice(0, 30),
         negative: negativeRow?.api_key?.slice(0, 30),
