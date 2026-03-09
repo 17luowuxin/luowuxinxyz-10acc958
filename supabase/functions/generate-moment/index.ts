@@ -563,12 +563,6 @@ async function generateImage(
 }
 
 
-            const editsTimeout = Math.min(45_000, msLeft() - 1_000);
-            if (editsTimeout > 2_000) {
-              const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
-              if (edits) return edits;
-            }
-
             const jsonTimeout = Math.min(25_000, msLeft() - 1_000);
             if (jsonTimeout > 2_000) {
               const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
