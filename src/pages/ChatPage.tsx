@@ -303,7 +303,18 @@ const ChatPage: React.FC = () => {
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
   const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
   const [charNaiRefStrength] = useState<number>(0.6); // kept for NovelAI compat only
+
+  // 统一图片API配置（即梦/OpenAI兼容）
   const [hasUnifiedImageConfig, setHasUnifiedImageConfig] = useState(false);
+  const [unifiedImageConfig, setUnifiedImageConfig] = useState<{
+    enabled: boolean;
+    apiKey: string;
+    apiUrl: string;
+    model?: string;
+    size?: string;
+    stylePrompt?: string;
+  } | null>(null);
+
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
