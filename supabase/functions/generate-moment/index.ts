@@ -793,10 +793,10 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         // 加载角色垫图设置
         const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
         if (charRef) {
-          console.log("Using character reference image for space moment, strength:", charRef.refStrength);
+          console.log("Using character reference image for space moment");
         }
         
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl, charRef?.refStrength);
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");
