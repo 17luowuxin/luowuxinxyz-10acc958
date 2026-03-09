@@ -86,7 +86,7 @@ const FriendsPage: React.FC = () => {
   const [naiNegativePrompt, setNaiNegativePrompt] = useState('');
   // NovelAI 角色专属垫图设置
   const [naiReferenceImage, setNaiReferenceImage] = useState('');
-  const [naiReferenceStrength, setNaiReferenceStrength] = useState(0.6);
+  
   const [uploadingRefImage, setUploadingRefImage] = useState(false);
   const naiRefImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -508,7 +508,6 @@ const FriendsPage: React.FC = () => {
     setNaiPositivePrompt('');
     setNaiNegativePrompt('');
     setNaiReferenceImage('');
-    setNaiReferenceStrength(0.6);
     setOpen(true);
     
     // 并行加载记忆摘要和NAI提示词（包括垫图设置）
@@ -530,8 +529,7 @@ const FriendsPage: React.FC = () => {
           .in('provider', [
             `nai_positive_${char.id}`, 
             `nai_negative_${char.id}`,
-            `nai_ref_image_${char.id}`,
-            `nai_ref_strength_${char.id}`
+            `nai_ref_image_${char.id}`
           ])
       ]);
       
@@ -543,11 +541,9 @@ const FriendsPage: React.FC = () => {
         const positiveRow = naiRes.data.find(r => r.provider === `nai_positive_${char.id}`);
         const negativeRow = naiRes.data.find(r => r.provider === `nai_negative_${char.id}`);
         const refImageRow = naiRes.data.find(r => r.provider === `nai_ref_image_${char.id}`);
-        const refStrengthRow = naiRes.data.find(r => r.provider === `nai_ref_strength_${char.id}`);
         if (positiveRow) setNaiPositivePrompt(positiveRow.api_key);
         if (negativeRow) setNaiNegativePrompt(negativeRow.api_key);
         if (refImageRow) setNaiReferenceImage(refImageRow.api_key);
-        if (refStrengthRow) setNaiReferenceStrength(parseFloat(refStrengthRow.api_key) || 0.6);
       }
     } catch (err) {
       console.error('Failed to load character data:', err);
@@ -605,8 +601,7 @@ const FriendsPage: React.FC = () => {
       const providers = [
         `nai_positive_${editingChar.id}`, 
         `nai_negative_${editingChar.id}`,
-        `nai_ref_image_${editingChar.id}`,
-        `nai_ref_strength_${editingChar.id}`
+        `nai_ref_image_${editingChar.id}`
       ];
       await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
       
@@ -619,7 +614,6 @@ const FriendsPage: React.FC = () => {
       }
       if (naiReferenceImage.trim()) {
         rows.push({ user_id: user.id, provider: `nai_ref_image_${editingChar.id}`, api_key: naiReferenceImage.trim() });
-        rows.push({ user_id: user.id, provider: `nai_ref_strength_${editingChar.id}`, api_key: naiReferenceStrength.toString() });
       }
       
       if (rows.length > 0) {
@@ -642,15 +636,14 @@ const FriendsPage: React.FC = () => {
       const providers = [
         `nai_positive_${editingChar.id}`, 
         `nai_negative_${editingChar.id}`,
-        `nai_ref_image_${editingChar.id}`,
-        `nai_ref_strength_${editingChar.id}`
+        `nai_ref_image_${editingChar.id}`
       ];
       await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
       
       setNaiPositivePrompt('');
       setNaiNegativePrompt('');
       setNaiReferenceImage('');
-      setNaiReferenceStrength(0.6);
+      
       setNaiPromptOpen(false);
       toast.success('角色NAI设置已清空');
     } catch (err) {

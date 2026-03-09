@@ -115,16 +115,15 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
 }
 
 // 获取角色专属垫图设置
-async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string; refStrength: number } | null> {
+async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string } | null> {
   if (!userId || !characterId) return null;
   const settings = await fetchApiSettings(userId);
   if (!settings) return null;
   
   const refUrl = settings.get(`nai_ref_image_${characterId}`) || '';
-  const refStrength = parseFloat(settings.get(`nai_ref_strength_${characterId}`) || '0.6') || 0.6;
   
   if (!refUrl) return null;
-  return { refImageUrl: refUrl, refStrength };
+  return { refImageUrl: refUrl };
 }
 
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
@@ -203,7 +202,7 @@ async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): 
 const CHARACTER_CONSISTENCY_PROMPT = `CRITICAL: You must maintain the character's facial features, hairstyle, eye color, body proportions, and overall appearance exactly consistent with the reference image. Preserve the character's identity while adapting to the new scene. Do NOT change the character's face or key visual traits.`;
 
 // 生成图片（支持垫图 img2img via 用户自己的 API）
-async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string, _refStrength?: number): Promise<string | null> {
+async function generateImage(prompt: string, config: SpaceImageConfig, refImageUrl?: string): Promise<string | null> {
   try {
     // 添加画风提示词前缀
     let finalPrompt = prompt;
@@ -794,10 +793,10 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         // 加载角色垫图设置
         const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
         if (charRef) {
-          console.log("Using character reference image for space moment, strength:", charRef.refStrength);
+          console.log("Using character reference image for space moment");
         }
         
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl, charRef?.refStrength);
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");

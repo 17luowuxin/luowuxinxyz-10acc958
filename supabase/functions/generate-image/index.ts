@@ -244,33 +244,28 @@ serve(async (req) => {
         const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
         
         let refUrl = '';
-        let refStrength = 0.6;
         
         // Check cloud first
         const { data: cloudRef } = await sb.from('api_keys').select('provider, api_key')
-          .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`, `nai_ref_strength_${characterId}`]);
+          .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
         if (cloudRef) {
           const img = cloudRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
-          const str = cloudRef.find((r: any) => r.provider === `nai_ref_strength_${characterId}`);
           if (img) refUrl = img.api_key;
-          if (str) refStrength = parseFloat(str.api_key) || 0.6;
         }
         
         // Check external (override)
         if (externalUrl && externalKey) {
           const ext = createClient(externalUrl, externalKey);
           const { data: extRef } = await ext.from('api_keys').select('provider, api_key')
-            .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`, `nai_ref_strength_${characterId}`]);
+            .eq('user_id', userId).in('provider', [`nai_ref_image_${characterId}`]);
           if (extRef) {
             const img = extRef.find((r: any) => r.provider === `nai_ref_image_${characterId}`);
-            const str = extRef.find((r: any) => r.provider === `nai_ref_strength_${characterId}`);
             if (img) refUrl = img.api_key;
-            if (str) refStrength = parseFloat(str.api_key) || 0.6;
           }
         }
         
         if (refUrl) {
-          console.log('Auto-loaded character reference image for', characterId, 'strength:', refStrength);
+          console.log('Auto-loaded character reference image for', characterId);
           // Fetch the image as base64
           try {
             const imgResp = await fetch(refUrl);
