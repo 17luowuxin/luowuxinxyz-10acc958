@@ -454,9 +454,6 @@ async function generateImage(
   const msLeft = () => Math.max(2_000, deadline - Date.now());
 
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  // Reserve time for Lovable fallback so we don't end up with "Not enough time left".
-  const lovableReserve = LOVABLE_API_KEY ? 18_000 : 0;
-  const externalBudgetLeft = () => Math.max(0, msLeft() - lovableReserve - 1_000);
 
   try {
     // 添加画风提示词前缀
@@ -470,7 +467,7 @@ async function generateImage(
       try {
         console.log('Loading reference image for img2img...');
 
-        const refTimeout = Math.min(6_000, externalBudgetLeft());
+        const refTimeout = Math.min(8_000, msLeft() - 4_000);
         if (refTimeout > 2_000) {
           const imgResp = await fetchWithTimeout(refImageUrl, { method: 'GET' }, refTimeout);
           if (imgResp.ok) {
@@ -480,19 +477,20 @@ async function generateImage(
 
             const editPrompt = `${CHARACTER_CONSISTENCY_PROMPT}\n${finalPrompt}`;
 
-            const editsTimeout = Math.min(30_000, externalBudgetLeft());
-            if (editsTimeout > 2_000) {
+            // 给垫图接口充足时间（最多45s）
+            const editsTimeout = Math.min(45_000, msLeft() - 4_000);
+            if (editsTimeout > 4_000) {
               const edits = await tryImg2ImgMultipart(editPrompt, config, refDataUrl, editsTimeout);
               if (edits) return edits;
             }
 
-            const jsonTimeout = Math.min(12_000, externalBudgetLeft());
-            if (jsonTimeout > 2_000) {
+            const jsonTimeout = Math.min(20_000, msLeft() - 4_000);
+            if (jsonTimeout > 4_000) {
               const jsonEdits = await tryImg2ImgJson(editPrompt, config, refDataUrl, jsonTimeout);
               if (jsonEdits) return jsonEdits;
             }
 
-            console.log('img2img failed, will try fallback');
+            console.log('img2img failed, will try text2img fallback');
           }
         }
       } catch (e) {
@@ -500,9 +498,9 @@ async function generateImage(
       }
     }
 
-    // 文生图：先尝试用户配置接口（预算足够才试）
+    // 文生图：优先用户配置的即梦等接口，给足时间（最多50s）
     const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-    const textTimeout = Math.min(28_000, externalBudgetLeft());
+    const textTimeout = Math.min(50_000, msLeft() - 4_000);
 
     if (textTimeout > 6_000) {
       console.log('Trying external text2img...', apiUrl, 'timeoutMs:', textTimeout);
@@ -536,17 +534,16 @@ async function generateImage(
         console.error('External text2img threw error:', e instanceof Error ? e.message : e);
       }
     } else {
-      console.log('Skip external text2img due to low budget.');
+      console.log('Skip external text2img due to low budget:', textTimeout);
     }
 
-    // Lovable AI 兜底：生成 dataUrl → 上传到 chat-images → 返回 URL（避免把 base64 写进数据库）
+    // Lovable AI 兜底（仅在外部 API 全部失败且仍有剩余时间时使用）
     if (LOVABLE_API_KEY) {
-      const lovableTimeout = Math.min(16_000, msLeft() - 1_000);
+      const lovableTimeout = Math.min(16_000, msLeft() - 2_000);
       if (lovableTimeout > 4_000) {
-        console.log('Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
+        console.log('All external APIs failed. Fallback to Lovable image generation...', 'timeoutMs:', lovableTimeout);
         const lovableImage = await generateImageViaLovable(finalPrompt, config.size || '1024x1024', lovableTimeout);
         if (lovableImage) {
-          // If gateway returns a normal URL, we can use it directly; if it's a data URL, upload to storage.
           if (!lovableImage.startsWith('data:')) return lovableImage;
           const uploaded = await uploadImageDataUrlToPublicBucket(lovableImage, userId, 'space-generated');
           if (uploaded) return uploaded;
