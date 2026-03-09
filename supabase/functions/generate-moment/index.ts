@@ -562,16 +562,6 @@ async function generateImage(
   }
 }
 
-    const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
-
-    const textTimeout = Math.min(55_000, msLeft() - 1_000);
-    if (textTimeout <= 2_000) {
-      console.error('Not enough time left for text2img');
-      return null;
-    }
-
-    try {
-      const response = await fetchWithTimeout(
         apiUrl,
         {
           method: 'POST',
