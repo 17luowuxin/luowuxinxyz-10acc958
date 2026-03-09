@@ -529,8 +529,7 @@ const FriendsPage: React.FC = () => {
           .in('provider', [
             `nai_positive_${char.id}`, 
             `nai_negative_${char.id}`,
-            `nai_ref_image_${char.id}`,
-            `nai_ref_strength_${char.id}`
+            `nai_ref_image_${char.id}`
           ])
       ]);
       
