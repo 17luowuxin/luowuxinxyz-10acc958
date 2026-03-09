@@ -541,11 +541,9 @@ const FriendsPage: React.FC = () => {
         const positiveRow = naiRes.data.find(r => r.provider === `nai_positive_${char.id}`);
         const negativeRow = naiRes.data.find(r => r.provider === `nai_negative_${char.id}`);
         const refImageRow = naiRes.data.find(r => r.provider === `nai_ref_image_${char.id}`);
-        const refStrengthRow = naiRes.data.find(r => r.provider === `nai_ref_strength_${char.id}`);
         if (positiveRow) setNaiPositivePrompt(positiveRow.api_key);
         if (negativeRow) setNaiNegativePrompt(negativeRow.api_key);
         if (refImageRow) setNaiReferenceImage(refImageRow.api_key);
-        if (refStrengthRow) setNaiReferenceStrength(parseFloat(refStrengthRow.api_key) || 0.6);
       }
     } catch (err) {
       console.error('Failed to load character data:', err);
