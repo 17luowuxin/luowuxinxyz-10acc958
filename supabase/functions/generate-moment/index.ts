@@ -346,71 +346,7 @@ async function tryImg2ImgJson(
   }
 }
 
-// 生成图片（垫图优先走用户配置的 OpenAI 兼容接口；若超时/失败，使用 Lovable AI 兜底并上传到公共存储）
-function sizeToAspectHint(size?: string): string {
-  const s = (size || '').trim();
-  if (!s) return '';
-  if (s === '1024x1024') return 'square (1:1)';
-  if (s === '768x1024') return 'portrait (3:4)';
-  if (s === '1024x768') return 'landscape (4:3)';
-
-  const m = s.match(/^(\d{2,4})x(\d{2,4})$/);
-  if (!m) return '';
-  const w = Number(m[1]);
-  const h = Number(m[2]);
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '';
-  const ratio = (w / h).toFixed(2);
-  return `aspect ratio ~${ratio} (${w}x${h})`;
-}
-
-async function generateImageViaLovable(prompt: string, size: string, timeoutMs: number): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) return null;
-
-  const aspectHint = sizeToAspectHint(size);
-  const instruction = [
-    'Generate ONE high-quality image. No text overlay, no watermark.',
-    aspectHint ? `Prefer ${aspectHint}.` : '',
-    `Prompt: ${prompt}`,
-  ].filter(Boolean).join('\n');
-
-  try {
-    const resp = await fetchWithTimeout(
-      'https://ai.gateway.lovable.dev/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image',
-          messages: [{ role: 'user', content: instruction }],
-          modalities: ['image', 'text'],
-        }),
-      },
-      timeoutMs,
-    );
-
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => '');
-      console.error('Lovable image API error:', resp.status, t.slice(0, 400));
-      return null;
-    }
-
-    const data = await resp.json();
-    const imageUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
-    if (!imageUrl) {
-      console.error('Lovable image API returned no image:', JSON.stringify(data).slice(0, 500));
-      return null;
-    }
-
-    return imageUrl;
-  } catch (e) {
-    console.error('Lovable image generation threw error:', e instanceof Error ? e.message : e);
-    return null;
-  }
-}
+// 生成图片（仅使用用户配置的即梦等外部接口，不使用 Lovable AI）
 
 async function uploadImageDataUrlToPublicBucket(dataUrl: string, userId: string, prefix: string): Promise<string | null> {
   try {
