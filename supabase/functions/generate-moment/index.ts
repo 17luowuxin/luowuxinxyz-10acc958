@@ -200,38 +200,11 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
-  const b64 = uint8ToBase64(bytes);
-  return `data:${mime};base64,${b64}`;
-}
-
-function dataUrlToBytes(dataUrlOrBase64: string): { bytes: Uint8Array; mime: string; dataUrl: string } {
-  let dataUrl = dataUrlOrBase64;
-  if (!dataUrl.startsWith('data:')) dataUrl = `data:image/png;base64,${dataUrl}`;
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
-    const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, mime: 'image/png', dataUrl: `data:image/png;base64,${b64}` };
-  }
-  const mime = match[1] || 'image/png';
-  const b64 = match[2];
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return { bytes, mime, dataUrl };
-}
-
-function buildImagesEndpoint(baseUrl: string, kind: 'generations' | 'edits'): string {
+function buildImagesEndpoint(baseUrl: string): string {
   let url = baseUrl.replace(/\/+$/, '');
-
-  // If user provided the full images endpoint, normalize to requested kind.
-  url = url.replace(/\/images\/(generations|edits)\b/, `/images/${kind}`);
-
-  if (url.includes(`/images/${kind}`)) return url;
-  return `${url}/images/${kind}`;
+  url = url.replace(/\/images\/(generations|edits)\b/, '/images/generations');
+  if (url.includes('/images/generations')) return url;
+  return `${url}/images/generations`;
 }
 
 async function parseImageUrlFromResponse(response: Response): Promise<string | null> {
