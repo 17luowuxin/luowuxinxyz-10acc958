@@ -562,17 +562,6 @@ async function generateImage(
   }
 }
 
-
-            console.log('img2img failed, falling back to text2img');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load/use ref image:', e instanceof Error ? e.message : e);
-      }
-    }
-
-    // 纯文生图
-    console.log('Fallback to pure text2img...');
     const apiUrl = buildImagesEndpoint(config.apiUrl, 'generations');
 
     const textTimeout = Math.min(55_000, msLeft() - 1_000);
