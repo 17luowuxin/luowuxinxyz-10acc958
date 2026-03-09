@@ -302,7 +302,7 @@ const ChatPage: React.FC = () => {
   const [charNaiPositive, setCharNaiPositive] = useState<string>('');
   const [charNaiNegative, setCharNaiNegative] = useState<string>('');
   const [charNaiRefImage, setCharNaiRefImage] = useState<string>('');
-  const [charNaiRefStrength, setCharNaiRefStrength] = useState<number>(0.6);
+  const [charNaiRefStrength] = useState<number>(0.6); // kept for NovelAI compat only
   const [hasUnifiedImageConfig, setHasUnifiedImageConfig] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
