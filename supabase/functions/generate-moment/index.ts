@@ -114,17 +114,6 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   return { enabled, apiKey, apiUrl, model, stylePrompt, size };
 }
 
-// 获取角色专属垫图设置
-async function getCharacterRefImage(userId: string, characterId: string): Promise<{ refImageUrl: string } | null> {
-  if (!userId || !characterId) return null;
-  const settings = await fetchApiSettings(userId);
-  if (!settings) return null;
-  
-  const refUrl = settings.get(`nai_ref_image_${characterId}`) || '';
-  
-  if (!refUrl) return null;
-  return { refImageUrl: refUrl };
-}
 
 async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
   if (!userId) return null;
