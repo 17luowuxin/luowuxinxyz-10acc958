@@ -802,13 +802,8 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
         console.log("Image prompt:", imagePrompt.slice(0, 150));
         
-        // 加载角色垫图设置
-        const charRef = character?.id ? await getCharacterRefImage(userId, character.id) : null;
-        if (charRef) {
-          console.log("Using character reference image for space moment");
-        }
-        
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, charRef?.refImageUrl);
+        // 纯文生图（不使用垫图，即梦等API不支持img2img且效果差）
+        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig);
         
         if (generatedImageUrl) {
           console.log("Image generated successfully");
