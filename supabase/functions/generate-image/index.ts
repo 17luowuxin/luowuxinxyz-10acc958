@@ -244,9 +244,6 @@ serve(async (req) => {
     // Only use explicitly provided reference image (don't auto-load from DB)
     // Auto img2img disabled: 即梦等国产API不支持img2img，且会导致超时
     let effectiveRefBase64 = referenceImageBase64 || null;
-        console.error('Error loading character reference image:', e);
-      }
-    }
     
     // Determine effective action
     const effectiveAction = action || (effectiveRefBase64 ? 'edit-image' : 'generate-image');
