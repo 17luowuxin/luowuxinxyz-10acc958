@@ -886,7 +886,7 @@ const ChatPage: React.FC = () => {
           apiKeys
             .filter((k) => k.provider === provider)
             .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
-            .at(-1);
+            .pop();
 
         const customKey = pickLatest('custom');
         const deepseekKey = pickLatest('deepseek');
@@ -1223,7 +1223,7 @@ const ChatPage: React.FC = () => {
   }, []);
 
   // 长按消息显示菜单
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressRef = useRef(false);
   
   const handleMessageTouchStart = useCallback((msg: any) => {
