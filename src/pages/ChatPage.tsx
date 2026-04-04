@@ -886,7 +886,7 @@ const ChatPage: React.FC = () => {
           apiKeys
             .filter((k) => k.provider === provider)
             .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
-            .at(-1);
+            .pop();
 
         const customKey = pickLatest('custom');
         const deepseekKey = pickLatest('deepseek');
