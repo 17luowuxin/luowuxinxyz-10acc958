@@ -1223,7 +1223,7 @@ const ChatPage: React.FC = () => {
   }, []);
 
   // 长按消息显示菜单
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressRef = useRef(false);
   
   const handleMessageTouchStart = useCallback((msg: any) => {

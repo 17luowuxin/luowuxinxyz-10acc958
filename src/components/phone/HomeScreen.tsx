@@ -214,7 +214,7 @@ const HomeScreen: React.FC = () => {
   };
 
   // 长按相关状态
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPressing, setIsPressing] = useState(false);
 
   // 编辑模式下单击选择图片
