@@ -75,35 +75,50 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchPresets = async () => {
-    const { data, error } = await supabase
+    // 先尝试联表查询，失败则回退到简单查询
+    let { data, error } = await supabase
       .from('presets')
       .select('*, characters(name)')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
     if (error) {
-      console.error('Fetch presets error:', error);
+      console.warn('Fetch presets with join failed, falling back:', error.message);
+      const fallback = await supabase
+        .from('presets')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+      data = fallback.data as any;
+      if (fallback.error) console.error('Fetch presets fallback error:', fallback.error);
     }
     if (data) {
       setPresets(data.map((p: any) => ({
         ...p,
-        character_name: p.characters?.name
+        character_name: p.characters?.name || undefined
       })));
     }
   };
 
   const fetchWorldBooks = async () => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('world_books')
       .select('*, characters(name)')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
     if (error) {
-      console.error('Fetch world books error:', error);
+      console.warn('Fetch world_books with join failed, falling back:', error.message);
+      const fallback = await supabase
+        .from('world_books')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+      data = fallback.data as any;
+      if (fallback.error) console.error('Fetch world_books fallback error:', fallback.error);
     }
     if (data) {
       setWorldBooks(data.map((wb: any) => ({
         ...wb,
-        character_name: wb.characters?.name
+        character_name: wb.characters?.name || undefined
       })));
     }
   };
