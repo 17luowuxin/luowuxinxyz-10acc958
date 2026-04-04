@@ -88,7 +88,7 @@ const WorkshopPage: React.FC = () => {
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
-      data = fallback.data;
+      data = fallback.data as any;
       if (fallback.error) console.error('Fetch presets fallback error:', fallback.error);
     }
     if (data) {
