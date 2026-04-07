@@ -61,7 +61,7 @@ interface SpaceLog {
 
 const SpacePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [moments, setMoments] = useState<Moment[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
