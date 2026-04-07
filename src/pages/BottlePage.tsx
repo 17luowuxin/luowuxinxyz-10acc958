@@ -21,7 +21,7 @@ interface BottleMessage {
 
 const BottlePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const { apiConfig, loading: apiConfigLoading } = useAPIConfig();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -117,7 +117,8 @@ const BottlePage: React.FC = () => {
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
           },
-          userId: user?.id
+          userId: user?.id,
+          authSource
         }),
       });
 

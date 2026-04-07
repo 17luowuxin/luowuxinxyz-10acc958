@@ -24,29 +24,62 @@ interface AIConfig {
   defaultModel?: string;
 }
 
-async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
-  if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
-  
+// 从 Cloud 和 External 两个数据库获取 api_keys，合并结果（外部优先）
+async function fetchApiSettings(userId: string) {
+  if (!userId) return null;
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  
-  const { data: apiSettings } = await supabase
+  const cloudClient = createClient(supabaseUrl, supabaseKey);
+
+  const { data: cloudSettings } = await cloudClient
     .from('api_keys')
     .select('provider, api_key')
     .eq('user_id', userId);
+
+  const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+  const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+  let externalSettings: any[] | null = null;
+  if (extUrl && extKey) {
+    try {
+      const extClient = createClient(extUrl, extKey);
+      const { data } = await extClient
+        .from('api_keys')
+        .select('provider, api_key')
+        .eq('user_id', userId);
+      externalSettings = data;
+    } catch (e) {
+      console.warn('Failed to read external api_keys:', e);
+    }
+  }
+
+  const merged = new Map<string, string>();
+  if (cloudSettings) {
+    for (const s of cloudSettings) merged.set(s.provider, s.api_key);
+  }
+  if (externalSettings) {
+    for (const s of externalSettings) merged.set(s.provider, s.api_key);
+  }
+
+  if (merged.size === 0) return null;
+  return merged;
+}
+
+async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boolean; defaultModel: string }> {
+  if (!userId) return { useDefault: false, defaultModel: 'deepseek-chat' };
   
+  const settings = await fetchApiSettings(userId);
   let useDefault = false;
   let defaultModel = 'deepseek-chat';
   
-  if (apiSettings) {
-    const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
-    if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
+  if (settings) {
+    const defaultApiVal = settings.get('use_default_api');
+    if (defaultApiVal === 'true') {
       useDefault = true;
     }
-    const defaultModelSetting = apiSettings.find(s => s.provider === 'default_model');
-    if (defaultModelSetting) {
-      defaultModel = defaultModelSetting.api_key;
+    const defaultModelVal = settings.get('default_model');
+    if (defaultModelVal) {
+      defaultModel = defaultModelVal;
     }
   }
   return { useDefault, defaultModel };
@@ -198,12 +231,20 @@ serve(async (req) => {
   }
 
   try {
-    const { content, apiConfig, userId } = await req.json();
-    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50));
+    const { content, apiConfig, userId, authSource } = await req.json();
+    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50), 'authSource:', authSource);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const cloudClient = createClient(supabaseUrl, supabaseKey);
+
+    // 根据 authSource 选择查询用户资料的数据库
+    let supabase = cloudClient;
+    const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    if (authSource === 'external' && extUrl && extKey) {
+      supabase = createClient(extUrl, extKey);
+    }
 
     let userName = '朋友';
     let userPersona = '';

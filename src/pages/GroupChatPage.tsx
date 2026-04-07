@@ -75,7 +75,7 @@ interface Message {
 const GroupChatPage: React.FC = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [group, setGroup] = useState<any>(null);
@@ -445,6 +445,7 @@ const GroupChatPage: React.FC = () => {
       };
 
       body.userId = user?.id;
+      body.authSource = authSource;
       // 始终传递API配置
       body.userApiKey = apiConfig.apiKey;
       body.provider = apiConfig.provider;
@@ -530,6 +531,7 @@ const GroupChatPage: React.FC = () => {
             isCharacterToCharacter: true,
             triggerCharacterId: currentTrigger.characterId,
             userId: user?.id,
+            authSource,
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
           };

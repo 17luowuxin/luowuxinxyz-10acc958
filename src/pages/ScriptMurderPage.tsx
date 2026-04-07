@@ -48,7 +48,7 @@ interface SelectedCharacterForRole {
 
 const ScriptMurderPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedScript, setSelectedScript] = useState<Script | null>(null);
@@ -233,6 +233,7 @@ const ScriptMurderPage: React.FC = () => {
           question,
           apiConfig,
           userId: user?.id,
+          authSource,
         },
       });
 

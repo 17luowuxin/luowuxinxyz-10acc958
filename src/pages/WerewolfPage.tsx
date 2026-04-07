@@ -63,7 +63,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 const WerewolfPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [gameCharacters, setGameCharacters] = useState<GameCharacter[]>([]);
@@ -310,6 +310,7 @@ const WerewolfPage: React.FC = () => {
           targetName,
           apiConfig,
           userId: user?.id,
+          authSource,
         },
       });
 

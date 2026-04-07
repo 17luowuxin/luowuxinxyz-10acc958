@@ -29,7 +29,7 @@ interface GameLog {
 
 const TruthDarePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authSource } = useAuth();
   const { apiConfig, isConfigured, loading: apiConfigLoading } = useAPIConfig();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
@@ -82,7 +82,7 @@ const TruthDarePage: React.FC = () => {
   const getAIResponse = async (action: string, character: Character, targetCharacter: Character, gameHistory: string = '') => {
     try {
       const { data, error } = await supabase.functions.invoke('truth-dare', {
-        body: { action, character, targetCharacter, gameHistory, apiConfig, userId: user?.id }
+        body: { action, character, targetCharacter, gameHistory, apiConfig, userId: user?.id, authSource }
       });
       if (error) throw error;
       return data.reply;
