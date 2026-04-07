@@ -140,6 +140,8 @@ serve(async (req) => {
     // Backward-compat: normalize legacy params
     if (!persona && characterPersona) persona = characterPersona;
     if (!userApiKey && legacyApiKey) userApiKey = legacyApiKey;
+    
+    console.log('Chat request:', { characterName, hasPersona: !!persona, authSource, userId: userId?.slice(0, 8) });
 
     if (!Array.isArray(messages) || messages.length === 0) {
       if (Array.isArray(chatHistory) && chatHistory.length > 0) {
