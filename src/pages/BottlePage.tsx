@@ -117,7 +117,8 @@ const BottlePage: React.FC = () => {
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
           },
-          userId: user?.id
+          userId: user?.id,
+          authSource
         }),
       });
 
