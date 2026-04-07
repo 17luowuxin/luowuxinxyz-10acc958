@@ -454,7 +454,8 @@ const SpacePage: React.FC = () => {
             provider: apiConfig.provider,
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
-            userId: user?.id
+            userId: user?.id,
+            authSource
           }
         });
 
@@ -543,7 +544,8 @@ const SpacePage: React.FC = () => {
                 model: apiConfig.model,
                 userProfile: userProfile,
                 replyCharacterId: char.id,
-                userId: user?.id
+                userId: user?.id,
+                authSource
               }
             });
 
@@ -618,7 +620,8 @@ const SpacePage: React.FC = () => {
                 baseUrl: apiConfig.baseUrl,
                 model: apiConfig.model,
                 userProfile: userProfile,
-                userId: user?.id
+                userId: user?.id,
+                authSource
               }
             });
 
@@ -729,6 +732,7 @@ const SpacePage: React.FC = () => {
             model: apiConfig.model,
             userProfile: userProfile,
             userId: user?.id,
+            authSource,
           },
         });
 
