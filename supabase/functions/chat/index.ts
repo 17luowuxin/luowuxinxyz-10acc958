@@ -134,6 +134,7 @@ serve(async (req) => {
       clientTime,
       isAutoReply, // 自动回复标记：用户沉默2分钟后触发
       willSendImage, // 客户端预检测：此次回复后会发送图片
+      authSource, // 'external' | 'lovable-cloud' | null
     } = body ?? {};
 
     // Backward-compat: normalize legacy params
