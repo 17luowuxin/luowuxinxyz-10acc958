@@ -745,6 +745,7 @@ const ChatPage: React.FC = () => {
         characterName: character?.name, 
         characterId: characterId,
         userId: user?.id,
+        authSource,
         persona: character?.persona,
         userProfile: profile ? { nickname: profile.nickname, persona: profile.persona } : undefined,
         userApiKey: apiConfig.apiKey,
