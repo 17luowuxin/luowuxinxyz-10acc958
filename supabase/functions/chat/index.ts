@@ -134,11 +134,14 @@ serve(async (req) => {
       clientTime,
       isAutoReply, // 自动回复标记：用户沉默2分钟后触发
       willSendImage, // 客户端预检测：此次回复后会发送图片
+      authSource, // 'external' | 'lovable-cloud' | null
     } = body ?? {};
 
     // Backward-compat: normalize legacy params
     if (!persona && characterPersona) persona = characterPersona;
     if (!userApiKey && legacyApiKey) userApiKey = legacyApiKey;
+    
+    console.log('Chat request:', { characterName, hasPersona: !!persona, authSource, userId: userId?.slice(0, 8) });
 
     if (!Array.isArray(messages) || messages.length === 0) {
       if (Array.isArray(chatHistory) && chatHistory.length > 0) {
@@ -179,7 +182,20 @@ serve(async (req) => {
     if (userId && characterId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const cloudClient = createClient(supabaseUrl, supabaseKey);
+      
+      // 根据 authSource 选择数据客户端（外部用户的数据在外部数据库）
+      let supabase = cloudClient;
+      if (authSource === 'external') {
+        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+        if (externalUrl && externalKey) {
+          supabase = createClient(externalUrl, externalKey);
+          console.log('Using EXTERNAL database for data queries');
+        } else {
+          console.warn('External DB requested but not configured, falling back to Cloud');
+        }
+      }
       
       // 获取该角色的预设（角色专属 + 无角色关联的通用预设）
       const { data: presets } = await supabase
@@ -336,7 +352,16 @@ serve(async (req) => {
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      let supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // 外部用户的 API 配置存在外部数据库
+      if (authSource === 'external') {
+        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+        if (externalUrl && externalKey) {
+          supabase = createClient(externalUrl, externalKey);
+        }
+      }
       
       const { data: apiSettings } = await supabase
         .from('api_keys')
