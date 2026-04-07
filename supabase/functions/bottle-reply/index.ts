@@ -231,12 +231,20 @@ serve(async (req) => {
   }
 
   try {
-    const { content, apiConfig, userId } = await req.json();
-    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50));
+    const { content, apiConfig, userId, authSource } = await req.json();
+    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50), 'authSource:', authSource);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const cloudClient = createClient(supabaseUrl, supabaseKey);
+
+    // 根据 authSource 选择查询用户资料的数据库
+    let supabase = cloudClient;
+    const extUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const extKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    if (authSource === 'external' && extUrl && extKey) {
+      supabase = createClient(extUrl, extKey);
+    }
 
     let userName = '朋友';
     let userPersona = '';
