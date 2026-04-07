@@ -445,6 +445,7 @@ const GroupChatPage: React.FC = () => {
       };
 
       body.userId = user?.id;
+      body.authSource = authSource;
       // 始终传递API配置
       body.userApiKey = apiConfig.apiKey;
       body.provider = apiConfig.provider;
@@ -530,6 +531,7 @@ const GroupChatPage: React.FC = () => {
             isCharacterToCharacter: true,
             triggerCharacterId: currentTrigger.characterId,
             userId: user?.id,
+            authSource,
             userApiKey: apiConfig.apiKey,
             provider: apiConfig.provider,
           };
