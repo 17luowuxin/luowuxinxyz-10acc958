@@ -350,7 +350,16 @@ serve(async (req) => {
     if (userId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      let supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // 外部用户的 API 配置存在外部数据库
+      if (authSource === 'external') {
+        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+        if (externalUrl && externalKey) {
+          supabase = createClient(externalUrl, externalKey);
+        }
+      }
       
       const { data: apiSettings } = await supabase
         .from('api_keys')
