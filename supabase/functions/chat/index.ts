@@ -180,7 +180,20 @@ serve(async (req) => {
     if (userId && characterId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const cloudClient = createClient(supabaseUrl, supabaseKey);
+      
+      // 根据 authSource 选择数据客户端（外部用户的数据在外部数据库）
+      let supabase = cloudClient;
+      if (authSource === 'external') {
+        const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+        const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+        if (externalUrl && externalKey) {
+          supabase = createClient(externalUrl, externalKey);
+          console.log('Using EXTERNAL database for data queries');
+        } else {
+          console.warn('External DB requested but not configured, falling back to Cloud');
+        }
+      }
       
       // 获取该角色的预设（角色专属 + 无角色关联的通用预设）
       const { data: presets } = await supabase
