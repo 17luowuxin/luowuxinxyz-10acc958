@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.character-memory]
 verify_jwt = false
+
+[functions.delete-character]
+verify_jwt = false
