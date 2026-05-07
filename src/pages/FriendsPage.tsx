@@ -50,7 +50,7 @@ const truncateMessage = (content: string, maxLength: number = 30): string => {
 
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, authSource } = useAuth();
+  const { user, authSource, getActiveClient } = useAuth();
   const [characters, setCharacters] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [persona, setPersona] = useState('');
@@ -475,47 +475,33 @@ const FriendsPage: React.FC = () => {
       toast.error('未登录，无法删除');
       return;
     }
-    // 先清理关联数据，避免遗留
-    const relatedTables = [
-      'chat_messages',
-      'character_memories',
-      'character_extracted_memories',
-      'character_summaries',
-      'character_sprites',
-      'world_books',
-      'chat_read_status',
-      'character_blocks',
-      'pending_messages',
-      'presets',
-      'moments',
-      'diaries',
-      'dream_transactions',
-      'gift_history',
-      'gift_favorites',
-      'guestbook',
-      'vn_saves',
-    ] as const;
-    await Promise.all(
-      relatedTables.map(t =>
-        supabase.from(t as any).delete().eq('user_id', user.id).eq('character_id', id)
-      )
-    );
+    const activeClient = getActiveClient();
+    const { data: { session } } = await activeClient.auth.getSession();
 
-    const { error, count } = await supabase
-      .from('characters')
-      .delete({ count: 'exact' })
-      .eq('id', id)
-      .eq('user_id', user.id);
+    if (!session?.access_token) {
+      toast.error('登录状态已失效，请重新登录后再试');
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke('delete-character', {
+      body: { characterId: id, authSource },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
 
     if (error) {
-      console.error('[deleteCharacter] error:', error);
+      console.error('[deleteCharacter] invoke error:', error);
       toast.error('删除失败：' + error.message);
       return;
     }
-    if (!count) {
-      toast.error('删除失败：未找到该角色或没有权限（可能登录账号与角色归属不一致）');
+
+    if (!data?.success) {
+      const message = typeof data?.error === 'string' ? data.error : '未知错误';
+      toast.error('删除失败：' + message);
       return;
     }
+
     toast.success('角色已删除');
     fetchCharacters();
   };
