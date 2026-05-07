@@ -10,22 +10,24 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const BATCH_SIZE = 200;
 
 const RELATED_TABLES = [
-  'chat_messages',
-  'character_memories',
-  'character_extracted_memories',
-  'character_summaries',
-  'character_sprites',
-  'world_books',
-  'chat_read_status',
-  'character_blocks',
-  'pending_messages',
-  'presets',
-  'moments',
-  'diaries',
-  'dream_transactions',
-  'gift_history',
-  'guestbook',
-  'vn_saves',
+  { name: 'chat_messages', scopedByUser: true },
+  { name: 'character_memories', scopedByUser: true },
+  { name: 'character_extracted_memories', scopedByUser: true },
+  { name: 'character_summaries', scopedByUser: true },
+  { name: 'character_sprites', scopedByUser: true },
+  { name: 'world_books', scopedByUser: true },
+  { name: 'chat_read_status', scopedByUser: true },
+  { name: 'character_blocks', scopedByUser: true },
+  { name: 'pending_messages', scopedByUser: true },
+  { name: 'presets', scopedByUser: true },
+  { name: 'moments', scopedByUser: true },
+  { name: 'diaries', scopedByUser: true },
+  { name: 'dream_transactions', scopedByUser: true },
+  { name: 'gift_history', scopedByUser: true },
+  { name: 'guestbook', scopedByUser: true },
+  { name: 'vn_saves', scopedByUser: true },
+  { name: 'group_members', scopedByUser: false },
+  { name: 'group_messages', scopedByUser: false },
 ] as const;
 
 function isValidUUID(value: string) {
@@ -55,16 +57,22 @@ async function deleteByCharacterInBatches(
   table: string,
   userId: string,
   characterId: string,
+  scopedByUser: boolean,
 ) {
   let deleted = 0;
 
   while (true) {
-    const { data, error } = await adminClient
+    let query = adminClient
       .from(table)
       .select('id')
-      .eq('user_id', userId)
       .eq('character_id', characterId)
       .limit(BATCH_SIZE);
+
+    if (scopedByUser) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`${table}: ${error.message}`);
@@ -146,7 +154,7 @@ serve(async (req) => {
     const deletedCounts: Record<string, number> = {};
 
     for (const table of RELATED_TABLES) {
-      deletedCounts[table] = await deleteByCharacterInBatches(dataClient, table, userId, characterId);
+      deletedCounts[table.name] = await deleteByCharacterInBatches(dataClient, table.name, userId, characterId, table.scopedByUser);
     }
 
     const { error: deleteCharacterError } = await dataClient
