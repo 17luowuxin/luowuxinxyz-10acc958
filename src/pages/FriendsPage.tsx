@@ -502,6 +502,9 @@ const FriendsPage: React.FC = () => {
       return;
     }
 
+    const nextCharacters = characters.filter((char) => char.id !== id);
+    setCharacters(nextCharacters);
+    cacheCharacters(nextCharacters);
     toast.success('角色已删除');
     fetchCharacters();
   };
