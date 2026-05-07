@@ -471,7 +471,51 @@ const FriendsPage: React.FC = () => {
   };
 
   const deleteCharacter = async (id: string) => {
-    await supabase.from('characters').delete().eq('id', id);
+    if (!user?.id) {
+      toast.error('未登录，无法删除');
+      return;
+    }
+    // 先清理关联数据，避免遗留
+    const relatedTables = [
+      'chat_messages',
+      'character_memories',
+      'character_extracted_memories',
+      'character_summaries',
+      'character_sprites',
+      'world_books',
+      'chat_read_status',
+      'character_blocks',
+      'pending_messages',
+      'presets',
+      'moments',
+      'diaries',
+      'dream_transactions',
+      'gift_history',
+      'gift_favorites',
+      'guestbook',
+      'vn_saves',
+    ] as const;
+    await Promise.all(
+      relatedTables.map(t =>
+        supabase.from(t as any).delete().eq('user_id', user.id).eq('character_id', id)
+      )
+    );
+
+    const { error, count } = await supabase
+      .from('characters')
+      .delete({ count: 'exact' })
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('[deleteCharacter] error:', error);
+      toast.error('删除失败：' + error.message);
+      return;
+    }
+    if (!count) {
+      toast.error('删除失败：未找到该角色或没有权限（可能登录账号与角色归属不一致）');
+      return;
+    }
     toast.success('角色已删除');
     fetchCharacters();
   };
