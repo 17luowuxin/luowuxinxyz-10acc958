@@ -20,40 +20,61 @@ Deno.serve(async (req) => {
       )
     }
 
-    // 使用 SERVICE_ROLE_KEY 绕过 RLS
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
+    const normalizedCode = code.toUpperCase().trim()
 
-    // 查找邀请码
-    const { data: inviteCode, error: findError } = await supabase
-      .from('invite_codes')
-      .select('*')
-      .eq('code', code.toUpperCase().trim())
-      .single()
+    // 构建两个客户端：Cloud + External（管理员可能在任一实例创建邀请码）
+    const clients: { name: string; client: ReturnType<typeof createClient> }[] = []
 
-    // 使用统一的错误消息防止邀请码枚举攻击
-    // Return generic error to prevent invite code enumeration attacks
-    if (findError || !inviteCode) {
-      console.log('Invite code validation failed: code not found')
+    const cloudUrl = Deno.env.get('SUPABASE_URL')
+    const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (cloudUrl && cloudKey) {
+      clients.push({ name: 'cloud', client: createClient(cloudUrl, cloudKey) })
+    }
+
+    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
+    const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')
+    if (externalUrl && externalKey) {
+      clients.push({ name: 'external', client: createClient(externalUrl, externalKey) })
+    }
+
+    // 在两个库中查找邀请码
+    let foundClient: typeof clients[number] | null = null
+    let inviteCode: any = null
+
+    for (const c of clients) {
+      try {
+        const { data, error } = await c.client
+          .from('invite_codes')
+          .select('*')
+          .eq('code', normalizedCode)
+          .maybeSingle()
+        if (!error && data) {
+          foundClient = c
+          inviteCode = data
+          break
+        }
+      } catch (e) {
+        console.error(`Error querying ${c.name}:`, e)
+      }
+    }
+
+    if (!foundClient || !inviteCode) {
+      console.log('Invite code validation failed: code not found in any database')
       return new Response(
         JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 检查是否已使用 - 使用相同的通用错误消息
     if (inviteCode.is_used) {
-      console.log('Invite code validation failed: code already used')
+      console.log(`Invite code validation failed: code already used (${foundClient.name})`)
       return new Response(
         JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // 标记邀请码为已使用
-    const { error: updateError } = await supabase
+    const { error: updateError } = await foundClient.client
       .from('invite_codes')
       .update({
         is_used: true,
@@ -70,6 +91,7 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log(`Invite code validated successfully from ${foundClient.name}`)
     return new Response(
       JSON.stringify({ valid: true, message: '邀请码验证成功' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -78,7 +100,7 @@ Deno.serve(async (req) => {
     console.error('Error:', error)
     return new Response(
       JSON.stringify({ valid: false, message: '服务错误，请稍后重试' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
