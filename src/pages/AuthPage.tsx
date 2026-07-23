@@ -73,10 +73,14 @@ const AuthPage: React.FC = () => {
           const msg = error.message || '';
           if (msg.includes('already registered')) {
             toast.error('该邮箱已注册');
+          } else if (msg.includes('Signup is disabled') || msg.includes('not allowed')) {
+            toast.error('注册通道未开启，请联系管理员');
+          } else if (msg.includes('Email rate limit exceeded') || msg.includes('over_email_send_rate_limit') || msg.includes('rate limit')) {
+            toast.error('注册邮件发送过于频繁，请稍后再试');
           } else if (msg.includes('503') || msg.includes('upstream') || msg.includes('Service Unavailable')) {
             toast.error('服务暂时不可用，请稍后再试');
-          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch') || msg.toLowerCase().includes('load failed')) {
-            toast.error('网络连接失败，请检查网络后重试（邀请码未消耗，可再次尝试）');
+          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch') || msg.toLowerCase().includes('load failed') || msg.includes('timed out')) {
+            toast.error('注册服务器连接失败，请稍后重试（邀请码未消耗）');
           } else if (msg) {
             toast.error(msg);
           } else {
