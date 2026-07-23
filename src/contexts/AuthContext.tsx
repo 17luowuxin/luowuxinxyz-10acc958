@@ -5,6 +5,22 @@ import { externalSupabase, isExternalSupabaseProxyEnabled, switchExternalSupabas
 import { setActiveAuthSource } from '@/lib/supabase';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
+const SIGNUP_TIMEOUT_MS = 12000;
+
+const withSignupTimeout = async <T,>(promise: Promise<T>): Promise<T> => {
+  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error('Load failed: signup request timed out')), SIGNUP_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+};
 
 interface AuthContextType {
   user: User | null;
@@ -120,7 +136,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const firstResult = await externalSupabase.auth.signUp(payload);
+    const runSignup = async () => {
+      try {
+        return await withSignupTimeout(externalSupabase.auth.signUp(payload));
+      } catch (error) {
+        return { data: { user: null, session: null }, error: error as Error };
+      }
+    };
+
+    const firstResult = await runSignup();
     if (!firstResult.error) {
       return { error: null };
     }
@@ -130,13 +154,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       message.includes('Load failed') ||
       message.includes('Failed to fetch') ||
       message.includes('network') ||
-      message.includes('fetch')
+      message.includes('fetch') ||
+      message.includes('Unexpected token') ||
+      message.includes('JSON') ||
+      message.includes('timed out')
     );
 
     if (looksLikeProxyFailure) {
       console.warn('[Auth] External signup proxy failed, retrying direct connection');
       switchExternalSupabaseToDirect();
-      const retryResult = await externalSupabase.auth.signUp(payload);
+      const retryResult = await runSignup();
       return { error: retryResult.error as Error | null };
     }
 
