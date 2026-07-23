@@ -74,6 +74,15 @@ Deno.serve(async (req) => {
       )
     }
 
+    // 仅校验模式：不消费邀请码，注册成功后前端再次调用 consume=true 消费
+    if (!consume) {
+      console.log(`Invite code check-only OK from ${foundClient.name}`)
+      return new Response(
+        JSON.stringify({ valid: true, message: '邀请码有效' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { error: updateError } = await foundClient.client
       .from('invite_codes')
       .update({
@@ -91,7 +100,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`Invite code validated successfully from ${foundClient.name}`)
+    console.log(`Invite code consumed from ${foundClient.name}`)
     return new Response(
       JSON.stringify({ valid: true, message: '邀请码验证成功' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
