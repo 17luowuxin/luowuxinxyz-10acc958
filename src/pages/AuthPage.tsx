@@ -56,8 +56,9 @@ const AuthPage: React.FC = () => {
         }
         
         // 验证邀请码
+        // 1) 先仅校验邀请码（不消费）
         const { data: validateData, error: validateError } = await supabase.functions.invoke('validate-invite-code', {
-          body: { code: inviteCode, email }
+          body: { code: inviteCode, email, consume: false }
         });
         
         if (validateError || !validateData?.valid) {
@@ -66,6 +67,7 @@ const AuthPage: React.FC = () => {
           return;
         }
         
+        // 2) 注册
         const { error } = await signUp(email, password);
         if (error) {
           const msg = error.message || '';
@@ -73,14 +75,22 @@ const AuthPage: React.FC = () => {
             toast.error('该邮箱已注册');
           } else if (msg.includes('503') || msg.includes('upstream') || msg.includes('Service Unavailable')) {
             toast.error('服务暂时不可用，请稍后再试');
-          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch')) {
-            toast.error('网络连接失败，请检查网络后重试');
+          } else if (msg.includes('Failed to fetch') || msg.includes('network') || msg.includes('fetch') || msg.toLowerCase().includes('load failed')) {
+            toast.error('网络连接失败，请检查网络后重试（邀请码未消耗，可再次尝试）');
           } else if (msg) {
             toast.error(msg);
           } else {
             toast.error('注册失败，请稍后重试');
           }
         } else {
+          // 3) 注册成功后消费邀请码
+          try {
+            await supabase.functions.invoke('validate-invite-code', {
+              body: { code: inviteCode, email, consume: true }
+            });
+          } catch (e) {
+            console.warn('Failed to consume invite code after signup:', e);
+          }
           toast.success('注册成功!');
           const redirectTo = (location.state as { from?: string } | null)?.from || '/';
           navigate(redirectTo, { replace: true });
