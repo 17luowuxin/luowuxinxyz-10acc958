@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { code, email } = await req.json()
+    const { code, email, consume } = await req.json()
 
     if (!code || !email) {
       return new Response(
