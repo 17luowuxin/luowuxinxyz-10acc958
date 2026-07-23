@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.delete-character]
 verify_jwt = false
+
+[functions.register-with-invite]
+verify_jwt = false
