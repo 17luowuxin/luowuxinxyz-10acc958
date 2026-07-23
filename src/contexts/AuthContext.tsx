@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { externalSupabase, isExternalSupabaseProxyEnabled, switchExternalSupabaseToDirect } from '@/integrations/supabase/externalClient';
 import { setActiveAuthSource } from '@/lib/supabase';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
@@ -112,14 +112,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 新用户注册 - 使用外部 Supabase
   const signUp = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    const { error } = await externalSupabase.auth.signUp({
+    const payload = {
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl
       }
-    });
-    return { error: error as Error | null };
+    };
+
+    const firstResult = await externalSupabase.auth.signUp(payload);
+    if (!firstResult.error) {
+      return { error: null };
+    }
+
+    const message = firstResult.error.message || '';
+    const looksLikeProxyFailure = isExternalSupabaseProxyEnabled() && (
+      message.includes('Load failed') ||
+      message.includes('Failed to fetch') ||
+      message.includes('network') ||
+      message.includes('fetch')
+    );
+
+    if (looksLikeProxyFailure) {
+      console.warn('[Auth] External signup proxy failed, retrying direct connection');
+      switchExternalSupabaseToDirect();
+      const retryResult = await externalSupabase.auth.signUp(payload);
+      return { error: retryResult.error as Error | null };
+    }
+
+    return { error: firstResult.error as Error };
   };
 
   // 登录 - 先尝试 Cloud，失败后尝试外部
