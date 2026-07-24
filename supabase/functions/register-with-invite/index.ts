@@ -9,9 +9,11 @@ const BodySchema = z.object({
 })
 
 type ClientEntry = {
-  name: string
+  name: InviteSource
   client: ReturnType<typeof createClient>
 }
+
+type InviteSource = 'cloud' | 'external'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -77,14 +79,16 @@ Deno.serve(async (req) => {
       return json({ success: false, message: '邀请码无效或已过期' }, 400)
     }
 
-    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
-    const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')
-    if (!externalUrl || !externalKey) {
+    const authAdmin = entry.client
+    const authSource: InviteSource = entry.name === 'external' ? 'external' : 'cloud'
+
+    if (!authAdmin) {
       return json({ success: false, message: '注册服务未配置，请联系管理员' }, 500)
     }
 
-    const externalAdmin = createClient(externalUrl, externalKey)
-    const { data: created, error: createError } = await externalAdmin.auth.admin.createUser({
+    console.log(`[register-with-invite] registering ${email} in ${entry.name}`)
+
+    const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -113,24 +117,24 @@ Deno.serve(async (req) => {
     if (consumeError) {
       console.error('[register-with-invite] consume invite failed:', consumeError)
       if (created.user?.id) {
-        await externalAdmin.auth.admin.deleteUser(created.user.id).catch((error) => {
+        await authAdmin.auth.admin.deleteUser(created.user.id).catch((error) => {
           console.error('[register-with-invite] rollback user failed:', error)
         })
       }
       return json({ success: false, message: '邀请码已被使用，请换一个邀请码重试' }, 409)
     }
 
-    const { data: sessionData, error: signInError } = await externalAdmin.auth.signInWithPassword({
+    const { data: sessionData, error: signInError } = await authAdmin.auth.signInWithPassword({
       email,
       password,
     })
 
     if (signInError || !sessionData.session) {
       console.error('[register-with-invite] sign in after create failed:', signInError)
-      return json({ success: true, message: '注册成功，请返回登录', session: null })
+      return json({ success: true, message: '注册成功，请返回登录', session: null, authSource })
     }
 
-    return json({ success: true, message: '注册成功', session: sessionData.session })
+    return json({ success: true, message: '注册成功', session: sessionData.session, authSource })
   } catch (error) {
     console.error('[register-with-invite] unexpected error:', error)
     return json({ success: false, message: '服务错误，请稍后重试' }, 500)

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Heart, Sparkles, Mail, Lock, Ticket } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { cloudSupabase, supabase } from '@/lib/supabase';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 const AuthPage: React.FC = () => {
@@ -92,7 +92,11 @@ const AuthPage: React.FC = () => {
             }
 
             if (fallbackData.session) {
-              await externalSupabase.auth.setSession(fallbackData.session);
+              if (fallbackData.authSource === 'cloud') {
+                await cloudSupabase.auth.setSession(fallbackData.session);
+              } else {
+                await externalSupabase.auth.setSession(fallbackData.session);
+              }
             }
 
             toast.success(fallbackData.message || '注册成功!');
