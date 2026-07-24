@@ -9,7 +9,7 @@ const BodySchema = z.object({
 })
 
 type ClientEntry = {
-  name: string
+  name: InviteSource
   client: ReturnType<typeof createClient>
 }
 
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     }
 
     const authAdmin = entry.client
-    const authSource = entry.name === 'external' ? 'external' : 'cloud' satisfies InviteSource
+    const authSource: InviteSource = entry.name === 'external' ? 'external' : 'cloud'
 
     if (!authAdmin) {
       return json({ success: false, message: '注册服务未配置，请联系管理员' }, 500)
