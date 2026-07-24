@@ -8,6 +8,7 @@
  */
 import { supabase as cloudClient } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { supabaseProxy, isUsingProxy } from '@/integrations/supabase/proxyClient';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
 
@@ -28,9 +29,12 @@ export const setActiveAuthSource = (source: AuthSource) => {
  * - cloud 用户 → 使用 cloud
  */
 const getActiveClient = () => {
-  const client = _authSource === 'external' ? externalSupabase : cloudClient;
+  const cloud = isUsingProxy() ? supabaseProxy : cloudClient;
+  const client = _authSource === 'external' ? externalSupabase : cloud;
   return client;
 };
+
+const getCloudClient = () => isUsingProxy() ? supabaseProxy : cloudClient;
 
 /**
  * 动态代理 - 自动路由到正确的 Supabase 实例
@@ -44,7 +48,7 @@ export const supabase = new Proxy({} as typeof cloudClient, {
   get(_target, prop: string | symbol) {
     // Edge Functions 始终使用 Lovable Cloud（仅部署在 Cloud）
     if (prop === 'functions') {
-      return (cloudClient as any)[prop];
+      return (getCloudClient() as any)[prop];
     }
     
     // Storage 根据认证来源路由（外部用户使用外部存储）
