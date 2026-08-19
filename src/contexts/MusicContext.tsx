@@ -143,6 +143,34 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [user, localMode, fetchTracks, loadDefaultCover]);
 
+  const playTrack = useCallback((index: number) => {
+    const track = tracks[index];
+    if (track) {
+      setIsLoading(true);
+      setCurrentTrackId(track.id);
+      setPlaying(true);
+      setCurrentTime(0);
+      setTimeout(() => {
+        audioRef.current?.play().catch((err) => {
+          console.error('Play failed:', err);
+          setIsLoading(false);
+        });
+      }, 100);
+    }
+  }, [tracks]);
+
+  const prevTrack = useCallback(() => {
+    if (tracks.length === 0) return;
+    const prevIndex = currentTrackIndex <= 0 ? tracks.length - 1 : currentTrackIndex - 1;
+    playTrack(prevIndex);
+  }, [tracks.length, currentTrackIndex, playTrack]);
+
+  const nextTrack = useCallback(() => {
+    if (tracks.length === 0) return;
+    const nextIndex = (currentTrackIndex + 1) % tracks.length;
+    playTrack(nextIndex);
+  }, [tracks.length, currentTrackIndex, playTrack]);
+
   // Audio event listeners
   useEffect(() => {
     const audio = audioRef.current;
@@ -199,7 +227,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       audio.removeEventListener('error', handleError);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [loopMode, currentTrackIndex, tracks.length]);
+  }, [loopMode, currentTrackIndex, tracks.length, playTrack]);
 
   // Wake lock for background playback
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -252,7 +280,9 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     // Preload audio for smoother playback
     audio.preload = 'auto';
-    audio.src = currentTrack.audio_url;
+    if (audio.getAttribute('src') !== currentTrack.audio_url) {
+      audio.src = currentTrack.audio_url;
+    }
     
     if (playing) {
       audio.play().catch(console.error);
@@ -283,23 +313,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       });
     }
-  }, [currentTrack?.id]);
-
-  const playTrack = useCallback((index: number) => {
-    const track = tracks[index];
-    if (track) {
-      setIsLoading(true);
-      setCurrentTrackId(track.id);
-      setPlaying(true);
-      setCurrentTime(0);
-      setTimeout(() => {
-        audioRef.current?.play().catch((err) => {
-          console.error('Play failed:', err);
-          setIsLoading(false);
-        });
-      }, 100);
-    }
-  }, [tracks]);
+  }, [currentTrack, nextTrack, playing, prevTrack]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -310,18 +324,6 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       audio.play().catch(console.error);
     }
   }, [playing, currentTrack]);
-
-  const prevTrack = useCallback(() => {
-    if (tracks.length === 0) return;
-    const prevIndex = currentTrackIndex <= 0 ? tracks.length - 1 : currentTrackIndex - 1;
-    playTrack(prevIndex);
-  }, [tracks.length, currentTrackIndex, playTrack]);
-
-  const nextTrack = useCallback(() => {
-    if (tracks.length === 0) return;
-    const nextIndex = (currentTrackIndex + 1) % tracks.length;
-    playTrack(nextIndex);
-  }, [tracks.length, currentTrackIndex, playTrack]);
 
   const cycleLoopMode = useCallback(() => {
     const modes: LoopMode[] = ['none', 'single', 'all'];

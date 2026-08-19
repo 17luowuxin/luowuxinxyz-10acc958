@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, MessageCircle, Users, Heart, Calendar, TrendingUp, Clock } from 'lucide-react';
@@ -39,11 +39,7 @@ const StatsPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) fetchStats();
-  }, [user, localMode]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
@@ -160,7 +156,11 @@ const StatsPage: React.FC = () => {
       favoriteCharacter
     });
     setLoading(false);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) fetchStats();
+  }, [fetchStats, localMode, user]);
 
   const statCards = [
     { label: '聊天消息', value: stats.totalMessages, icon: MessageCircle, color: 'from-pink-400 to-rose-400' },

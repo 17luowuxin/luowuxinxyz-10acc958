@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Waves, Sparkles, RefreshCw, Trash2, X } from 'lucide-react';
-import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { supabase } from '@/lib/supabase';
+import { fetchEdgeFunction, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
@@ -39,11 +38,7 @@ const BottlePage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) fetchBottles();
-  }, [user, localMode]);
-
-  const fetchBottles = async () => {
+  const fetchBottles = useCallback(async () => {
     if (localMode && user?.id) {
       const data = (await getLocalTable(user.id, 'bottles'))
         .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
@@ -74,7 +69,11 @@ const BottlePage: React.FC = () => {
         created_at: b.created_at
       })));
     }
-  };
+  }, [localMode, user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) fetchBottles();
+  }, [user, localMode, fetchBottles]);
 
   const deleteBottle = async (bottleId: string) => {
     // 先更新UI
@@ -131,11 +130,10 @@ const BottlePage: React.FC = () => {
       setInput('');
       setShowCompose(false);
 
-      const response = await fetch(`${getSupabaseUrl()}/functions/v1/bottle-reply`, {
+      const response = await fetchEdgeFunction('bottle-reply', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({ 
           content: input.trim(),

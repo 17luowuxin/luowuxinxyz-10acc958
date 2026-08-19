@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+
     const { accessKey } = await req.json();
 
     if (!accessKey) {
@@ -50,8 +54,7 @@ serve(async (req) => {
         });
       }
     } else {
-      const errText = await response.text();
-      console.error('Unsplash error:', errText);
+      console.error('Unsplash API error:', response.status);
       
       let errorMessage = `API错误: ${response.status}`;
       if (response.status === 401) {
@@ -69,12 +72,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-  } catch (error: unknown) {
-    console.error('Test Unsplash error:', error);
-    const errorMessage = error instanceof Error ? error.message : '连接测试失败';
+  } catch {
+    console.error('Unsplash connection test failed');
     return new Response(JSON.stringify({ 
       success: false, 
-      error: errorMessage 
+      error: '连接测试失败'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

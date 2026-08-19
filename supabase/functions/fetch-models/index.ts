@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+
     const { apiKey, baseUrl } = await req.json();
 
     if (!apiKey || !baseUrl) {
@@ -35,8 +39,6 @@ serve(async (req) => {
       modelsUrl = `${modelsUrl}/models`;
     }
 
-    console.log('Fetching models from:', modelsUrl);
-
     const response = await fetch(modelsUrl, {
       method: 'GET',
       headers: {
@@ -46,8 +48,6 @@ serve(async (req) => {
     });
 
     const responseText = await response.text();
-    console.log('Response status:', response.status);
-    console.log('Response:', responseText.substring(0, 1000));
 
     if (!response.ok) {
       // 尝试其他常见的models端点格式
@@ -60,7 +60,6 @@ serve(async (req) => {
       for (const altUrl of alternativeUrls) {
         if (altUrl === modelsUrl) continue;
         
-        console.log('Trying alternative URL:', altUrl);
         try {
           const altResponse = await fetch(altUrl, {
             method: 'GET',
@@ -83,8 +82,8 @@ serve(async (req) => {
               });
             }
           }
-        } catch (e) {
-          console.log('Alternative URL failed:', altUrl, e);
+        } catch {
+          console.log('Alternative model URL failed');
         }
       }
 
@@ -123,11 +122,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-  } catch (error) {
-    console.error('Error:', error);
+  } catch {
+    console.error('Fetch models failed');
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error instanceof Error ? error.message : '未知错误' 
+      error: '获取模型列表失败'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

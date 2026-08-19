@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,8 +93,6 @@ async function getAICompletion(messages: any[], config: AIConfig, maxRetries = 3
   };
   let model: string;
 
-  console.log('getAICompletion called with config:', JSON.stringify(config));
-
   // 【关键修复】优先检查用户传递的自定义API配置
   if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
     let baseUrl = config.baseUrl.replace(/\/+$/, '');
@@ -156,7 +155,6 @@ async function getAICompletion(messages: any[], config: AIConfig, maxRetries = 3
 
     const data = await response.json();
     
-    console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
     
     let content = '';
     // 尝试多种格式提取内容
@@ -188,10 +186,9 @@ async function getAICompletion(messages: any[], config: AIConfig, maxRetries = 3
       content = data;
     }
     
-    console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
     
     if (!content || content.trim() === '') {
-      console.error("Empty content from API. Full response:", JSON.stringify(data));
+      console.error("Empty content from AI API");
       if (fullContent) {
         break; // 已有内容则返回
       }
@@ -231,7 +228,11 @@ serve(async (req) => {
   }
 
   try {
-    const { content, apiConfig, userId, authSource } = await req.json();
+    let { content, apiConfig, userId, authSource } = await req.json();
+    const auth = await requireUser(req, userId, authSource);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+    userId = auth.userId;
+    authSource = auth.source;
     console.log('Received bottle reply request', { authSource });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -258,7 +259,7 @@ serve(async (req) => {
     if (userProfile) {
       userName = userProfile.nickname || '朋友';
       userPersona = userProfile.persona || '';
-      console.log('Found user profile:', userName);
+      console.log('User profile loaded');
     }
 
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };

@@ -249,7 +249,7 @@ const ChatMessageBubble = memo(({
       showTimeDivider: shouldShow,
       formattedTime: shouldShow ? formatTime(currentTime) : '',
     };
-  }, [msg.created_at, prevMsg?.created_at]);
+  }, [msg.created_at, prevMsg]);
 
   const { displayContent, transferData, isCallRecord, callType, callDuration, showBubble } = useMemo(() => {
     const transferCmd = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;

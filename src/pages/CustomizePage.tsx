@@ -142,6 +142,9 @@ const CustomizePage: React.FC = () => {
   const [novelActionColor, setNovelActionColor] = useState('#9c27b0');
   const [novelThoughtColor, setNovelThoughtColor] = useState('#607d8b');
   const [localMode, setLocalMode] = useState<boolean | null>(null);
+  const fetchSettingsRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchUserProfileRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchFirstCharacterRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     if (!user) {
@@ -153,9 +156,9 @@ const CustomizePage: React.FC = () => {
 
   useEffect(() => {
     if (user && localMode !== null) {
-      fetchSettings();
-      fetchUserProfile();
-      fetchFirstCharacter();
+      void fetchSettingsRef.current();
+      void fetchUserProfileRef.current();
+      void fetchFirstCharacterRef.current();
     }
   }, [user, localMode]);
 
@@ -172,6 +175,7 @@ const CustomizePage: React.FC = () => {
       });
     }
   };
+  fetchUserProfileRef.current = fetchUserProfile;
 
   const fetchFirstCharacter = async () => {
     if (!user) return;
@@ -186,6 +190,7 @@ const CustomizePage: React.FC = () => {
       });
     }
   };
+  fetchFirstCharacterRef.current = fetchFirstCharacter;
 
   // Apply theme to document
   useEffect(() => {
@@ -249,6 +254,7 @@ const CustomizePage: React.FC = () => {
       if ((data as any).novel_thought_color) setNovelThoughtColor((data as any).novel_thought_color);
     }
   };
+  fetchSettingsRef.current = fetchSettings;
 
   const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

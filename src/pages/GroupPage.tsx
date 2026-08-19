@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, Users, MessageCircle, User, Trash2, Loader2 } from 'lucide-react';
@@ -32,14 +32,7 @@ const GroupPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchGroups();
-      fetchCharacters();
-    }
-  }, [user, localMode]);
-
-  const fetchGroups = async () => {
+  const fetchGroups = useCallback(async () => {
     if (!user?.id) return;
     if (localMode) {
       const [localGroups, localMembers, localCharacters] = await Promise.all([
@@ -73,9 +66,9 @@ const GroupPage: React.FC = () => {
       return;
     }
     setGroups(data || []);
-  };
+  }, [localMode, user]);
 
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (!user?.id) return;
     if (localMode) {
       setCharacters(await getLocalTable(user.id, 'characters'));
@@ -86,7 +79,14 @@ const GroupPage: React.FC = () => {
       .select('*')
       .eq('user_id', user?.id);
     if (data) setCharacters(data);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchGroups();
+      fetchCharacters();
+    }
+  }, [fetchCharacters, fetchGroups, localMode, user]);
 
   const createGroup = async () => {
     if (!groupName.trim()) {

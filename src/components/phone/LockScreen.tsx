@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { ChevronUp, ImagePlus, Film } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -46,12 +46,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchCustomization();
-    }
-  }, [user, localMode]);
-
   // 优化视频播放
   useEffect(() => {
     if (videoBgUrl && videoRef.current) {
@@ -73,7 +67,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     }
   }, [videoBgUrl]);
 
-  const fetchCustomization = async () => {
+  const fetchCustomization = useCallback(async () => {
     if (!user) return;
     const result = localMode
       ? { data: (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id), error: null }
@@ -93,7 +87,13 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     const videoUrl = data?.lock_screen_video_url ? String(data.lock_screen_video_url) : null;
     setBgUrl(imageUrl && localMode ? await getLocalAssetUrl(user.id, imageUrl) : imageUrl);
     setVideoBgUrl(videoUrl && localMode ? await getLocalAssetUrl(user.id, videoUrl) : videoUrl);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchCustomization();
+    }
+  }, [fetchCustomization, localMode, user]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

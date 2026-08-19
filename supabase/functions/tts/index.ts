@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+
     const { text, voiceId, ttsConfig } = await req.json();
     
     if (!text) {
@@ -61,19 +65,6 @@ serve(async (req) => {
     const isAliyun = normalizedBaseUrl.includes('aliyun') || normalizedBaseUrl.includes('alibaba');
     const isSiliconFlow = normalizedBaseUrl.includes('siliconflow');
 
-    console.log('TTS API Detection:', {
-      baseUrl: normalizedBaseUrl,
-      isVolink,
-      isOpenAILike,
-      isElevenLabs,
-      isMinimax,
-      isFishAudio,
-      isAzure,
-      isGoogleTTS,
-      isByteDance,
-      voiceId,
-    });
-
     // ===== Volink API =====
     // 文档: https://api.volink.org/
     // POST /api/v1/tts
@@ -113,7 +104,6 @@ serve(async (req) => {
         // stream: false  // 可选，默认 false
       };
       
-      console.log('Volink TTS Request:', { requestUrl, voiceId, textLength: text.length });
     } else if (isElevenLabs) {
       // ElevenLabs API format
       requestUrl = voiceId 
@@ -252,14 +242,6 @@ serve(async (req) => {
       };
     }
 
-    console.log('TTS Request:', {
-      url: requestUrl,
-      provider: isVolink ? 'Volink' : isElevenLabs ? 'ElevenLabs' : isMinimax ? 'Minimax' : 'Other',
-      bodyType: typeof requestBody === 'string' ? 'string' : 'object',
-      voiceId,
-      model
-    });
-
     const response = await fetch(requestUrl, {
       method: 'POST',
       headers,
@@ -267,8 +249,7 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('TTS API error:', response.status, errorText);
+      console.error('TTS API error:', response.status);
       
       // 解析常见错误
       let errorMessage = `TTS API error: ${response.status}`;
@@ -287,8 +268,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: errorMessage,
-          details: errorText.slice(0, 500),
-          requestUrl: requestUrl.replace(apiKey, '***'),
         }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -320,9 +299,9 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
-        console.error('No audio content in JSON response:', JSON.stringify(jsonData).slice(0, 500));
+        console.error('No audio content in TTS JSON response');
         return new Response(
-          JSON.stringify({ error: 'No audio content in response', raw: jsonData }),
+          JSON.stringify({ error: 'No audio content in response' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -348,10 +327,9 @@ serve(async (req) => {
       );
     }
   } catch (error: unknown) {
-    console.error('TTS function error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('TTS function failed');
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: 'TTS request failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

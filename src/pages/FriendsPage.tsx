@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
-import { supabase } from '@/lib/supabase';
+import { fetchEdgeFunction, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
@@ -159,21 +158,7 @@ const FriendsPage: React.FC = () => {
     toast.success('已全部标记为已读');
   };
 
-  // 初始化：先读取缓存，再从服务器更新
-  useEffect(() => {
-    if (user && localMode !== null) {
-      // 1. 先从缓存快速显示
-      const cached = getCachedCharacters();
-      if (cached && cached.length > 0) {
-        console.log('[Cache] 从缓存加载好友列表，秒开界面');
-        setCharacters(cached);
-      }
-      // 2. 然后从服务器获取最新数据
-      fetchCharacters();
-    }
-  }, [user, localMode]);
-
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (!user?.id) return;
     let charData: any[];
     let lastMessages: any[];
@@ -256,7 +241,19 @@ const FriendsPage: React.FC = () => {
     // 缓存到 LocalStorage
     cacheCharacters(sortedChars);
     console.log('[Cache] 好友列表已更新并缓存');
-  };
+  }, [cacheCharacters, localMode, user?.id]);
+
+  // 初始化：先读取缓存，再从服务器更新
+  useEffect(() => {
+    if (user && localMode !== null) {
+      const cached = getCachedCharacters();
+      if (cached && cached.length > 0) {
+        console.log('[Cache] 从缓存加载好友列表，秒开界面');
+        setCharacters(cached);
+      }
+      fetchCharacters();
+    }
+  }, [fetchCharacters, getCachedCharacters, localMode, user]);
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -880,15 +877,10 @@ const FriendsPage: React.FC = () => {
     
     setRegeneratingMemory(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
+      const resp = await fetchEdgeFunction('generate-memory-summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify({
           characterId: editingChar.id,

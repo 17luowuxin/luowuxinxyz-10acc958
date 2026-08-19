@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,6 +135,8 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt } = body;
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
     if (!prompt) {
       return new Response(JSON.stringify({ success: false, error: '请提供绘图提示词' }), {
@@ -174,7 +177,7 @@ serve(async (req) => {
       finalPrompt = `${mergedStylePrompt}, ${finalPrompt}`;
     }
 
-    console.log(`[text2img] prompt: ${finalPrompt.slice(0, 100)}, size: ${size || 'default'}`);
+  console.log(`[text2img] request size: ${size || 'default'}`);
     
     const finalSize = size || config.imageSize || '1024x1024';
     const result = await generateImage(finalPrompt, config, finalSize);

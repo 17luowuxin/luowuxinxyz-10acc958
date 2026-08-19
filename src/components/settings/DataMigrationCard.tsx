@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CloudDownload, Download, HardDrive, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,13 +6,22 @@ import { toast } from 'sonner';
 import { copyCloudDataToLocal } from '@/utils/cloudToLocalMigration';
 import {
   createLocalBackup,
+  countLocalRecords,
   downloadLocalBackup,
+  getLocalMeta,
+  getLocalStorageStatus,
   importLocalBackup,
   isLocalModeEnabled,
   LocalBackupPackage,
   requestPersistentLocalStorage,
   setLocalModeEnabled,
 } from '@/lib/localDataStore';
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024 * 1024) return `${Math.max(0, bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+};
 
 const DataMigrationCard: React.FC = () => {
   const { user } = useAuth();
@@ -21,6 +30,11 @@ const DataMigrationCard: React.FC = () => {
   const [progress, setProgress] = useState('');
   const [localReady, setLocalReady] = useState(false);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
+  const [storageStatus, setStorageStatus] = useState<Awaited<ReturnType<typeof getLocalStorageStatus>>>(null);
+
+  const refreshStorageStatus = useCallback(async () => {
+    setStorageStatus(await getLocalStorageStatus());
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -29,32 +43,38 @@ const DataMigrationCard: React.FC = () => {
       return;
     }
 
-    Promise.all([isLocalModeEnabled(user.id), createLocalBackup(user.id)])
-      .then(([enabled, backup]) => {
-        const recordCount = Object.values(backup.tables).reduce((sum, rows) => sum + rows.length, 0);
+    Promise.all([
+      isLocalModeEnabled(user.id),
+      countLocalRecords(user.id),
+      getLocalMeta<{ completed?: boolean }>(`cloud-copy:${user.id}`),
+    ])
+      .then(([enabled, recordCount, cloudCopy]) => {
         setLocalMode(enabled);
-        setLocalReady(recordCount > 0);
+        setLocalReady(recordCount > 0 && (enabled || cloudCopy?.completed === true));
       })
       .catch(() => {
         setLocalMode(false);
         setLocalReady(false);
       });
-  }, [user?.id]);
+    refreshStorageStatus();
+  }, [refreshStorageStatus, user?.id]);
 
   const handleSafeCloudCopy = async () => {
     if (!user || copying || localMode !== false) return;
     setCopying(true);
+    setLocalReady(false);
     setProgress('正在准备本机数据库...');
     try {
       const result = await copyCloudDataToLocal(user.id, (table, current, total) => {
         setProgress(`正在复制 ${table}（${current}/${total}）`);
       });
-      setLocalReady(true);
+      setLocalReady(result.completed);
       if (result.warnings.length > 0) {
-        toast.warning(`已复制 ${result.copiedRecords} 条记录和 ${result.copiedAssets} 个文件；有 ${result.warnings.length} 个网络文件未复制，云端原数据仍完整保留`, { duration: 10000 });
+        toast.warning(`有 ${result.warnings.length} 项数据或文件未复制，请检查网络后重试；暂时不能切换，云端原数据仍完整保留`, { duration: 10000 });
       } else {
         toast.success(`已安全复制 ${result.copiedRecords} 条记录和 ${result.copiedAssets} 个文件，云端原数据未改动`);
       }
+      await refreshStorageStatus();
     } catch (error) {
       toast.error(`复制中止：${error instanceof Error ? error.message : '未知错误'}。云端原数据未改动`, { duration: 10000 });
     } finally {
@@ -67,9 +87,9 @@ const DataMigrationCard: React.FC = () => {
     if (!user || !localReady || localMode) return;
     if (!window.confirm('确认开始使用本机数据？云端旧数据会保留，不会删除。')) return;
     await setLocalModeEnabled(user.id, true);
-    await requestPersistentLocalStorage();
+    const persisted = await requestPersistentLocalStorage();
     setLocalMode(true);
-    toast.success('已启用本机保存，正在重新载入');
+    toast.success(persisted ? '已启用本机保存，正在重新载入' : '已启用本机保存，请记得定期导出备份');
     setTimeout(() => window.location.reload(), 500);
   };
 
@@ -93,14 +113,21 @@ const DataMigrationCard: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
     try {
+      const currentStorage = await getLocalStorageStatus();
+      const available = currentStorage?.quota ? currentStorage.quota - currentStorage.usage : null;
+      if (available !== null && file.size > available) {
+        toast.error(`本机空间不足：备份约 ${formatBytes(file.size)}，当前剩余约 ${formatBytes(available)}`);
+        return;
+      }
       if (!window.confirm('导入会替换这台设备上的现有数据，确认继续吗？')) return;
       const parsed = JSON.parse(await file.text()) as LocalBackupPackage;
       const result = await importLocalBackup(user.id, parsed);
       await setLocalModeEnabled(user.id, true);
-      await requestPersistentLocalStorage();
+      const persisted = await requestPersistentLocalStorage();
       setLocalReady(true);
       setLocalMode(true);
-      toast.success(`已导入 ${result.records} 条数据和 ${result.assets} 个文件，正在使用本机数据`);
+      toast.success(`已导入 ${result.records} 条数据和 ${result.assets} 个文件${persisted ? '' : '，请定期导出备份'}`);
+      await refreshStorageStatus();
       setTimeout(() => window.location.reload(), 500);
     } catch (error) {
       toast.error(`导入失败：${error instanceof Error ? error.message : '备份文件无效'}`);
@@ -153,6 +180,12 @@ const DataMigrationCard: React.FC = () => {
       </div>
       <input ref={backupInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImport} />
       <p className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-2 py-1.5">卸载浏览器或清除网站数据前，请先导出备份；备份内含 API 密钥，请妥善保管。</p>
+      {storageStatus && storageStatus.quota > 0 && (
+        <p className="text-[11px] text-muted-foreground text-center">
+          本站本机空间：已用 {formatBytes(storageStatus.usage)} / 上限约 {formatBytes(storageStatus.quota)}
+          {storageStatus.persisted ? '（已持久保存）' : '（请定期备份）'}
+        </p>
+      )}
     </div>
   );
 };

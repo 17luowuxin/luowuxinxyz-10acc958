@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -146,7 +147,12 @@ serve(async (req) => {
   }
 
   try {
-    const { characterId, userId, characterName, characterPersona, authSource } = await req.json();
+    let { characterId, userId, characterName, characterPersona, authSource } = await req.json();
+
+    const auth = await requireUser(req, userId, authSource);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+    userId = auth.userId;
+    authSource = auth.source;
 
     if (!characterId || !userId) {
       return new Response(
@@ -215,7 +221,7 @@ serve(async (req) => {
       );
     }
 
-    const messages = rawMessages.reverse();
+    const messages = [...(rawMessages ?? [])].reverse();
 
     // Get existing memory (兼容外部旧表无 manually_edited)
     let existingSummary = '';

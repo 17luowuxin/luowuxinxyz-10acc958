@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -153,7 +154,6 @@ async function getAICompletion(
 
   const data = await response.json();
   
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 500));
   
   let content = '';
   let finishReason = data.choices?.[0]?.finish_reason || null;
@@ -187,7 +187,6 @@ async function getAICompletion(
     content = data;
   }
   
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY', "finish_reason:", finishReason);
   
   // 自动续写：如果 finish_reason 是 length，说明被截断了
   let fullContent = content;
@@ -239,7 +238,7 @@ async function getAICompletion(
   
   // 如果内容为空，返回更有意义的错误信息
   if (!fullContent || fullContent.trim() === '') {
-    console.error("Empty content from API. Full response:", JSON.stringify(data));
+    console.error("Empty content from AI API");
     return '(AI暂时无法回复，请稍后再试)';
   }
   
@@ -256,6 +255,8 @@ serve(async (req) => {
 
   try {
     const { messages, characters, userMessage, userApiKey, provider, baseUrl, model: customModel, userProfile, mentionedCharacterIds, userId, isCharacterToCharacter, triggerCharacterId } = await req.json();
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     
@@ -273,8 +274,6 @@ serve(async (req) => {
     const usingCustom = userApiKey && (provider === 'custom' || provider === 'deepseek' || provider === 'openai');
     console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl, model: customModel });
     console.log("Using provider:", usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : "lovable-ai"));
-    console.log("Mentioned characters:", mentionedCharacterIds);
-    console.log("Is character-to-character:", isCharacterToCharacter);
 
     const userName = userProfile?.nickname || '用户';
     const userPersona = userProfile?.persona || '';
@@ -283,7 +282,7 @@ serve(async (req) => {
     
     if (mentionedCharacterIds && mentionedCharacterIds.length > 0) {
       responders = characters.filter((c: any) => mentionedCharacterIds.includes(c.id));
-      console.log("Using mentioned characters:", responders.map((r: any) => r.name));
+      console.log("Using mentioned characters:", responders.length);
     } else if (isCharacterToCharacter && triggerCharacterId) {
       // 角色回角色模式：排除触发者，随机选一个其他角色回复
       const otherCharacters = characters.filter((c: any) => c.id !== triggerCharacterId);
@@ -291,7 +290,7 @@ serve(async (req) => {
         const shuffled = [...otherCharacters].sort(() => Math.random() - 0.5);
         responders = shuffled.slice(0, 1);
       }
-      console.log("Character-to-character mode, responder:", responders.map((r: any) => r.name));
+      console.log("Character-to-character mode enabled");
     } else {
       const shuffled = [...characters].sort(() => Math.random() - 0.5);
       responders = shuffled.slice(0, 1);

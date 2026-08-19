@@ -9,6 +9,7 @@
 import { supabase as cloudClient } from '@/integrations/supabase/client';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { supabaseProxy, isUsingProxy } from '@/integrations/supabase/proxyClient';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 
 type AuthSource = 'lovable-cloud' | 'external' | null;
 
@@ -36,6 +37,42 @@ const getActiveClient = () => {
 
 const getCloudClient = () => isUsingProxy() ? supabaseProxy : cloudClient;
 
+export const fetchEdgeFunction = async (functionName: string, init: RequestInit = {}) => {
+  const { data } = await getActiveClient().auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) {
+    throw new Error('登录状态已失效，请重新登录');
+  }
+
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${accessToken}`);
+  headers.set('apikey', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+
+  return fetch(`${getSupabaseUrl()}/functions/v1/${functionName}`, {
+    ...init,
+    headers,
+  });
+};
+
+const invokeWithActiveSession: typeof cloudClient.functions.invoke = async (functionName, options) => {
+  const activeClient = getActiveClient();
+  const { data } = await activeClient.auth.getSession();
+  const accessToken = data.session?.access_token;
+  const headers = {
+    ...(options?.headers ?? {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+
+  return getCloudClient().functions.invoke(functionName, {
+    ...options,
+    headers,
+  });
+};
+
+const authenticatedFunctions = {
+  invoke: invokeWithActiveSession,
+} as typeof cloudClient.functions;
+
 /**
  * 动态代理 - 自动路由到正确的 Supabase 实例
  * 
@@ -48,7 +85,7 @@ export const supabase = new Proxy({} as typeof cloudClient, {
   get(_target, prop: string | symbol) {
     // Edge Functions 始终使用 Lovable Cloud（仅部署在 Cloud）
     if (prop === 'functions') {
-      return (getCloudClient() as any)[prop];
+      return authenticatedFunctions;
     }
     
     // Storage 根据认证来源路由（外部用户使用外部存储）

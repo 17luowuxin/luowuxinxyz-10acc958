@@ -120,6 +120,12 @@ const SpacePage: React.FC = () => {
   const [charSelectOpen, setCharSelectOpen] = useState(false);
   const [selectedReplyChars, setSelectedReplyChars] = useState<Set<string>>(new Set());
   const [localMode, setLocalMode] = useState<boolean | null>(null);
+  const fetchUserProfileRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchSpaceBackgroundRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchCharactersRef = useRef<() => Promise<unknown>>(async () => undefined);
+  const fetchMomentsRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchGuestbookRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchSpaceLogsRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     if (!user?.id) {
@@ -132,13 +138,13 @@ const SpacePage: React.FC = () => {
   useEffect(() => {
     if (user && localMode !== null) {
       // 先加载角色，再加载说说和留言板（它们需要角色信息做 fallback）
-      fetchCharacters().then(() => {
-        fetchMoments();
-        fetchGuestbook();
+      void fetchCharactersRef.current().then(() => {
+        void fetchMomentsRef.current();
+        void fetchGuestbookRef.current();
       });
-      fetchUserProfile();
-      fetchSpaceBackground();
-      fetchSpaceLogs();
+      void fetchUserProfileRef.current();
+      void fetchSpaceBackgroundRef.current();
+      void fetchSpaceLogsRef.current();
     }
   }, [user, localMode]);
 
@@ -171,6 +177,7 @@ const SpacePage: React.FC = () => {
       .single();
     if (data) setUserProfile(data);
   };
+  fetchUserProfileRef.current = fetchUserProfile;
 
   const fetchSpaceBackground = async () => {
     if (!user?.id) return;
@@ -186,6 +193,7 @@ const SpacePage: React.FC = () => {
       .single();
     if (data?.space_background_url) setSpaceBackground(data.space_background_url);
   };
+  fetchSpaceBackgroundRef.current = fetchSpaceBackground;
 
   const fetchCharacters = async () => {
     if (localMode && user?.id) {
@@ -203,6 +211,7 @@ const SpacePage: React.FC = () => {
     }
     return [];
   };
+  fetchCharactersRef.current = fetchCharacters;
 
   const fetchMoments = async () => {
     setLoading(true);
@@ -278,6 +287,7 @@ const SpacePage: React.FC = () => {
     }
     setLoading(false);
   };
+  fetchMomentsRef.current = fetchMoments;
 
   const fetchGuestbook = async () => {
     if (!user?.id) return;
@@ -327,6 +337,7 @@ const SpacePage: React.FC = () => {
       }));
     }
   };
+  fetchGuestbookRef.current = fetchGuestbook;
 
   const fetchSpaceLogs = async () => {
     if (!user?.id) return;
@@ -345,6 +356,7 @@ const SpacePage: React.FC = () => {
       setSpaceLogs(data);
     }
   };
+  fetchSpaceLogsRef.current = fetchSpaceLogs;
 
   const handlePostLog = async () => {
     if (!user?.id || !newLogTitle.trim() || !newLogContent.trim()) return;

@@ -145,6 +145,18 @@ export async function countLocalTable(userId: string, table: string): Promise<nu
   }
 }
 
+export async function countLocalRecords(userId: string): Promise<number> {
+  const database = await openLocalDatabase();
+  try {
+    const transaction = database.transaction('records', 'readonly');
+    const count = await requestResult(transaction.objectStore('records').index('by-user').count(userId));
+    await transactionDone(transaction);
+    return count;
+  } finally {
+    database.close();
+  }
+}
+
 export async function insertLocalRow(
   userId: string,
   table: string,
@@ -244,6 +256,23 @@ export async function requestPersistentLocalStorage(): Promise<boolean> {
     return await navigator.storage.persist();
   } catch {
     return false;
+  }
+}
+
+export async function getLocalStorageStatus(): Promise<{
+  usage: number;
+  quota: number;
+  persisted: boolean;
+} | null> {
+  if (!navigator.storage?.estimate) return null;
+  try {
+    const [{ usage = 0, quota = 0 }, persisted = false] = await Promise.all([
+      navigator.storage.estimate(),
+      navigator.storage.persisted?.() ?? Promise.resolve(false),
+    ]);
+    return { usage, quota, persisted };
+  } catch {
+    return null;
   }
 }
 
@@ -361,58 +390,72 @@ export async function importLocalBackup(
   currentUserId: string,
   backup: LocalBackupPackage,
 ): Promise<{ tables: number; records: number; assets: number }> {
-  if (backup.format !== 'dream-phone-local-backup' || backup.version !== 2 || !backup.tables) {
+  if (
+    backup.format !== 'dream-phone-local-backup'
+    || backup.version !== 2
+    || !backup.tables
+    || typeof backup.userId !== 'string'
+  ) {
     throw new Error('这不是有效的梦境小手机本地备份');
   }
 
   const entries = Object.entries(backup.tables);
-  if (entries.some(([, rows]) => !Array.isArray(rows))) {
+  if (entries.some(([, rows]) => !Array.isArray(rows) || rows.some((row) => !row || typeof row !== 'object' || Array.isArray(row)))) {
     throw new Error('备份中的数据表格式不正确');
   }
-  const decodedAssets = await Promise.all((backup.assets ?? []).map(async (asset) => ({
-    sourceUrl: asset.sourceUrl,
-    blob: await fetch(asset.dataUrl).then((response) => response.blob()),
-  })));
+
+  const replacementRecords: StoredRecord[] = [];
+  const recordKeys = new Set<string>();
+  for (const [table, rows] of entries) {
+    rows.forEach((row, index) => {
+      const nextRow = { ...row };
+      if (nextRow.user_id === backup.userId) nextRow.user_id = currentUserId;
+      if (table === 'profiles' && nextRow.id === backup.userId) nextRow.id = currentUserId;
+      const recordId = getRecordId(nextRow, index);
+      const key = `${currentUserId}:${table}:${recordId}`;
+      if (recordKeys.has(key)) throw new Error(`备份中的 ${table} 存在重复数据`);
+      recordKeys.add(key);
+      replacementRecords.push({ key, userId: currentUserId, table, recordId, data: nextRow });
+    });
+  }
+
+  const decodedAssets = await Promise.all((backup.assets ?? []).map(async (asset) => {
+    if (
+      !asset
+      || typeof asset.sourceUrl !== 'string'
+      || typeof asset.dataUrl !== 'string'
+      || !asset.dataUrl.startsWith('data:')
+    ) {
+      throw new Error('备份中的文件格式不正确');
+    }
+    const response = await fetch(asset.dataUrl);
+    if (!response.ok) throw new Error('备份中的文件无法读取');
+    return { sourceUrl: asset.sourceUrl, blob: await response.blob() };
+  }));
 
   const database = await openLocalDatabase();
   try {
     const transaction = database.transaction(['records', 'assets'], 'readwrite');
-    const deleteByUser = async (storeName: 'records' | 'assets') => {
-      const request = transaction.objectStore(storeName).index('by-user').openKeyCursor(IDBKeyRange.only(currentUserId));
-      await new Promise<void>((resolve, reject) => {
-        request.onsuccess = () => {
-          const cursor = request.result;
-          if (!cursor) {
-            resolve();
-            return;
-          }
-          transaction.objectStore(storeName).delete(cursor.primaryKey);
-          cursor.continue();
-        };
-        request.onerror = () => reject(request.error ?? new Error('清理本机旧数据失败'));
-      });
-    };
-    await Promise.all([deleteByUser('records'), deleteByUser('assets')]);
+    const recordsStore = transaction.objectStore('records');
+    const assetsStore = transaction.objectStore('assets');
+    const userKeyRange = IDBKeyRange.bound(`${currentUserId}:`, `${currentUserId}:\uffff`);
+
+    recordsStore.delete(userKeyRange);
+    assetsStore.delete(userKeyRange);
+    replacementRecords.forEach((record) => recordsStore.put(record));
+    decodedAssets.forEach((asset) => assetsStore.put({
+      key: `${currentUserId}:${asset.sourceUrl}`,
+      userId: currentUserId,
+      sourceUrl: asset.sourceUrl,
+      blob: asset.blob,
+    } satisfies StoredAsset));
+
     await transactionDone(transaction);
   } finally {
     database.close();
   }
 
-  let records = 0;
-  for (const [table, rows] of entries) {
-    const reboundRows = rows.map((row) => {
-      const nextRow = { ...row };
-      if (nextRow.user_id === backup.userId) nextRow.user_id = currentUserId;
-      if (table === 'profiles' && nextRow.id === backup.userId) nextRow.id = currentUserId;
-      return nextRow;
-    });
-    await replaceLocalTable(currentUserId, table, reboundRows);
-    records += reboundRows.length;
-  }
-
-  for (const asset of decodedAssets) {
-    await saveLocalAsset(currentUserId, asset.sourceUrl, asset.blob);
-  }
+  const records = replacementRecords.length;
 
   await setLocalMeta(`backup-import:${currentUserId}`, {
     importedAt: new Date().toISOString(),

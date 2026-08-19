@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -182,7 +183,6 @@ async function getAICompletion(
     const content = extractContent(data);
 
     console.log("Finish reason:", finishReason);
-    console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
 
     return { content: (content || '').trim(), finishReason };
   };
@@ -222,6 +222,8 @@ serve(async (req) => {
 
   try {
     const { action, character, targetCharacter, gameHistory, apiConfig, userId } = await req.json();
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -137,11 +138,16 @@ serve(async (req) => {
       authSource, // 'external' | 'lovable-cloud' | null
     } = body ?? {};
 
+    const auth = await requireUser(req, userId, authSource);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+    userId = auth.userId;
+    authSource = auth.source;
+
     // Backward-compat: normalize legacy params
     if (!persona && characterPersona) persona = characterPersona;
     if (!userApiKey && legacyApiKey) userApiKey = legacyApiKey;
     
-    console.log('Chat request:', { characterName, hasPersona: !!persona, authSource, userId: userId?.slice(0, 8) });
+    console.log('Chat request authenticated:', { hasPersona: !!persona, authSource });
 
     if (!Array.isArray(messages) || messages.length === 0) {
       if (Array.isArray(chatHistory) && chatHistory.length > 0) {
@@ -916,7 +922,7 @@ ${willSendImage ? `
               if (visionResponse.ok) {
                 const visionData = await visionResponse.json();
                 imageDescription = visionData.choices?.[0]?.message?.content || '';
-                console.log("Image description from user API:", imageDescription.slice(0, 100));
+                console.log("Image description received from user API");
                 break;
               }
 
@@ -1459,7 +1465,7 @@ ${willSendImage ? `
 
     // 非SSE响应 - 读取并解析，支持自动续写
     const responseText = await response.text();
-    console.log("Response text (first 500 chars):", responseText.slice(0, 500));
+    console.log("Response text received, length:", responseText.length);
 
     let { content, finishReason } = extractContent(responseText);
     let fullContent = content;
@@ -1515,7 +1521,7 @@ ${willSendImage ? `
     }
 
     if (!fullContent) {
-      console.error("Could not extract content from response:", responseText.slice(0, 500));
+      console.error("Could not extract content from response");
       
       // 尝试检测是否是内容审核问题
       let errorMsg = "无法解析AI响应，请检查API配置是否正确";

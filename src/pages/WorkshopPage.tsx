@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Search, Users, Sparkles, BookOpen, Upload, Download, Plus, Pencil, Trash2, Globe } from 'lucide-react';
@@ -67,15 +67,7 @@ const WorkshopPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchCharacters();
-      fetchPresets();
-      fetchWorldBooks();
-    }
-  }, [user, localMode]);
-
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (localMode && user?.id) {
       const data = await getLocalTable(user.id, 'characters');
       setCharacters(data.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()));
@@ -87,9 +79,9 @@ const WorkshopPage: React.FC = () => {
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
     if (data) setCharacters(data);
-  };
+  }, [localMode, user]);
 
-  const fetchPresets = async () => {
+  const fetchPresets = useCallback(async () => {
     if (localMode && user?.id) {
       const [data, localCharacters] = await Promise.all([
         getLocalTable(user.id, 'presets'),
@@ -126,9 +118,9 @@ const WorkshopPage: React.FC = () => {
         character_name: p.characters?.name || undefined
       })));
     }
-  };
+  }, [localMode, user]);
 
-  const fetchWorldBooks = async () => {
+  const fetchWorldBooks = useCallback(async () => {
     if (localMode && user?.id) {
       const [data, localCharacters] = await Promise.all([
         getLocalTable(user.id, 'world_books'),
@@ -164,7 +156,15 @@ const WorkshopPage: React.FC = () => {
         character_name: wb.characters?.name || undefined
       })));
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchCharacters();
+      fetchPresets();
+      fetchWorldBooks();
+    }
+  }, [fetchCharacters, fetchPresets, fetchWorldBooks, localMode, user]);
 
   const handleSavePreset = async () => {
     if (!presetName.trim() || !presetContent.trim()) {

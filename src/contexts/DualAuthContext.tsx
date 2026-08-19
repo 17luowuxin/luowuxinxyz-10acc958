@@ -33,11 +33,15 @@ export const DualAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUser(session.user);
           setAuthSource('lovable-cloud');
           setLoading(false);
-        } else if (authSource === 'lovable-cloud') {
-          // 只有当当前来源是 cloud 时才清除
-          setSession(null);
-          setUser(null);
-          setAuthSource(null);
+        } else {
+          setAuthSource(currentSource => {
+            if (currentSource === 'lovable-cloud') {
+              setSession(null);
+              setUser(null);
+              return null;
+            }
+            return currentSource;
+          });
         }
       }
     );
@@ -49,11 +53,15 @@ export const DualAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUser(session.user);
           setAuthSource('external');
           setLoading(false);
-        } else if (authSource === 'external') {
-          // 只有当当前来源是 external 时才清除
-          setSession(null);
-          setUser(null);
-          setAuthSource(null);
+        } else {
+          setAuthSource(currentSource => {
+            if (currentSource === 'external') {
+              setSession(null);
+              setUser(null);
+              return null;
+            }
+            return currentSource;
+          });
         }
       }
     );

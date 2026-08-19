@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, Image as ImageIcon, FolderPlus, Folder, X, Trash2, ChevronRight } from 'lucide-react';
@@ -53,14 +53,7 @@ const AlbumPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchAlbums();
-      fetchPhotos();
-    }
-  }, [user, localMode]);
-
-  const fetchAlbums = async () => {
+  const fetchAlbums = useCallback(async () => {
     if (localMode && user?.id) {
       const data = await getLocalTable(user.id, 'albums');
       setAlbums(data.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as Album[]);
@@ -72,9 +65,9 @@ const AlbumPage: React.FC = () => {
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
     if (data) setAlbums(data);
-  };
+  }, [localMode, user]);
 
-  const fetchPhotos = async (albumId?: string) => {
+  const fetchPhotos = useCallback(async (albumId?: string) => {
     if (localMode && user?.id) {
       const data = (await getLocalTable(user.id, 'photos'))
         .filter((photo) => albumId ? photo.album_id === albumId : !photo.album_id)
@@ -96,7 +89,14 @@ const AlbumPage: React.FC = () => {
     
     const { data } = await query;
     if (data) setPhotos(data);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchAlbums();
+      fetchPhotos();
+    }
+  }, [fetchAlbums, fetchPhotos, localMode, user]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,7 +157,6 @@ async function getAICompletion(
   let finishReason = data.choices?.[0]?.finish_reason;
   console.log("Finish reason:", finishReason);
   
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
   
   let content = '';
   // 尝试多种格式提取内容
@@ -188,7 +188,6 @@ async function getAICompletion(
     content = data;
   }
   
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
   
   // 自动续写：如果 finish_reason 是 length，说明被截断了
   let fullContent = content;
@@ -239,7 +238,7 @@ async function getAICompletion(
   }
   
   if (!fullContent || fullContent.trim() === '') {
-    console.error("Empty content from API. Full response:", JSON.stringify(data));
+    console.error("Empty content from AI API");
     return '(AI暂时无法回复，请稍后再试)';
   }
   
@@ -256,6 +255,8 @@ serve(async (req) => {
 
   try {
     const { character, userComment, apiConfig, userId } = await req.json();
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
     

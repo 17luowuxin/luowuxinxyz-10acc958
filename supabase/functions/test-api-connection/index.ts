@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 // 智能构建API URL
 function buildApiUrl(baseUrl: string): string {
@@ -28,6 +29,9 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireUser(req);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+
     const { provider, apiKey, baseUrl, model } = await req.json();
 
     console.log('Testing connection for provider:', provider);
@@ -88,7 +92,6 @@ serve(async (req) => {
         }
         // 使用智能URL构建函数
         testUrl = buildApiUrl(baseUrl);
-        console.log('Built API URL:', testUrl, 'from base:', baseUrl);
         testHeaders = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
@@ -110,9 +113,6 @@ serve(async (req) => {
         });
     }
 
-    console.log('Testing URL:', testUrl);
-    console.log('Testing model:', model);
-    
     const response = await fetch(testUrl, {
       method: 'POST',
       headers: testHeaders,
@@ -121,7 +121,6 @@ serve(async (req) => {
 
     const responseText = await response.text();
     console.log('Response status:', response.status);
-    console.log('Response body:', responseText.substring(0, 500));
 
     // 检查是否有有效响应
     if (response.ok) {
@@ -178,12 +177,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-  } catch (error: unknown) {
-    console.error('Test connection error:', error);
-    const errorMessage = error instanceof Error ? error.message : '连接测试失败';
+  } catch {
+    console.error('API connection test failed');
     return new Response(JSON.stringify({ 
       success: false, 
-      error: errorMessage 
+      error: '连接测试失败'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

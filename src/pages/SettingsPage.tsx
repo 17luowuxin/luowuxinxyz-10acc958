@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X, Copy, Trash2, Upload, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -162,10 +162,6 @@ const SettingsPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) fetchApiKeys();
-  }, [user, localMode]);
-
   const removeApiKeys = async (userId: string, providers?: string[]) => {
     if (localMode) {
       await deleteLocalRows(
@@ -205,7 +201,7 @@ const SettingsPage: React.FC = () => {
     return supabase.from('api_keys').insert(rows).select();
   };
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     console.log('[Settings] Fetching API settings');
     if (!user) return;
     const result = localMode
@@ -357,7 +353,11 @@ const SettingsPage: React.FC = () => {
         setIsConfigured(true);
       }
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) fetchApiKeys();
+  }, [fetchApiKeys, localMode, user]);
 
   const fetchModels = async () => {
     if (!apiKey || !customBaseUrl) {

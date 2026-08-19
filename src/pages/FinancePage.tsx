@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Wallet, TrendingUp, History, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -37,13 +37,7 @@ const FinancePage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchTransactions();
-    }
-  }, [user, localMode]);
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     if (!user) return;
     const result = localMode
       ? {
@@ -72,7 +66,13 @@ const FinancePage: React.FC = () => {
       setTotalReceived(total);
     }
     setLoading(false);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchTransactions();
+    }
+  }, [fetchTransactions, localMode, user]);
 
   const handleReceive = async (transactionId: string) => {
     if (!user) return;

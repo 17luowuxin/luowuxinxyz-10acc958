@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Heart, Zap, Users, Loader2, RotateCcw, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -55,14 +55,7 @@ const TruthDarePage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchCharacters();
-      fetchUserProfile();
-    }
-  }, [user, localMode]);
-
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
     if (!user) return;
     const data = localMode
       ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
@@ -74,9 +67,9 @@ const TruthDarePage: React.FC = () => {
         avatar_url: avatarUrl && localMode ? await getLocalAssetUrl(user.id, avatarUrl) : avatarUrl,
       });
     }
-  };
+  }, [localMode, user]);
 
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (!user) return;
     const data = localMode
       ? (await getLocalTable(user.id, 'characters')).filter((row) => row.user_id === user.id)
@@ -88,7 +81,14 @@ const TruthDarePage: React.FC = () => {
       })));
       setCharacters(resolved as Character[]);
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchCharacters();
+      fetchUserProfile();
+    }
+  }, [fetchCharacters, fetchUserProfile, localMode, user]);
 
   const toggleCharacter = (id: string) => {
     setSelectedCharacters(prev =>

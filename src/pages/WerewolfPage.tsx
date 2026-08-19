@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Moon, Sun, Users, Skull, Shield, Eye, FlaskConical, Sword, Vote, Play, RotateCcw, Settings, User, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -101,14 +101,7 @@ const WerewolfPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchCharacters();
-      fetchUserProfile();
-    }
-  }, [user, localMode]);
-
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
     if (!user) return;
     const data = localMode
       ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
@@ -117,13 +110,13 @@ const WerewolfPage: React.FC = () => {
       const avatarUrl = data.avatar_url ? String(data.avatar_url) : null;
       setUserProfile({ avatar_url: avatarUrl && localMode ? await getLocalAssetUrl(user.id, avatarUrl) : avatarUrl });
     }
-  };
+  }, [localMode, user]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (!user) return;
     const data = localMode
       ? (await getLocalTable(user.id, 'characters')).filter((row) => row.user_id === user.id).slice(0, 8)
@@ -136,7 +129,14 @@ const WerewolfPage: React.FC = () => {
       })));
       setCharacters(resolved as Character[]);
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchCharacters();
+      fetchUserProfile();
+    }
+  }, [fetchCharacters, fetchUserProfile, localMode, user]);
 
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];

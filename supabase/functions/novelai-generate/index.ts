@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { unzipSync } from "https://esm.sh/fflate@0.8.2?deno";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,6 +213,9 @@ serve(async (req) => {
       apiKey: requestApiKey,
     } = await req.json();
 
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+
     const trimmedRequestApiKey = typeof requestApiKey === "string" ? requestApiKey.trim() : "";
 
     // 允许“测试生成”直接传 key，不强依赖数据库已保存配置
@@ -249,7 +253,7 @@ serve(async (req) => {
 
     // 自动增强提示词
     const enhancedPrompt = enhancePrompt(prompt);
-    console.log('[PromptEnhance] original:', prompt?.slice(0, 80), '=> enhanced:', enhancedPrompt?.slice(0, 120));
+    console.log('[PromptEnhance] completed');
 
     const requestedSize = resolveSize(config.size, { width: config.width, height: config.height });
     const requestWidth = parseNumber(width);

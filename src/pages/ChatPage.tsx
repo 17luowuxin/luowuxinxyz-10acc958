@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from 'react';
-import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Send, Smile, Trash2, RotateCcw, Quote, MoreVertical, X, Gift, MessageSquare, Check, ImagePlus, Sticker, Upload, Phone, Video, Volume2, VideoIcon, Play, Pause, Plus, Settings, Copy, Ban, UserPlus, Download, Keyboard } from 'lucide-react';
 import { MessageItem } from '@/components/chat/ChatMessageList';
@@ -10,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { supabase } from '@/lib/supabase';
+import { fetchEdgeFunction, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import TransferCard from '@/components/chat/TransferCard';
@@ -40,6 +39,29 @@ import {
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 import cuteBoyHead from '@/assets/bubble-frames/cute-boy-head.png';
 
+type BubbleFramePreset = {
+  type: 'css' | 'image';
+  gradient?: string;
+  borderColor?: string;
+  decorIcon: string;
+  imageUrl?: string;
+  decorImage?: string;
+  backdropFilter?: string;
+  boxShadow?: string;
+  highlight?: string;
+};
+
+const BUBBLE_FRAME_PRESETS: Record<string, BubbleFramePreset> = {
+  'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
+  'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
+  'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
+  'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
+  'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
+  'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
+  'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
+  'cute-boy': { type: 'css', gradient: '#FFFFFF', borderColor: '#000000', decorIcon: '', decorImage: cuteBoyHead },
+};
+
 const VOICE_REQUEST_KEYWORDS = [
   "发语音",
   "发个语音",
@@ -54,6 +76,10 @@ const VOICE_REQUEST_KEYWORDS = [
   "听你声音",
   "想听",
 ] as const;
+
+const SILENCE_TIMEOUT_MS = 2 * 60 * 1000;
+const BLOCKED_MESSAGE_TIMEOUT_MS = 60 * 1000;
+const AUTO_REPLY_INTERVAL_MS = 1500;
 
 const isVoiceRequestedByUser = (text: string) => {
   const t = (text ?? "").replace(/\s+/g, "");
@@ -372,10 +398,15 @@ const ChatPage: React.FC = () => {
   // 沉默自动回复相关状态（仅线上模式生效）
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoReplyingRef = useRef(false); // 防止重复触发
+  const triggerAutoReplyRef = useRef<() => Promise<void>>(async () => undefined);
 
   // 拉黑后持续消息相关状态（每1分钟尝试一次）
   const blockedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isBlockMessageSendingRef = useRef(false);
+  const resetBlockedMessageTimerRef = useRef<() => void>(() => undefined);
+  const fetchMessagesWithTransfersRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchCustomizationRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchApiConfigRef = useRef<() => Promise<void>>(async () => undefined);
   
   // 本地缓存 Hooks（秒开界面）
   const { getCache: getCachedMessages, setCache: cacheMessages, clearCache: clearMessagesCache } = useMessagesCache(user?.id, characterId);
@@ -588,10 +619,10 @@ const ChatPage: React.FC = () => {
       
       // 2. 然后从服务器获取最新数据
       fetchCharacter();
-      fetchMessagesWithTransfers();
-      fetchCustomization();
+      void fetchMessagesWithTransfersRef.current();
+      void fetchCustomizationRef.current();
       fetchProfile();
-      fetchApiConfig();
+      void fetchApiConfigRef.current();
       fetchUserStickers();
       fetchCharNaiPrompts(); // 加载角色专属NAI提示词
       
@@ -603,7 +634,7 @@ const ChatPage: React.FC = () => {
     return () => {
       setCurrentChat(null);
     };
-  }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, setCurrentChat]);
+  }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, getCachedMessages, getCachedCustomization, getCachedProfile, setCurrentChat]);
 
   // 消息变化时自动同步缓存（解决发送新消息后退出重进缓存不同步的问题）
   useEffect(() => {
@@ -741,6 +772,7 @@ const ChatPage: React.FC = () => {
       }
     }
   };
+  fetchMessagesWithTransfersRef.current = fetchMessagesWithTransfers;
   
   // 加载更多历史消息（向上滚动时触发）
   const loadMoreMessages = useCallback(async () => {
@@ -865,11 +897,10 @@ const ChatPage: React.FC = () => {
       const chatController = new AbortController();
       const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
 
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
         signal: chatController.signal,
@@ -979,6 +1010,7 @@ const ChatPage: React.FC = () => {
       cacheCustomization(data); // 缓存个性化设置
     }
   };
+  fetchCustomizationRef.current = fetchCustomization;
 
   const fetchApiConfig = async () => {
     setApiConfigLoading(true);
@@ -1122,6 +1154,7 @@ const ChatPage: React.FC = () => {
       setApiConfigLoading(false);
     }
   };
+  fetchApiConfigRef.current = fetchApiConfig;
   
   // TTS生成函数 - 返回 audioBase64，支持重试
   const generateTTSAudio = async (text: string, retries: number = 2): Promise<string | null> => {
@@ -1131,11 +1164,10 @@ const ChatPage: React.FC = () => {
     
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
+        const response = await fetchEdgeFunction('tts', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
             text,
@@ -1190,11 +1222,10 @@ const ChatPage: React.FC = () => {
     
     try {
       setTtsPlaying(true);
-      const response = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
+      const response = await fetchEdgeFunction('tts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
           text,
@@ -1566,11 +1597,10 @@ const ChatPage: React.FC = () => {
       if (apiConfig?.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig?.model) body.model = apiConfig.model;
 
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
       });
@@ -1990,11 +2020,7 @@ const ChatPage: React.FC = () => {
           }
         }
       }
-      console.log('What-doing request: extracted actions from AI reply:', promptParts.slice(0, 5));
     }
-    
-    console.log('User intent:', userIntentParts);
-    console.log('Extracted from dialogue:', dialogueContext.slice(0, 10));
 
     // 判断使用哪个API：NovelAI还是统一图片API（即梦等）
     const willUseNovelAI = Boolean(novelaiConfig?.apiKey && novelaiConfig?.enabled !== false);
@@ -2100,7 +2126,6 @@ const ChatPage: React.FC = () => {
 
       if (genderGuard) cnParts.push(genderGuard);
       const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
-      console.log('Generated image prompt (unified/jimeng):', prompt);
       return { should: true, prompt };
     }
 
@@ -2263,7 +2288,6 @@ const ChatPage: React.FC = () => {
     // 角色专属提示词优先
     if (charNaiPositive.trim()) {
       promptParts.unshift(charNaiPositive.trim());
-      console.log('Using character-specific positive prompt:', charNaiPositive.slice(0, 50));
     }
 
     // 基础提示词
@@ -2274,7 +2298,6 @@ const ChatPage: React.FC = () => {
     promptParts.push(`${character?.name || genderBase}, ${genderTag}, ${qualityTags}, simple background, white background`);
 
     const prompt = [...new Set(promptParts)].join(', ');
-    console.log('Generated image prompt:', prompt);
 
     return { should: true, prompt };
   };
@@ -2508,11 +2531,10 @@ const ChatPage: React.FC = () => {
       const chatController = new AbortController();
       const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
 
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
         signal: chatController.signal,
@@ -2587,7 +2609,7 @@ const ChatPage: React.FC = () => {
       }
       
       if (!assistantContent.trim()) {
-        console.error('Empty response from image API. Raw:', fullText.slice(0, 300));
+        console.error('Empty response from image API');
         toast.error('AI返回为空');
         setLoading(false);
         return;
@@ -2747,13 +2769,6 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
       
-      console.log('Sending chat with API config:', { 
-        hasApiKey: !!body.userApiKey, 
-        provider: body.provider, 
-        hasBaseUrl: !!body.baseUrl, 
-        model: body.model 
-      });
-      
       // Use fetch directly for streaming, with retry on network errors
       const MAX_CHAT_RETRIES = 1;
       let resp: Response | null = null;
@@ -2763,11 +2778,10 @@ const ChatPage: React.FC = () => {
         const chatTimeout = window.setTimeout(() => chatController.abort(), 95_000);
         
         try {
-          resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+          resp = await fetchEdgeFunction('chat', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
             body: JSON.stringify(body),
             signal: chatController.signal,
@@ -2837,8 +2851,6 @@ const ChatPage: React.FC = () => {
       }
       fullText += decoder.decode(); // flush remaining
       
-      console.log('Raw response preview:', fullText.slice(0, 300));
-      
       // 尝试多种解析方式
       // 1. 首先检查是否是纯JSON响应
       if (!fullText.startsWith('data:') && !fullText.includes('\ndata:')) {
@@ -2899,7 +2911,7 @@ const ChatPage: React.FC = () => {
       
       // 如果内容为空，显示详细错误
       if (!assistantContent.trim()) {
-        console.error('Empty response. Raw data:', fullText.slice(0, 500));
+        console.error('Empty response from chat API');
         toast.error('AI返回为空，请检查API配置是否正确');
         setLoading(false);
         return;
@@ -2913,7 +2925,7 @@ const ChatPage: React.FC = () => {
       
       // 检测响应是否被截断
       if (looksLikeTruncated(assistantContent)) {
-        console.warn('Response appears truncated:', assistantContent.slice(0, 100));
+        console.warn('Response appears truncated');
         // 尝试清理并继续，而不是完全丢弃
       }
       
@@ -3284,10 +3296,8 @@ const ChatPage: React.FC = () => {
       
       // 检查是否需要生成图片（小说模式和线上单消息模式）
       const canGenerateImage = Boolean(novelaiConfig?.apiKey || hasUnifiedImageConfig);
-      console.log('[ImageGen] Mode:', replyMode, 'canGenerateImage:', canGenerateImage, 'contentLen:', cleanContent?.length);
       if (canGenerateImage && cleanContent && cleanContent.trim()) {
         const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
-        console.log('[ImageGen] shouldGenerate:', should, 'prompt:', prompt?.slice(0, 80));
         if (should) {
           // 异步生成图片，不阻塞主流程
           generateNovelAIImage(prompt);
@@ -3320,15 +3330,10 @@ const ChatPage: React.FC = () => {
       if (totalMessages > 0 && messagesSinceLastSummary >= 10) {
         console.log('Triggering memory summary generation, total:', totalMessages, 'since last summary:', messagesSinceLastSummary);
         // 后台生成摘要，不阻塞UI
-        const { data: { session } } = await supabase.auth.getSession();
-        const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-        fetch(`${getSupabaseUrl()}/functions/v1/generate-memory-summary`, {
+        fetchEdgeFunction('generate-memory-summary', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
             characterId,
@@ -3368,10 +3373,6 @@ const ChatPage: React.FC = () => {
   };
   
   // 沉默自动回复功能：仅在线上模式开启时，用户2分钟不说话触发AI主动发消息
-  const SILENCE_TIMEOUT_MS = 2 * 60 * 1000; // 2分钟
-  const BLOCKED_MESSAGE_TIMEOUT_MS = 60 * 1000; // 拉黑后1分钟继续发
-  const AUTO_REPLY_INTERVAL_MS = 1500; // 连发消息间隔1.5秒
-
   const resetSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
@@ -3384,7 +3385,7 @@ const ChatPage: React.FC = () => {
     if (isBlocked) return; // 拉黑状态不走普通沉默自动回复
 
     silenceTimerRef.current = setTimeout(() => {
-      triggerAutoReply();
+      void triggerAutoReplyRef.current();
     }, SILENCE_TIMEOUT_MS);
   }, [replyMode, user?.id, characterId, character, apiConfig?.apiKey, isBlocked]);
 
@@ -3465,16 +3466,17 @@ const ChatPage: React.FC = () => {
             }
           }
           await refetchBlockStatus();
-          await fetchMessagesWithTransfers();
+          await fetchMessagesWithTransfersRef.current();
         }
       } catch (e) {
         console.error('[BlockAutoMessage] error:', e);
       } finally {
         isBlockMessageSendingRef.current = false;
-        resetBlockedMessageTimer();
+        resetBlockedMessageTimerRef.current();
       }
     }, BLOCKED_MESSAGE_TIMEOUT_MS);
-  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, localMode, refetchBlockStatus, fetchMessagesWithTransfers]);
+  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, localMode, refetchBlockStatus, saveChatMessage]);
+  resetBlockedMessageTimerRef.current = resetBlockedMessageTimer;
 
   const triggerAutoReply = async () => {
     // 防止重复触发
@@ -3519,11 +3521,10 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
 
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
       });
@@ -3637,6 +3638,7 @@ const ChatPage: React.FC = () => {
     isAutoReplyingRef.current = false;
     resetSilenceTimer();
   };
+  triggerAutoReplyRef.current = triggerAutoReply;
   
   // 页面加载和replyMode变化时管理沉默计时器
   useEffect(() => {
@@ -3687,21 +3689,6 @@ const ChatPage: React.FC = () => {
   const userAvatarFrame = (customization as any).avatar_frame_url || '';
   const friendAvatarFrame = (customization as any).friend_avatar_frame_url || '';
   
-// 气泡框预设 - 带三丽鸥装饰 + 头像装饰
-  const bubbleFramePresets: Record<string, { type: 'css' | 'image'; gradient?: string; borderColor?: string; decorIcon: string; imageUrl?: string; decorImage?: string; backdropFilter?: string; boxShadow?: string; highlight?: string }> = {
-    'cute-pink': { type: 'css', gradient: 'linear-gradient(135deg, #FFE4EC 0%, #FFB5C5 100%)', borderColor: '#FFB5C5', decorIcon: '🎀' },
-    'cute-blue': { type: 'css', gradient: 'linear-gradient(135deg, #E4F4FF 0%, #B5D8FF 100%)', borderColor: '#B5D8FF', decorIcon: '☁️' },
-    'cute-yellow': { type: 'css', gradient: 'linear-gradient(135deg, #FFF9E4 0%, #FFFAB5 100%)', borderColor: '#FFE066', decorIcon: '⭐' },
-    'cute-green': { type: 'css', gradient: 'linear-gradient(135deg, #E4FFF4 0%, #B5FFD8 100%)', borderColor: '#B5FFD8', decorIcon: '🍀' },
-    'cute-purple': { type: 'css', gradient: 'linear-gradient(135deg, #F4E4FF 0%, #E5B5FF 100%)', borderColor: '#E5B5FF', decorIcon: '💜' },
-    // 水滴透明磨砂气泡框 - 高光立体效果
-    'water-drop': { type: 'css', gradient: 'linear-gradient(145deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.4) 15%, rgba(200,230,255,0.35) 40%, rgba(170,210,255,0.25) 70%, rgba(255,255,255,0.5) 100%)', borderColor: 'rgba(255,255,255,0.8)', decorIcon: '', backdropFilter: 'blur(12px) saturate(180%)', boxShadow: 'inset 0 4px 12px rgba(255,255,255,0.9), inset 0 -3px 8px rgba(100,180,255,0.25), inset 3px 0 8px rgba(255,255,255,0.5), inset -3px 0 8px rgba(255,255,255,0.5), 0 6px 20px rgba(80,140,200,0.3), 0 2px 6px rgba(255,255,255,0.6)', highlight: 'radial-gradient(ellipse 70% 50% at 25% 15%, rgba(255,255,255,0.8) 0%, transparent 60%)' },
-    // 带卡通头像装饰的黑红渐变气泡框
-    'anime-head': { type: 'css', gradient: 'linear-gradient(180deg, #1a1a1a 0%, #2a0000 50%, #8b0000 100%)', borderColor: '#8b0000', decorIcon: '', decorImage: animeHeadDecor },
-    // 可爱男孩气泡框 - 白底黑边+边缘贴卡通小人
-    'cute-boy': { type: 'css', gradient: '#FFFFFF', borderColor: '#000000', decorIcon: '', decorImage: cuteBoyHead },
-  };
-  
   const userBubbleFrame = (customization as any).bubble_frame_url || '';
   const friendBubbleFrame = (customization as any).friend_bubble_frame_url || '';
   
@@ -3720,7 +3707,7 @@ const ChatPage: React.FC = () => {
 
   const getBubbleBackgroundStyle = useCallback((isUser: boolean): React.CSSProperties => {
     const frameId = isUser ? userBubbleFrame : friendBubbleFrame;
-    const frame = bubbleFramePresets[frameId];
+    const frame = BUBBLE_FRAME_PRESETS[frameId];
     
     if (frame) {
       if (frame.type === 'image' && frame.imageUrl) {
@@ -3755,10 +3742,10 @@ const ChatPage: React.FC = () => {
     return { backgroundColor: hex };
   }, [userBubbleFrame, friendBubbleFrame, userBubbleColor, friendBubbleColor]);
 
-  const userBubbleDecor = useMemo(() => bubbleFramePresets[userBubbleFrame]?.decorIcon || null, [userBubbleFrame]);
-  const friendBubbleDecor = useMemo(() => bubbleFramePresets[friendBubbleFrame]?.decorIcon || null, [friendBubbleFrame]);
-  const userBubbleDecorImage = useMemo(() => bubbleFramePresets[userBubbleFrame]?.decorImage || null, [userBubbleFrame]);
-  const friendBubbleDecorImage = useMemo(() => bubbleFramePresets[friendBubbleFrame]?.decorImage || null, [friendBubbleFrame]);
+  const userBubbleDecor = useMemo(() => BUBBLE_FRAME_PRESETS[userBubbleFrame]?.decorIcon || null, [userBubbleFrame]);
+  const friendBubbleDecor = useMemo(() => BUBBLE_FRAME_PRESETS[friendBubbleFrame]?.decorIcon || null, [friendBubbleFrame]);
+  const userBubbleDecorImage = useMemo(() => BUBBLE_FRAME_PRESETS[userBubbleFrame]?.decorImage || null, [userBubbleFrame]);
+  const friendBubbleDecorImage = useMemo(() => BUBBLE_FRAME_PRESETS[friendBubbleFrame]?.decorImage || null, [friendBubbleFrame]);
 
   // 选择表情包图片（先预览，不立即上传）
   const handleStickerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4040,11 +4027,10 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
       
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
       });
@@ -4226,12 +4212,11 @@ const ChatPage: React.FC = () => {
         const controller = new AbortController();
         const ttsTimeout = window.setTimeout(() => controller.abort(), 8000);
 
-        const ttsResp = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
+        const ttsResp = await fetchEdgeFunction('tts', {
           method: 'POST',
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
             text: greeting,
@@ -4500,11 +4485,10 @@ const ChatPage: React.FC = () => {
       if (apiConfig.baseUrl) body.baseUrl = apiConfig.baseUrl;
       if (apiConfig.model) body.model = apiConfig.model;
 
-      const resp = await fetch(`${getSupabaseUrl()}/functions/v1/chat`, {
+      const resp = await fetchEdgeFunction('chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify(body),
       });
@@ -4573,18 +4557,15 @@ const ChatPage: React.FC = () => {
         if (ttsConfig?.enabled && ttsConfig.apiKey && ttsConfig.baseUrl && character?.voice_id) {
           setIsAISpeaking(true);
           
-          console.log('Generating TTS for:', assistantContent.slice(0, 50));
-          
           // TTS请求带超时（8秒）
           const ttsController = new AbortController();
           const ttsTimeout = setTimeout(() => ttsController.abort(), 8000);
           
           try {
-            const ttsResp = await fetch(`${getSupabaseUrl()}/functions/v1/tts`, {
+            const ttsResp = await fetchEdgeFunction('tts', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
               },
               body: JSON.stringify({
                 text: assistantContent,
@@ -4600,7 +4581,6 @@ const ChatPage: React.FC = () => {
             clearTimeout(ttsTimeout);
             
             const ttsData = await ttsResp.json();
-            console.log('TTS response:', ttsResp.ok, 'hasAudio:', !!ttsData.audioContent, 'error:', ttsData.error);
             
             if (ttsData.audioContent) {
               audioBase64 = ttsData.audioContent;
@@ -4643,7 +4623,7 @@ const ChatPage: React.FC = () => {
     }
 
     setCallLoading(false);
-  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, audioQueue]);
+  }, [callMessages, character, characterId, user?.id, profile, apiConfig, ttsConfig, showCallDialog, callLoading, audioQueue, authSource]);
 
   // 更新自动发送函数引用
   useEffect(() => {

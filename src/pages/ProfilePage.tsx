@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,11 +33,7 @@ const ProfilePage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) fetchProfile();
-  }, [user, localMode]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
     const data = localMode
       ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
@@ -47,7 +43,11 @@ const ProfilePage: React.FC = () => {
       setPersona(String(data.persona || ''));
       setAvatarUrl(String(data.avatar_url || ''));
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) fetchProfile();
+  }, [fetchProfile, localMode, user]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

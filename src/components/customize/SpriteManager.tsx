@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { User, Upload, X, Image, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
@@ -56,23 +56,11 @@ const SpriteManager: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchCharacters();
-    }
-  }, [user, localMode]);
-
-  useEffect(() => {
-    if (selectedCharacter) {
-      fetchSprites(selectedCharacter.id);
-    }
-  }, [selectedCharacter]);
-
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (localMode && user?.id) {
       const data = await getLocalTable(user.id, 'characters');
       setCharacters(data as unknown as Character[]);
-      if (data.length > 0 && !selectedCharacter) setSelectedCharacter(data[0] as unknown as Character);
+      if (data.length > 0) setSelectedCharacter((current) => current ?? data[0] as unknown as Character);
       return;
     }
     const { data } = await supabase
@@ -81,13 +69,11 @@ const SpriteManager: React.FC = () => {
       .eq('user_id', user?.id);
     if (data) {
       setCharacters(data);
-      if (data.length > 0 && !selectedCharacter) {
-        setSelectedCharacter(data[0]);
-      }
+      if (data.length > 0) setSelectedCharacter((current) => current ?? data[0]);
     }
-  };
+  }, [localMode, user]);
 
-  const fetchSprites = async (characterId: string) => {
+  const fetchSprites = useCallback(async (characterId: string) => {
     if (localMode && user?.id) {
       const data = (await getLocalTable(user.id, 'character_sprites')).filter((row) => row.character_id === characterId);
       setSprites(data as unknown as Sprite[]);
@@ -101,7 +87,19 @@ const SpriteManager: React.FC = () => {
     if (data) {
       setSprites(data);
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchCharacters();
+    }
+  }, [fetchCharacters, localMode, user]);
+
+  useEffect(() => {
+    if (selectedCharacter) {
+      fetchSprites(selectedCharacter.id);
+    }
+  }, [fetchSprites, selectedCharacter]);
 
   const handleMainSpriteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, Heart, Smile, Meh, Frown, Star, Pencil, Trash2, X } from 'lucide-react';
@@ -54,14 +54,7 @@ const DiaryPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchEntries();
-      fetchCharacters();
-    }
-  }, [user, localMode]);
-
-  const fetchEntries = async () => {
+  const fetchEntries = useCallback(async () => {
     if (localMode && user?.id) {
       const [diaries, localCharacters] = await Promise.all([
         getLocalTable(user.id, 'diaries'),
@@ -89,9 +82,9 @@ const DiaryPage: React.FC = () => {
         character_avatar: d.characters?.avatar_url
       })));
     }
-  };
+  }, [localMode, user]);
 
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     if (localMode && user?.id) {
       setCharacters(await getLocalTable(user.id, 'characters'));
       return;
@@ -101,7 +94,14 @@ const DiaryPage: React.FC = () => {
       .select('id, name, avatar_url')
       .eq('user_id', user?.id);
     if (data) setCharacters(data);
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchEntries();
+      fetchCharacters();
+    }
+  }, [fetchCharacters, fetchEntries, localMode, user]);
 
   const handleSave = async () => {
     if (!content.trim()) {

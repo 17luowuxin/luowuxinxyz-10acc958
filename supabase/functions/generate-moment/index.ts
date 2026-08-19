@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -201,7 +202,7 @@ async function parseImageUrlFromResponse(response: Response): Promise<string | n
   if (data.images?.[0]?.b64_json) return `data:image/png;base64,${data.images[0].b64_json}`;
   if (data.output?.url) return data.output.url;
 
-  console.log('No image URL found in response:', JSON.stringify(data).slice(0, 500));
+  console.log('No image URL found in response');
   return null;
 }
 
@@ -215,7 +216,7 @@ async function generateImage(
     let finalPrompt = prompt;
     if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
 
-    console.log('Text2img with prompt:', finalPrompt.slice(0, 100), 'size:', config.size || '1024x1024');
+    console.log('Text2img request size:', config.size || '1024x1024');
 
     const apiUrl = buildImagesEndpoint(config.apiUrl);
 
@@ -337,7 +338,6 @@ async function getAICompletion(
     console.warn("Response was truncated due to max_tokens limit");
   }
   
-  console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
   
   let content = '';
   if (data.choices?.[0]?.message?.content) {
@@ -368,10 +368,9 @@ async function getAICompletion(
     content = data;
   }
   
-  console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
   
   if (!content || content.trim() === '') {
-    console.error("Empty content from API. Full response:", JSON.stringify(data));
+    console.error("Empty content from AI API");
     const fallbackContents = [
       '今天也是元气满满的一天呢~ ✨',
       '刚刚看到了很美的风景，想分享给你们！🌸',
@@ -544,6 +543,8 @@ serve(async (req) => {
 
   try {
     const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
     const cloudUrl = Deno.env.get('SUPABASE_URL')!;
     const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -663,7 +664,7 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     const usingCustom = userApiKey && (provider === 'custom' || provider === 'deepseek' || provider === 'openai');
     console.log("API Config received:", { hasApiKey: !!userApiKey, provider, hasBaseUrl: !!baseUrl });
     console.log(`Using provider: ${usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : 'lovable-ai')}`);
-    console.log(`User: ${userName}, hasImages: ${!!userImages}`);
+    console.log(`Moment request has images: ${!!userImages}`);
 
     const content = await getAICompletion(
       [{ role: "user", content: prompt }],
@@ -703,7 +704,6 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
-        console.log("Image prompt:", imagePrompt.slice(0, 150));
         
         const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId);
         

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Upload, Trash2, Plus, Save, Shield, Image, MessageCircle, Users, Music, Settings, Camera, User, Palette, Star, Gamepad2, Mail, BookOpen, BarChart3, Hammer, Wallet, Edit, X, LayoutGrid, TrendingUp, Calendar, AlertTriangle, Clock, RefreshCw, Megaphone, Search, KeyRound, Ticket } from 'lucide-react';
@@ -181,15 +181,7 @@ const AdminPage: React.FC = () => {
   const [themeForm, setThemeForm] = useState<ThemeForm>(emptyForm);
   const [uploading, setUploading] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      checkAdminRole();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const checkAdminRole = async () => {
+  const checkAdminRole = useCallback(async () => {
     if (!user) return;
     
     try {
@@ -206,13 +198,27 @@ const AdminPage: React.FC = () => {
         setNeedsPasswordVerification(true);
       } else {
         setIsAdmin(false);
+        setIsAuthenticated(false);
+        setNeedsPasswordVerification(false);
       }
     } catch (err) {
       console.error('Error checking admin role:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      setLoading(true);
+      checkAdminRole();
+    } else {
+      setIsAdmin(false);
+      setIsAuthenticated(false);
+      setNeedsPasswordVerification(false);
+      setLoading(false);
+    }
+  }, [checkAdminRole, user]);
 
   // 验证管理员密码
   const verifyAdminPassword = async () => {

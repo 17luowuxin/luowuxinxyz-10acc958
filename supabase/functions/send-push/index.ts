@@ -6,18 +6,12 @@ import {
   type PushSubscription,
   type VapidKeys,
 } from "https://esm.sh/@block65/webcrypto-web-push@1.0.2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
-
-function extractBearerToken(req: Request): string {
-  const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader) return '';
-  if (authHeader.toLowerCase().startsWith('bearer ')) return authHeader.slice(7);
-  return authHeader;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -34,29 +28,21 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[send-push] Sending notification to user ${userId} for character ${characterName || characterId}`);
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const useExternal = auth.source === 'external';
+    const supabaseUrl = useExternal
+      ? Deno.env.get('EXTERNAL_SUPABASE_URL')!
+      : Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = useExternal
+      ? Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')!
+      : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || '';
     const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || '';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Security: if called by a normal user session, only allow sending to themselves.
-    // (Internal server-to-server calls may use the service role key.)
-    const bearer = extractBearerToken(req);
-    let effectiveUserId = userId as string;
-    if (bearer && bearer !== supabaseServiceKey) {
-      const { data: authData, error: authError } = await supabase.auth.getUser(bearer);
-      if (authError || !authData?.user) {
-        return new Response(
-          JSON.stringify({ error: 'Unauthorized' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      effectiveUserId = authData.user.id;
-    }
+    const effectiveUserId = auth.userId;
 
     // Get user's push subscriptions
     const { data: subscriptions, error: subError } = await supabase

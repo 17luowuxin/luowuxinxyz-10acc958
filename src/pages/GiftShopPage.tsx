@@ -137,6 +137,11 @@ const GiftShopPage: React.FC = () => {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [giftHistory, setGiftHistory] = useState<HistoryItem[]>([]);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
+  const fetchCustomImagesRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchBalanceRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchCharactersRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchFavoritesRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchGiftHistoryRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     if (!user?.id) {
@@ -148,11 +153,11 @@ const GiftShopPage: React.FC = () => {
 
   useEffect(() => {
     if (user && localMode !== null) {
-      fetchBalance();
-      fetchCharacters();
-      fetchFavorites();
-      fetchGiftHistory();
-      fetchCustomImages();
+      void fetchBalanceRef.current();
+      void fetchCharactersRef.current();
+      void fetchFavoritesRef.current();
+      void fetchGiftHistoryRef.current();
+      void fetchCustomImagesRef.current();
     }
   }, [user, localMode]);
 
@@ -170,6 +175,7 @@ const GiftShopPage: React.FC = () => {
       }));
     }
   };
+  fetchCustomImagesRef.current = fetchCustomImages;
 
   const fetchBalance = async () => {
     if (!user?.id) return;
@@ -182,6 +188,7 @@ const GiftShopPage: React.FC = () => {
       setBalance(total);
     }
   };
+  fetchBalanceRef.current = fetchBalance;
 
   const fetchCharacters = async () => {
     if (!user?.id) return;
@@ -193,6 +200,7 @@ const GiftShopPage: React.FC = () => {
       setCharacters(data);
     }
   };
+  fetchCharactersRef.current = fetchCharacters;
 
   const fetchFavorites = async () => {
     if (!user) return;
@@ -204,6 +212,7 @@ const GiftShopPage: React.FC = () => {
       setFavorites(data as FavoriteItem[]);
     }
   };
+  fetchFavoritesRef.current = fetchFavorites;
 
   const fetchGiftHistory = async () => {
     if (!user) return;
@@ -215,6 +224,7 @@ const GiftShopPage: React.FC = () => {
       setGiftHistory(data as HistoryItem[]);
     }
   };
+  fetchGiftHistoryRef.current = fetchGiftHistory;
 
   // 收藏/取消收藏
   const toggleFavorite = async (gift: GiftItem) => {

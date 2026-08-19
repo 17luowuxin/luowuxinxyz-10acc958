@@ -111,8 +111,12 @@ const GroupChatPage: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
   const bgInputRef = useRef<HTMLInputElement>(null);
+  const fetchGroupRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchMessagesRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchCustomizationRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchApiConfigRef = useRef<() => Promise<void>>(async () => undefined);
+  const fetchUserProfileRef = useRef<() => Promise<void>>(async () => undefined);
   
   // 热闹模式和角色互动设置
   const [livelyMode, setLivelyMode] = useState(false);
@@ -134,11 +138,11 @@ const GroupChatPage: React.FC = () => {
 
   useEffect(() => {
     if (user && groupId && localMode !== null) {
-      fetchGroup();
-      fetchMessages();
-      fetchCustomization();
-      fetchApiConfig();
-      fetchUserProfile();
+      void fetchGroupRef.current();
+      void fetchMessagesRef.current();
+      void fetchCustomizationRef.current();
+      void fetchApiConfigRef.current();
+      void fetchUserProfileRef.current();
     }
   }, [user, groupId, localMode]);
 
@@ -225,6 +229,7 @@ const GroupChatPage: React.FC = () => {
       toast.error('加载群聊失败');
     }
   };
+  fetchGroupRef.current = fetchGroup;
 
   // 保存互动设置到数据库
   const saveInteractionSettings = async (newSettings: typeof interactionSettings, newLivelyMode?: boolean) => {
@@ -294,6 +299,7 @@ const GroupChatPage: React.FC = () => {
       })));
     }
   };
+  fetchMessagesRef.current = fetchMessages;
 
   const fetchCustomization = async () => {
     if (localMode && user?.id) {
@@ -308,6 +314,7 @@ const GroupChatPage: React.FC = () => {
       .single();
     if (data) setCustomization(data);
   };
+  fetchCustomizationRef.current = fetchCustomization;
 
   const fetchApiConfig = async () => {
     setApiConfigLoading(true);
@@ -349,6 +356,7 @@ const GroupChatPage: React.FC = () => {
       setApiConfigLoading(false);
     }
   };
+  fetchApiConfigRef.current = fetchApiConfig;
 
   const fetchUserProfile = async () => {
     if (localMode && user?.id) {
@@ -363,6 +371,7 @@ const GroupChatPage: React.FC = () => {
       .single();
     if (data) setUserProfile(data);
   };
+  fetchUserProfileRef.current = fetchUserProfile;
 
   // 处理输入变化，检测@符号
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

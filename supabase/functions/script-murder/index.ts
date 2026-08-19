@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -160,7 +161,6 @@ async function getAICompletion(
       console.warn("Response was truncated due to max_tokens limit");
     }
     
-    console.log("AI API raw response:", JSON.stringify(data).slice(0, 800));
     
     let content = '';
     if (data.choices?.[0]?.message?.content) {
@@ -191,10 +191,9 @@ async function getAICompletion(
       content = data;
     }
     
-    console.log("Extracted content:", content?.slice(0, 200) || 'EMPTY');
     
     if (!content || content.trim() === '') {
-      console.error("Empty content from API. Full response:", JSON.stringify(data));
+      console.error("Empty content from AI API");
       return '(AI暂时无法回复，请稍后再试)';
     }
     
@@ -216,6 +215,8 @@ serve(async (req) => {
 
   try {
     const { action, character, scriptRole, script, gameState, question, apiConfig, userId } = await req.json();
+    const auth = await requireUser(req, userId);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
 
     const apiSetting = userId ? await checkDefaultApiSetting(userId) : { useDefault: false, defaultModel: 'deepseek-chat' };
 
@@ -262,7 +263,6 @@ ${scriptRole.isMurderer ? '【重要】你是凶手，需要隐藏自己的身�
       userPrompt = `游戏结束，请揭示你的真实身份和秘密。控制在50字以内。`;
     }
 
-    console.log('Script murder prompt:', userPrompt);
 
     const reply = await getAICompletion(
       [
@@ -272,7 +272,6 @@ ${scriptRole.isMurderer ? '【重要】你是凶手，需要隐藏自己的身�
       config
     );
 
-    console.log('Script murder reply:', reply);
 
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

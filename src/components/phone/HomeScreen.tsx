@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -91,13 +91,7 @@ const HomeScreen: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  useEffect(() => {
-    if (user && localMode !== null) {
-      loadCustomization();
-    }
-  }, [user, localMode]);
-
-  const loadCustomization = async () => {
+  const loadCustomization = useCallback(async () => {
     try {
       if (!user) return;
       const result = localMode
@@ -142,7 +136,13 @@ const HomeScreen: React.FC = () => {
     } catch (err) {
       console.error('Load customization error:', err);
     }
-  };
+  }, [localMode, user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
+      loadCustomization();
+    }
+  }, [loadCustomization, localMode, user]);
 
   // 图片压缩函数
   const compressImage = (file: File, maxWidth = 256, quality = 0.8): Promise<Blob> => {

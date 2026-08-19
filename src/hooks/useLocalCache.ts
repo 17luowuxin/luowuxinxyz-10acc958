@@ -64,7 +64,7 @@ export function useLocalCache<T>(
       console.warn('[Cache] Failed to read cache:', key, e);
       return null;
     }
-  }, [fullKey, userId]);
+  }, [fullKey, key, userId]);
 
   // 写入缓存
   const setCache = useCallback((data: T) => {
@@ -94,7 +94,7 @@ export function useLocalCache<T>(
         // 忽略
       }
     }
-  }, [fullKey, userId]);
+  }, [fullKey, key, userId]);
 
   // 清除缓存
   const clearCache = useCallback(() => {

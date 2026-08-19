@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,7 +101,12 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { action, characterId, userId, messages, apiKey, baseUrl, model, authSource } = await req.json();
+    let { action, characterId, userId, messages, apiKey, baseUrl, model, authSource } = await req.json();
+
+    const auth = await requireUser(req, userId, authSource);
+    if (!auth.ok) return authErrorResponse(auth, corsHeaders);
+    userId = auth.userId;
+    authSource = auth.source;
 
     if (!characterId || !userId) {
       return new Response(JSON.stringify({ success: false, error: 'Missing characterId or userId' }),

@@ -100,9 +100,19 @@ async function fetchGroupMembers(groupIds: string[]): Promise<Record<string, unk
 
   for (let offset = 0; offset < groupIds.length; offset += 100) {
     const ids = groupIds.slice(offset, offset + 100);
-    const response = await (supabase as any).from('group_members').select('*').in('group_id', ids);
-    if (response.error) throw response.error;
-    rows.push(...((response.data ?? []) as Record<string, unknown>[]));
+    let from = 0;
+    while (true) {
+      const response = await (supabase as any)
+        .from('group_members')
+        .select('*')
+        .in('group_id', ids)
+        .range(from, from + PAGE_SIZE - 1);
+      if (response.error) throw response.error;
+      const page = (response.data ?? []) as Record<string, unknown>[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
   }
 
   return rows;
@@ -121,6 +131,14 @@ export async function copyCloudDataToLocal(
   const storageUrls = new Set<string>();
   let copiedRecords = 0;
   let copiedAssets = 0;
+
+  // Invalidate any older successful marker before replacing local tables.
+  // If this run stops midway, the UI must not allow switching to partial data.
+  await setLocalMeta(`cloud-copy:${userId}`, {
+    completed: false,
+    startedAt: new Date().toISOString(),
+    cloudWasModified: false,
+  });
 
   for (let index = 0; index < LOCAL_CONTENT_TABLES.length; index += 1) {
     const table = LOCAL_CONTENT_TABLES[index];
