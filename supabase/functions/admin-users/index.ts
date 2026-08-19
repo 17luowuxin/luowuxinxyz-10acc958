@@ -18,7 +18,7 @@ function isValidUUID(id: string): boolean {
 const MAX_BATCH_SIZE = 100;
 
 // Min password length
-const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 6;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -66,61 +66,82 @@ serve(async (req) => {
       );
     }
 
-    // Use external Supabase service role client for admin operations
+    // Use service-role clients for both generations of accounts.
+    const cloudAdminClient = createClient(supabaseUrl, supabaseServiceKey);
     const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')!;
     const externalServiceKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')!;
     const adminClient = createClient(externalUrl, externalServiceKey);
-    const { action, inactiveMonths, userId, userIds, newPassword } = await req.json();
+    const { action, inactiveMonths, userId, userIds, newPassword, authSource } = await req.json();
 
     if (action === 'get_users') {
-      // Get all users from auth.users with profiles data
-      const { data: authUsers, error: authError } = await adminClient.auth.admin.listUsers({
-        perPage: 1000
-      });
+      const [externalUsersResult, cloudUsersResult] = await Promise.all([
+        adminClient.auth.admin.listUsers({ perPage: 1000 }),
+        cloudAdminClient.auth.admin.listUsers({ perPage: 1000 }),
+      ]);
 
-      if (authError) {
-        console.error('Error fetching auth users:', authError);
+      if (externalUsersResult.error && cloudUsersResult.error) {
+        console.error('Error fetching auth users:', {
+          external: externalUsersResult.error,
+          cloud: cloudUsersResult.error,
+        });
         return new Response(
-          JSON.stringify({ error: authError.message }),
+          JSON.stringify({ error: 'Unable to load users' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Get profiles
-      const { data: profiles } = await adminClient
-        .from('profiles')
-        .select('user_id, nickname, avatar_url');
+      const [externalProfiles, cloudProfiles, externalMessages, cloudMessages] = await Promise.all([
+        adminClient.from('profiles').select('user_id, nickname, avatar_url'),
+        cloudAdminClient.from('profiles').select('user_id, nickname, avatar_url'),
+        adminClient.from('chat_messages').select('user_id, created_at').order('created_at', { ascending: false }),
+        cloudAdminClient.from('chat_messages').select('user_id, created_at').order('created_at', { ascending: false }),
+      ]);
 
-      // Get all messages to calculate activity
-      const { data: allMessages } = await adminClient
-        .from('chat_messages')
-        .select('user_id, created_at')
-        .order('created_at', { ascending: false });
+      const buildUsers = (
+        authUsers: typeof externalUsersResult.data.users,
+        profiles: Array<{ user_id: string; nickname: string | null; avatar_url: string | null }>,
+        messages: Array<{ user_id: string; created_at: string }>,
+        source: 'lovable-cloud' | 'external',
+      ) => {
+        const activityMap: Record<string, { lastActivity: string; messageCount: number }> = {};
+        messages.forEach((message) => {
+          if (!activityMap[message.user_id]) {
+            activityMap[message.user_id] = { lastActivity: message.created_at, messageCount: 0 };
+          }
+          activityMap[message.user_id].messageCount += 1;
+        });
 
-      // Build user activity map with message count and last activity
-      const activityMap: Record<string, { lastActivity: string; messageCount: number }> = {};
-      (allMessages || []).forEach(msg => {
-        if (!activityMap[msg.user_id]) {
-          activityMap[msg.user_id] = { lastActivity: msg.created_at, messageCount: 0 };
-        }
-        activityMap[msg.user_id].messageCount++;
-      });
+        return authUsers.map((authUser) => {
+          const profile = profiles.find((item) => item.user_id === authUser.id);
+          const activity = activityMap[authUser.id];
+          return {
+            id: authUser.id,
+            auth_source: source,
+            email: authUser.email,
+            created_at: authUser.created_at,
+            last_sign_in_at: authUser.last_sign_in_at,
+            last_activity_at: activity?.lastActivity || null,
+            message_count: activity?.messageCount || 0,
+            nickname: profile?.nickname || null,
+            avatar_url: profile?.avatar_url || null,
+          };
+        });
+      };
 
-      // Merge data
-      const users = authUsers.users.map(authUser => {
-        const profile = profiles?.find(p => p.user_id === authUser.id);
-        const activity = activityMap[authUser.id];
-        return {
-          id: authUser.id,
-          email: authUser.email,
-          created_at: authUser.created_at,
-          last_sign_in_at: authUser.last_sign_in_at,
-          last_activity_at: activity?.lastActivity || null,
-          message_count: activity?.messageCount || 0,
-          nickname: profile?.nickname || null,
-          avatar_url: profile?.avatar_url || null,
-        };
-      });
+      const users = [
+        ...buildUsers(
+          externalUsersResult.data?.users ?? [],
+          externalProfiles.data ?? [],
+          externalMessages.data ?? [],
+          'external',
+        ),
+        ...buildUsers(
+          cloudUsersResult.data?.users ?? [],
+          cloudProfiles.data ?? [],
+          cloudMessages.data ?? [],
+          'lovable-cloud',
+        ),
+      ];
 
       // Sort by message count (most active first)
       users.sort((a, b) => b.message_count - a.message_count);
@@ -326,7 +347,8 @@ serve(async (req) => {
         );
       }
 
-      const { error: updateError } = await adminClient.auth.admin.updateUserById(
+      const targetAdminClient = authSource === 'lovable-cloud' ? cloudAdminClient : adminClient;
+      const { error: updateError } = await targetAdminClient.auth.admin.updateUserById(
         userId,
         { password: newPassword }
       );

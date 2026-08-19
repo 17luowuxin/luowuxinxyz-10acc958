@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X, Copy, Trash2, Upload, ImagePlus } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Shield, Camera, Lock, Brush, Settings, X, Copy, Trash2, Upload, ImagePlus, MessageCircle, Database, Bell, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,6 +49,49 @@ const NOVELAI_UC_PRESETS = [
   { id: 2, name: 'Preset 3 - Human Focus' },
   { id: 3, name: 'None' },
 ];
+
+type SettingsSectionId = 'ai' | 'image' | 'voice' | 'appearance' | 'data' | 'privacy';
+
+const SettingsSectionButton = ({
+  id,
+  openSection,
+  onToggle,
+  icon,
+  title,
+  subtitle,
+}: {
+  id: SettingsSectionId;
+  openSection: SettingsSectionId | null;
+  onToggle: (id: SettingsSectionId) => void;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+}) => {
+  const isOpen = openSection === id;
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      aria-expanded={isOpen}
+      className={`w-full rounded-2xl border px-4 py-3.5 text-left backdrop-blur-md transition-all ${
+        isOpen
+          ? 'border-purple-200 bg-white/85 shadow-sm'
+          : 'border-white/70 bg-white/60 hover:bg-white/80'
+      }`}
+    >
+      <span className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-purple-500">
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-gray-800">{title}</span>
+          <span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </span>
+    </button>
+  );
+};
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -153,6 +196,11 @@ const SettingsPage: React.FC = () => {
   // 时间同步 state
   const [timeSyncEnabled, setTimeSyncEnabled] = useState(false);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
+  const [openSection, setOpenSection] = useState<SettingsSectionId | null>(null);
+
+  const toggleSection = (section: SettingsSectionId) => {
+    setOpenSection((current) => current === section ? null : section);
+  };
 
   useEffect(() => {
     if (!user) {
@@ -1253,9 +1301,9 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background/70 backdrop-blur-sm">
+    <div className="min-h-screen bg-gradient-to-b from-purple-50/80 via-background/75 to-pink-50/70 backdrop-blur-sm">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 pb-2">
+      <div className="flex items-center gap-3 px-4 pb-2 pt-4">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -1264,15 +1312,44 @@ const SettingsPage: React.FC = () => {
         >
           <ChevronLeft className="w-6 h-6 text-purple-600" />
         </Button>
-        <div className="flex items-center gap-2">
-          <Key className="w-5 h-5 text-purple-500" />
-          <h1 className="text-lg font-bold text-purple-700">API密钥管理</h1>
+        <div>
+          <h1 className="text-lg font-bold text-purple-800">设置</h1>
+          <p className="text-xs text-gray-500">管理你的小手机</p>
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="space-y-3 p-4 pt-2">
+        <div className="flex items-center gap-3 rounded-2xl border border-purple-100/70 bg-white/65 px-4 py-3.5 backdrop-blur-md">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-100 to-purple-100">
+            <Shield className="h-4 w-4 text-purple-500" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-700">本机保存 · 数据只属于你</p>
+            <p className="text-xs text-gray-400">可随时导出完整备份</p>
+          </div>
+          <Check className="h-4 w-4 text-purple-400" />
+        </div>
+
+        <div className="space-y-2">
+          <SettingsSectionButton id="ai" openSection={openSection} onToggle={toggleSection} icon={<MessageCircle className="h-5 w-5" />} title="AI 与对话" subtitle="对话模型、时间同步、视觉小说" />
+          <SettingsSectionButton id="image" openSection={openSection} onToggle={toggleSection} icon={<ImageIcon className="h-5 w-5" />} title="图片生成" subtitle="NovelAI、空间配图、免费配图" />
+          <SettingsSectionButton id="voice" openSection={openSection} onToggle={toggleSection} icon={<Volume2 className="h-5 w-5" />} title="语音功能" subtitle="语音模型与试听" />
+          <SettingsSectionButton id="appearance" openSection={openSection} onToggle={toggleSection} icon={<Palette className="h-5 w-5" />} title="外观与壁纸" subtitle="主题、桌面、锁屏、聊天背景" />
+          <SettingsSectionButton id="data" openSection={openSection} onToggle={toggleSection} icon={<Database className="h-5 w-5" />} title="数据与备份" subtitle="一键导出、导入与本机数据" />
+          <SettingsSectionButton id="privacy" openSection={openSection} onToggle={toggleSection} icon={<Bell className="h-5 w-5" />} title="通知与隐私" subtitle="消息提醒与隐私设置" />
+        </div>
+
+        {openSection === 'appearance' && (
+          <div className="rounded-2xl border border-purple-100/70 bg-white/70 p-4 backdrop-blur-md">
+            <p className="mb-3 text-xs leading-relaxed text-gray-500">壁纸、锁屏、聊天气泡、字体和主题都在外观中心统一管理。</p>
+            <Button onClick={() => navigate('/customize')} className="w-full rounded-xl bg-gradient-to-r from-purple-400 to-pink-400 text-white">
+              <Palette className="mr-2 h-4 w-4" />进入外观设置
+            </Button>
+          </div>
+        )}
+
         {/* Main API Card */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-purple-100/50">
+        <div className={`${openSection === 'ai' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-purple-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -1508,7 +1585,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* NovelAI Configuration Card */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-pink-100/50">
+        <div className={`${openSection === 'image' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-pink-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2093,7 +2170,7 @@ const SettingsPage: React.FC = () => {
         </Dialog>
 
         {/* TTS Configuration Card */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-blue-100/50">
+        <div className={`${openSection === 'voice' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-blue-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2237,7 +2314,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* 图片生成API配置 (统一用于聊天和空间) */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-emerald-100/50">
+        <div className={`${openSection === 'image' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-emerald-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2496,7 +2573,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* Unsplash 免费配图配置 */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-sky-100/50">
+        <div className={`${openSection === 'image' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-sky-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2627,7 +2704,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* VN (视觉小说) 专用 API 配置 */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-indigo-100/50">
+        <div className={`${openSection === 'ai' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-indigo-100/70`}>
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2725,7 +2802,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* Reset All Settings Button */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-orange-100/50">
+        <div className={`${openSection === 'data' ? '' : 'hidden'} bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm border border-orange-100/70`}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-yellow-100 flex items-center justify-center">
               <span className="text-lg">🔄</span>
@@ -2813,17 +2890,24 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* Data Migration */}
-        <DataMigrationCard />
+        <div className={openSection === 'data' ? '' : 'hidden'}>
+          <DataMigrationCard />
+        </div>
 
         {/* 云推送需要服务器保存设备订阅，本机模式下不启用 */}
-        {localMode ? (
-          <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-gray-100/50">
-            <h2 className="font-bold text-gray-700">消息推送通知</h2>
-            <p className="text-xs text-gray-500 mt-1">本机模式下不上传设备信息，因此关闭后台云推送；软件打开时仍会显示站内提醒。</p>
-          </div>
-        ) : (
-          <PushNotificationCard />
-        )}
+        <div className={openSection === 'privacy' ? '' : 'hidden'}>
+          {localMode ? (
+            <div className="rounded-2xl border border-gray-100/70 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
+              <h2 className="font-bold text-gray-700">消息推送通知</h2>
+              <p className="text-xs text-gray-500 mt-1">本机模式下不上传设备信息，因此关闭后台云推送；软件打开时仍会显示站内提醒。</p>
+            </div>
+          ) : (
+            <PushNotificationCard />
+          )}
+          <button type="button" onClick={() => navigate('/privacy')} className="mt-2 w-full rounded-xl border border-purple-100 bg-white/60 py-3 text-sm text-purple-600">
+            查看隐私政策
+          </button>
+        </div>
 
         {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 
@@ -2895,6 +2979,14 @@ const SettingsPage: React.FC = () => {
           <p className="text-xs text-gray-300">
             © 2024 All Rights Reserved
           </p>
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="pt-2 text-[10px] text-gray-300 transition-colors hover:text-purple-400"
+          >
+            <Lock className="mr-1 inline h-2.5 w-2.5" />
+            管理员入口
+          </button>
         </div>
       </div>
       

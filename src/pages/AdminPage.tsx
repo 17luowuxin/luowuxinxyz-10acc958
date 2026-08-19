@@ -108,6 +108,7 @@ interface ActivityTrendData {
 
 interface AdminUser {
   id: string;
+  auth_source: 'lovable-cloud' | 'external';
   email: string | null;
   created_at: string;
   last_sign_in_at: string | null;
@@ -116,6 +117,8 @@ interface AdminUser {
   nickname: string | null;
   avatar_url: string | null;
 }
+
+const DEFAULT_RESET_PASSWORD = '123456';
 
 interface InactiveUser {
   id: string;
@@ -161,7 +164,7 @@ const AdminPage: React.FC = () => {
   
   // 密码重置状态
   const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [resetPasswordSource, setResetPasswordSource] = useState<'lovable-cloud' | 'external'>('external');
   const [resettingPassword, setResettingPassword] = useState(false);
   
   // 公告管理状态
@@ -523,20 +526,17 @@ const AdminPage: React.FC = () => {
 
   // 重置用户密码
   const resetUserPassword = async () => {
-    if (!resetPasswordUserId || !newPassword) {
-      toast.error('请输入新密码');
-      return;
-    }
-    
-    if (newPassword.length < 6) {
-      toast.error('密码至少需要6个字符');
-      return;
-    }
-    
+    if (!resetPasswordUserId) return;
+
     setResettingPassword(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-users', {
-        body: { action: 'reset_password', userId: resetPasswordUserId, newPassword }
+        body: {
+          action: 'reset_password',
+          userId: resetPasswordUserId,
+          authSource: resetPasswordSource,
+          newPassword: DEFAULT_RESET_PASSWORD,
+        }
       });
       
       if (error) {
@@ -545,9 +545,8 @@ const AdminPage: React.FC = () => {
         return;
       }
       
-      toast.success('密码已重置');
+      toast.success(`密码已重置为 ${DEFAULT_RESET_PASSWORD}`);
       setResetPasswordUserId(null);
-      setNewPassword('');
     } catch (err) {
       console.error('Error resetting password:', err);
       toast.error('重置密码失败');
@@ -1278,6 +1277,7 @@ const AdminPage: React.FC = () => {
                         <p className="text-xs text-muted-foreground flex items-center gap-1">
                           <Mail className="w-3 h-3" />
                           {user.email || '无邮箱'}
+                          <span>· {user.auth_source === 'lovable-cloud' ? '旧云端账号' : '新账号'}</span>
                         </p>
                       </div>
                       <div className="text-right space-y-1">
@@ -1299,7 +1299,7 @@ const AdminPage: React.FC = () => {
                         className="text-muted-foreground hover:text-primary"
                         onClick={() => {
                           setResetPasswordUserId(user.id);
-                          setNewPassword('');
+                          setResetPasswordSource(user.auth_source);
                         }}
                         title="重置密码"
                       >
@@ -1322,30 +1322,19 @@ const AdminPage: React.FC = () => {
                 重置用户密码
               </AlertDialogTitle>
               <AlertDialogDescription>
-                为用户设置新密码（最少6个字符）
+                确认将该用户的登录密码重置为临时密码：
+                <span className="font-semibold text-foreground"> {DEFAULT_RESET_PASSWORD}</span>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <div className="py-4">
-              <Label htmlFor="new-password">新密码</Label>
-              <Input
-                id="new-password"
-                type="password"
-                placeholder="请输入新密码（至少6个字符）"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="mt-2"
-              />
-            </div>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => {
                 setResetPasswordUserId(null);
-                setNewPassword('');
               }}>
                 取消
               </AlertDialogCancel>
               <AlertDialogAction 
                 onClick={resetUserPassword}
-                disabled={resettingPassword || newPassword.length < 6}
+                disabled={resettingPassword}
                 className="bg-primary"
               >
                 {resettingPassword ? (
