@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalAssetUrl, getLocalTable, isLocalModeEnabled, upsertLocalRow } from '@/lib/localDataStore';
 
 interface MusicTrack {
   id: string;
@@ -64,6 +65,15 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [duration, setDuration] = useState(0);
   const [defaultCoverUrl, setDefaultCoverUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
 
   // 根据 currentTrackId 找到当前歌曲，这样即使 tracks 更新后也能获取最新的封面
   const currentTrack = currentTrackId ? tracks.find(t => t.id === currentTrackId) || null : null;
@@ -71,7 +81,17 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Fetch tracks
   const fetchTracks = useCallback(async () => {
-    if (!user) return;
+    if (!user || localMode === null) return;
+    if (localMode) {
+      const localTracks = await getLocalTable(user.id, 'music');
+      const resolvedTracks = await Promise.all(localTracks.map(async (track) => ({
+        ...track,
+        audio_url: await getLocalAssetUrl(user.id, String(track.audio_url || '')),
+      })));
+      setTracks(resolvedTracks
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as MusicTrack[]);
+      return;
+    }
     const { data, error } = await supabase
       .from('music')
       .select('*')
@@ -81,11 +101,16 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setTracks(data);
     }
     if (error) console.error(error);
-  }, [user]);
+  }, [user, localMode]);
 
   // 加载默认封面
   const loadDefaultCover = useCallback(async () => {
-    if (!user) return;
+    if (!user || localMode === null) return;
+    if (localMode) {
+      const customization = (await getLocalTable(user.id, 'customization'))[0];
+      setDefaultCoverUrl(customization?.music_cover_url ? String(customization.music_cover_url) : null);
+      return;
+    }
     const { data } = await supabase
       .from('customization')
       .select('music_cover_url')
@@ -94,24 +119,29 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (data && (data as Customization).music_cover_url) {
       setDefaultCoverUrl((data as Customization).music_cover_url);
     }
-  }, [user]);
+  }, [user, localMode]);
 
   // 保存默认封面到数据库
   const saveDefaultCover = useCallback(async (url: string) => {
     if (!user) return;
+    if (localMode) {
+      await upsertLocalRow(user.id, 'customization', () => true, { user_id: user.id, music_cover_url: url });
+      setDefaultCoverUrl(url);
+      return;
+    }
     await supabase
       .from('customization')
       .update({ music_cover_url: url } as any)
       .eq('user_id', user.id);
     setDefaultCoverUrl(url);
-  }, [user]);
+  }, [user, localMode]);
 
   useEffect(() => {
-    if (user) {
+    if (user && localMode !== null) {
       fetchTracks();
       loadDefaultCover();
     }
-  }, [user, fetchTracks, loadDefaultCover]);
+  }, [user, localMode, fetchTracks, loadDefaultCover]);
 
   // Audio event listeners
   useEffect(() => {

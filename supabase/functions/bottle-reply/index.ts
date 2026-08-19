@@ -232,7 +232,7 @@ serve(async (req) => {
 
   try {
     const { content, apiConfig, userId, authSource } = await req.json();
-    console.log('Received bottle from user:', userId, 'content:', content?.substring(0, 50), 'authSource:', authSource);
+    console.log('Received bottle reply request', { authSource });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

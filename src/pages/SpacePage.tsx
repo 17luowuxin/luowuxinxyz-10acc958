@@ -13,6 +13,22 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  updateLocalRows,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(blob);
+  });
 
 interface Moment {
   id: string;
@@ -103,9 +119,18 @@ const SpacePage: React.FC = () => {
   const [viewingLog, setViewingLog] = useState<SpaceLog | null>(null);
   const [charSelectOpen, setCharSelectOpen] = useState(false);
   const [selectedReplyChars, setSelectedReplyChars] = useState<Set<string>>(new Set());
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       // 先加载角色，再加载说说和留言板（它们需要角色信息做 fallback）
       fetchCharacters().then(() => {
         fetchMoments();
@@ -115,10 +140,30 @@ const SpacePage: React.FC = () => {
       fetchSpaceBackground();
       fetchSpaceLogs();
     }
-  }, [user]);
+  }, [user, localMode]);
+
+  const saveMoment = async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) return { data: await insertLocalRow(user.id, 'moments', row), error: null };
+    return supabase.from('moments').insert(row as any).select().single();
+  };
+
+  const saveComment = async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) return { data: await insertLocalRow(user.id, 'comments', row), error: null };
+    return supabase.from('comments').insert(row as any).select().single();
+  };
+
+  const saveGuestbookEntry = async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) return { data: await insertLocalRow(user.id, 'guestbook', row), error: null };
+    return supabase.from('guestbook').insert(row as any).select().single();
+  };
 
   const fetchUserProfile = async () => {
     if (!user?.id) return;
+    if (localMode) {
+      const data = (await getLocalTable(user.id, 'profiles'))[0];
+      if (data) setUserProfile(data);
+      return;
+    }
     const { data } = await supabase
       .from('profiles')
       .select('nickname, persona, avatar_url')
@@ -129,6 +174,11 @@ const SpacePage: React.FC = () => {
 
   const fetchSpaceBackground = async () => {
     if (!user?.id) return;
+    if (localMode) {
+      const data = (await getLocalTable(user.id, 'customization'))[0];
+      setSpaceBackground(data?.space_background_url ? String(data.space_background_url) : null);
+      return;
+    }
     const { data } = await supabase
       .from('customization')
       .select('space_background_url')
@@ -138,6 +188,11 @@ const SpacePage: React.FC = () => {
   };
 
   const fetchCharacters = async () => {
+    if (localMode && user?.id) {
+      const data = await getLocalTable(user.id, 'characters');
+      setCharacters(data);
+      return data;
+    }
     const { data } = await supabase
       .from('characters')
       .select('*')
@@ -151,6 +206,29 @@ const SpacePage: React.FC = () => {
 
   const fetchMoments = async () => {
     setLoading(true);
+    if (localMode && user?.id) {
+      const [localMoments, localComments, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'moments'),
+        getLocalTable(user.id, 'comments'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      const data = localMoments
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .map((moment: any) => {
+          const character = localCharacters.find((item) => item.id === moment.character_id);
+          return {
+            ...moment,
+            character,
+            comments: localComments
+              .filter((comment) => comment.moment_id === moment.id)
+              .sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime()),
+            is_user_post: moment.is_user_post === true,
+          };
+        });
+      setMoments(data);
+      setLoading(false);
+      return;
+    }
     
     // 先尝试带 join 查询，如果失败则用分开查询
     let { data, error } = await supabase
@@ -203,6 +281,19 @@ const SpacePage: React.FC = () => {
 
   const fetchGuestbook = async () => {
     if (!user?.id) return;
+    if (localMode) {
+      const [entries, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'guestbook'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      setGuestbookEntries(entries
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .map((entry: any) => {
+          const character = localCharacters.find((item) => item.id === entry.character_id);
+          return { ...entry, character: character ? { name: character.name, avatar_url: character.avatar_url } : undefined };
+        }));
+      return;
+    }
     
     // 先尝试带 join 查询
     let { data, error } = await supabase
@@ -239,6 +330,11 @@ const SpacePage: React.FC = () => {
 
   const fetchSpaceLogs = async () => {
     if (!user?.id) return;
+    if (localMode) {
+      const data = await getLocalTable(user.id, 'space_logs');
+      setSpaceLogs(data.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as SpaceLog[]);
+      return;
+    }
     const { data } = await supabase
       .from('space_logs')
       .select('*')
@@ -255,15 +351,14 @@ const SpacePage: React.FC = () => {
     
     setPostingLog(true);
     try {
-      const { data, error } = await supabase
-        .from('space_logs')
-        .insert({
+      const logRow = {
           user_id: user.id,
           title: newLogTitle.trim(),
           content: newLogContent.trim()
-        })
-        .select()
-        .single();
+      };
+      const { data, error } = localMode
+        ? { data: await insertLocalRow(user.id, 'space_logs', logRow), error: null }
+        : await supabase.from('space_logs').insert(logRow).select().single();
 
       if (error) throw error;
 
@@ -283,10 +378,12 @@ const SpacePage: React.FC = () => {
 
   const handleDeleteLog = async (logId: string) => {
     try {
-      const { error } = await supabase
-        .from('space_logs')
-        .delete()
-        .eq('id', logId);
+      let error = null;
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'space_logs', (row) => row.id === logId);
+      } else {
+        error = (await supabase.from('space_logs').delete().eq('id', logId)).error;
+      }
 
       if (error) throw error;
 
@@ -309,6 +406,18 @@ const SpacePage: React.FC = () => {
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        const localUrl = await blobToDataUrl(compressedFile);
+        await upsertLocalRow(
+          user.id,
+          'customization',
+          () => true,
+          { user_id: user.id, space_background_url: localUrl },
+        );
+        setSpaceBackground(localUrl);
+        toast.success('背景已保存到本机');
+        return;
+      }
       
       const fileName = `${user.id}/space-bg-${Date.now()}.jpg`;
       
@@ -345,6 +454,13 @@ const SpacePage: React.FC = () => {
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 512, 0.85);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        const localUrl = await blobToDataUrl(compressedFile);
+        setUserProfile((prev) => ({ nickname: prev?.nickname, persona: prev?.persona, avatar_url: localUrl }));
+        await updateLocalRows(user.id, 'profiles', () => true, { avatar_url: localUrl });
+        toast.success('头像已保存到本机');
+        return;
+      }
       
       const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
@@ -396,6 +512,11 @@ const SpacePage: React.FC = () => {
         // 压缩图片（最大宽度1080px，质量0.8）
         const compressedBlob = await compressImage(file, 1080, 0.8);
         const compressedFile = blobToFile(compressedBlob, file.name);
+        if (localMode) {
+          const localUrl = await blobToDataUrl(compressedFile);
+          setPostImages((prev) => [...prev, localUrl]);
+          continue;
+        }
         
         const fileName = `${user.id}/moment-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
         
@@ -462,7 +583,7 @@ const SpacePage: React.FC = () => {
         if (error) throw error;
 
         // 如果生成了配图，一并保存
-        await supabase.from('moments').insert({
+        await saveMoment({
           user_id: user?.id,
           character_id: char.id,
           content: data.content,
@@ -499,13 +620,13 @@ const SpacePage: React.FC = () => {
 
       const imageUrl = postImages.length > 0 ? postImages.join(',') : null;
 
-      const { data: momentData, error } = await supabase.from('moments').insert({
+      const { data: momentData, error } = await saveMoment({
         user_id: user?.id,
         character_id: characters[0].id,
         content: postContent || '分享了图片',
         image_url: imageUrl,
         is_user_post: true
-      } as any).select().single();
+      });
 
       if (error) throw error;
 
@@ -550,7 +671,7 @@ const SpacePage: React.FC = () => {
             });
 
             if (replyData?.content) {
-              await supabase.from('comments').insert({
+              await saveComment({
                 moment_id: momentData.id,
                 user_id: user?.id,
                 content: `[${char.name}] ${replyData.content}`,
@@ -579,12 +700,12 @@ const SpacePage: React.FC = () => {
       : newGuestbookContent.trim();
     
     try {
-      const { data: insertedEntry, error: insertError } = await supabase.from('guestbook').insert({
+      const { data: insertedEntry, error: insertError } = await saveGuestbookEntry({
         user_id: user?.id,
         content: contentToPost,
         is_character_reply: false,
         parent_id: guestbookReplyTarget?.entryId || null
-      }).select().single();
+      });
 
       if (insertError) throw insertError;
 
@@ -626,7 +747,7 @@ const SpacePage: React.FC = () => {
             });
 
             if (replyData?.content) {
-              await supabase.from('guestbook').insert({
+              await saveGuestbookEntry({
                 user_id: user?.id,
                 content: replyData.content,
                 character_id: char.id,
@@ -651,7 +772,11 @@ const SpacePage: React.FC = () => {
 
   const handleDeleteGuestbook = async (entryId: string) => {
     try {
-      await supabase.from('guestbook').delete().eq('id', entryId);
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'guestbook', (row) => row.id === entryId || row.parent_id === entryId);
+      } else {
+        await supabase.from('guestbook').delete().eq('id', entryId);
+      }
       toast.success('留言删除成功');
       fetchGuestbook();
     } catch (err) {
@@ -674,10 +799,12 @@ const SpacePage: React.FC = () => {
     else newLiked.add(momentId);
     setLikedMoments(newLiked);
 
-    await supabase
-      .from('moments')
-      .update({ likes: moment.likes + (isLiked ? -1 : 1) })
-      .eq('id', momentId);
+    const likes = moment.likes + (isLiked ? -1 : 1);
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'moments', (row) => row.id === momentId, { likes });
+    } else {
+      await supabase.from('moments').update({ likes }).eq('id', momentId);
+    }
   };
 
   const handleComment = async (moment: Moment) => {
@@ -693,7 +820,7 @@ const SpacePage: React.FC = () => {
 
     const normalizedContent = targetName && !explicitTargetName ? `@${targetName} ${raw}` : raw;
 
-    await supabase.from('comments').insert({
+    await saveComment({
       moment_id: moment.id,
       user_id: user?.id,
       content: normalizedContent,
@@ -737,7 +864,7 @@ const SpacePage: React.FC = () => {
         });
 
         if (data?.content) {
-          await supabase.from('comments').insert({
+          await saveComment({
             moment_id: moment.id,
             user_id: user?.id,
             content: `[${replyCharacter.name}] ${data.content}`,
@@ -754,8 +881,13 @@ const SpacePage: React.FC = () => {
 
   const handleDelete = async (momentId: string) => {
     try {
-      await supabase.from('comments').delete().eq('moment_id', momentId);
-      await supabase.from('moments').delete().eq('id', momentId);
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'comments', (row) => row.moment_id === momentId);
+        await deleteLocalRows(user.id, 'moments', (row) => row.id === momentId);
+      } else {
+        await supabase.from('comments').delete().eq('moment_id', momentId);
+        await supabase.from('moments').delete().eq('id', momentId);
+      }
       toast.success('删除成功');
       fetchMoments();
     } catch (err) {

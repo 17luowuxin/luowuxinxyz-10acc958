@@ -106,12 +106,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(externalResult.data.session);
         setUser(externalResult.data.session!.user);
         updateAuthSource('external');
-        console.log('[Auth] Using EXTERNAL session, user:', externalResult.data.session!.user.id);
+        console.log('[Auth] Using EXTERNAL session');
       } else if (hasCloud) {
         setSession(cloudResult.data.session);
         setUser(cloudResult.data.session!.user);
         updateAuthSource('lovable-cloud');
-        console.log('[Auth] Using CLOUD session, user:', cloudResult.data.session!.user.id);
+        console.log('[Auth] Using CLOUD session');
       }
       
       setLoading(false);
@@ -172,7 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 登录 - 先尝试 Cloud，失败后尝试外部
   const signIn = async (email: string, password: string) => {
-    console.log('[Auth] Attempting sign in for:', email);
+    console.log('[Auth] Attempting sign in');
     
     // 首先尝试 Lovable Cloud（现有用户）
     const cloudResult = await supabase.auth.signInWithPassword({

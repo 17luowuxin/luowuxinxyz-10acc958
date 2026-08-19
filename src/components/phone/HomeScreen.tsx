@@ -5,6 +5,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
+  getLocalAssetUrl,
+  getLocalTable,
+  isLocalModeEnabled,
+  saveLocalAsset,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
+import {
   Image,
   User,
   Settings,
@@ -67,28 +74,43 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const [appIcons, setAppIcons] = useState<Record<string, string>>({});
   const [pageImages, setPageImages] = useState<Record<string, string>>({});
+  const [storedAppIcons, setStoredAppIcons] = useState<Record<string, string>>({});
+  const [storedPageImages, setStoredPageImages] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<{ type: 'app' | 'image'; key: string } | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       loadCustomization();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const loadCustomization = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customization')
-        .select('app_icons')
-        .eq('user_id', user!.id)
-        .single();
+      if (!user) return;
+      const result = localMode
+        ? { data: (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id), error: null }
+        : await supabase
+            .from('customization')
+            .select('app_icons')
+            .eq('user_id', user.id)
+            .single();
+      const { data, error } = result;
       
-      if (error && error.code === 'PGRST116') {
-        await supabase.from('customization').insert({ user_id: user!.id, app_icons: {} });
+      if (error && 'code' in error && error.code === 'PGRST116') {
+        await supabase.from('customization').insert({ user_id: user.id, app_icons: {} });
         return;
       }
       
@@ -96,17 +118,26 @@ const HomeScreen: React.FC = () => {
         const icons = data.app_icons as Record<string, unknown>;
         const regularIcons: Record<string, string> = {};
         const images: Record<string, string> = {};
+        const rawRegularIcons: Record<string, string> = {};
+        const rawImages: Record<string, string> = {};
         
-        Object.entries(icons).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(icons)) {
+          const resolvedValue = localMode && typeof value === 'string'
+            ? await getLocalAssetUrl(user.id, value)
+            : value;
           if (key.startsWith('page_image_')) {
-            images[key] = value as string;
+            images[key] = resolvedValue as string;
+            rawImages[key] = value as string;
           } else if (typeof value === 'string' && !key.startsWith('desktop_layout')) {
-            regularIcons[key] = value;
+            regularIcons[key] = resolvedValue as string;
+            rawRegularIcons[key] = value;
           }
-        });
+        }
         
         setAppIcons(regularIcons);
         setPageImages(images);
+        setStoredAppIcons(rawRegularIcons);
+        setStoredPageImages(rawImages);
       }
     } catch (err) {
       console.error('Load customization error:', err);
@@ -164,42 +195,53 @@ const HomeScreen: React.FC = () => {
       // 根据类型决定压缩尺寸：APP图标用小尺寸，背景图用大尺寸
       const maxWidth = uploadTarget.type === 'app' ? 256 : 800;
       const compressedBlob = await compressImage(file, maxWidth, 0.85);
-      
-      const fileName = `${user.id}/${uploadTarget.type}/${uploadTarget.key}-${Date.now()}.jpg`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, compressedBlob, { 
-          upsert: true,
-          contentType: 'image/jpeg'
-        });
+      let nextUrl: string;
+      let storedUrl: string;
 
-      if (uploadError) {
-        toast.dismiss();
-        toast.error('上传失败');
-        return;
+      if (localMode) {
+        const sourceUrl = `local-asset://home-${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, sourceUrl, compressedBlob);
+        storedUrl = sourceUrl;
+        nextUrl = await getLocalAssetUrl(user.id, sourceUrl);
+      } else {
+        const fileName = `${user.id}/${uploadTarget.type}/${uploadTarget.key}-${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, compressedBlob, { upsert: true, contentType: 'image/jpeg' });
+
+        if (uploadError) {
+          toast.dismiss();
+          toast.error('上传失败');
+          return;
+        }
+        storedUrl = supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
+        nextUrl = storedUrl;
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
       if (uploadTarget.type === 'app') {
-        const newIcons = { ...appIcons, [uploadTarget.key]: publicUrl };
+        const newIcons = { ...appIcons, [uploadTarget.key]: nextUrl };
+        const newStoredIcons = { ...storedAppIcons, [uploadTarget.key]: storedUrl };
         setAppIcons(newIcons);
+        setStoredAppIcons(newStoredIcons);
         
-        const allData = { ...newIcons, ...pageImages };
-        await supabase
-          .from('customization')
-          .upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+        const allData = { ...newStoredIcons, ...storedPageImages };
+        if (localMode) {
+          await upsertLocalRow(user.id, 'customization', (row) => row.user_id === user.id, { user_id: user.id, app_icons: allData });
+        } else {
+          await supabase.from('customization').upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+        }
       } else {
-        const newImages = { ...pageImages, [uploadTarget.key]: publicUrl };
+        const newImages = { ...pageImages, [uploadTarget.key]: nextUrl };
+        const newStoredImages = { ...storedPageImages, [uploadTarget.key]: storedUrl };
         setPageImages(newImages);
+        setStoredPageImages(newStoredImages);
         
-        const allData = { ...appIcons, ...newImages };
-        await supabase
-          .from('customization')
-          .upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+        const allData = { ...storedAppIcons, ...newStoredImages };
+        if (localMode) {
+          await upsertLocalRow(user.id, 'customization', (row) => row.user_id === user.id, { user_id: user.id, app_icons: allData });
+        } else {
+          await supabase.from('customization').upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+        }
       }
       
       toast.dismiss();
@@ -270,14 +312,19 @@ const HomeScreen: React.FC = () => {
 
   const removeImage = (imageKey: string) => {
     const newImages = { ...pageImages };
+    const newStoredImages = { ...storedPageImages };
     delete newImages[imageKey];
+    delete newStoredImages[imageKey];
     setPageImages(newImages);
+    setStoredPageImages(newStoredImages);
     
     if (user) {
-      const allData = { ...appIcons, ...newImages };
-      supabase
-        .from('customization')
-        .upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+      const allData = { ...storedAppIcons, ...newStoredImages };
+      if (localMode) {
+        upsertLocalRow(user.id, 'customization', (row) => row.user_id === user.id, { user_id: user.id, app_icons: allData });
+      } else {
+        supabase.from('customization').upsert({ user_id: user.id, app_icons: allData } as any, { onConflict: 'user_id' });
+      }
     }
     toast.success('已删除');
   };

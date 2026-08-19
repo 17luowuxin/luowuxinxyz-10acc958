@@ -8,6 +8,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';
 import ThemeGallery from '@/components/customize/ThemeGallery';
+import {
+  getLocalAssetUrl,
+  getLocalTable,
+  isLocalModeEnabled,
+  saveLocalAsset,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
@@ -108,6 +115,9 @@ const CustomizePage: React.FC = () => {
   const [chatBackgroundUrl, setChatBackgroundUrl] = useState('');
   const [globalBackgroundUrl, setGlobalBackgroundUrl] = useState('');
   const [videoBackgroundUrl, setVideoBackgroundUrl] = useState('');
+  const [storedChatBackgroundUrl, setStoredChatBackgroundUrl] = useState('');
+  const [storedGlobalBackgroundUrl, setStoredGlobalBackgroundUrl] = useState('');
+  const [storedVideoBackgroundUrl, setStoredVideoBackgroundUrl] = useState('');
   const [currentTheme, setCurrentTheme] = useState('pink');
   const [currentFont, setCurrentFont] = useState('default');
   const [fontColor, setFontColor] = useState('#333333');
@@ -131,32 +141,50 @@ const CustomizePage: React.FC = () => {
   const [novelNarrationColor, setNovelNarrationColor] = useState('#666666');
   const [novelActionColor, setNovelActionColor] = useState('#9c27b0');
   const [novelThoughtColor, setNovelThoughtColor] = useState('#607d8b');
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchSettings();
       fetchUserProfile();
       fetchFirstCharacter();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchUserProfile = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('nickname, avatar_url')
-      .eq('user_id', user?.id)
-      .single();
-    if (data) setUserProfile(data);
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
+      : (await supabase.from('profiles').select('nickname, avatar_url').eq('user_id', user.id).single()).data;
+    if (data) {
+      const avatarUrl = data.avatar_url ? String(data.avatar_url) : '';
+      setUserProfile({
+        ...data,
+        avatar_url: avatarUrl && localMode ? await getLocalAssetUrl(user.id, avatarUrl) : avatarUrl,
+      });
+    }
   };
 
   const fetchFirstCharacter = async () => {
-    const { data } = await supabase
-      .from('characters')
-      .select('name, avatar_url')
-      .eq('user_id', user?.id)
-      .limit(1)
-      .single();
-    if (data) setCharacterPreview(data);
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'characters')).find((row) => row.user_id === user.id)
+      : (await supabase.from('characters').select('name, avatar_url').eq('user_id', user.id).limit(1).single()).data;
+    if (data) {
+      const avatarUrl = data.avatar_url ? String(data.avatar_url) : '';
+      setCharacterPreview({
+        ...data,
+        avatar_url: avatarUrl && localMode ? await getLocalAssetUrl(user.id, avatarUrl) : avatarUrl,
+      });
+    }
   };
 
   // Apply theme to document
@@ -185,16 +213,25 @@ const CustomizePage: React.FC = () => {
   }, [currentFont]);
 
   const fetchSettings = async () => {
-    const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).maybeSingle();
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id)
+      : (await supabase.from('customization').select('*').eq('user_id', user.id).maybeSingle()).data;
     if (data) {
       setBubbleColor(data.bubble_color || '#FFB5C5');
       setFriendBubbleColor(data.friend_bubble_color || '#B5D8FF');
       setBubbleStyle(data.bubble_style || 'rounded');
       setOpacity([Number(data.bubble_opacity) || 1]);
       setBubbleSize([(data as any).bubble_size || 16]);
-      setChatBackgroundUrl(data.chat_background_url || '');
-      setGlobalBackgroundUrl((data as any).global_background_url || '');
-      setVideoBackgroundUrl((data as any).video_background_url || '');
+      const chatUrl = String(data.chat_background_url || '');
+      const globalUrl = String(data.global_background_url || '');
+      const videoUrl = String(data.video_background_url || '');
+      setStoredChatBackgroundUrl(chatUrl);
+      setStoredGlobalBackgroundUrl(globalUrl);
+      setStoredVideoBackgroundUrl(videoUrl);
+      setChatBackgroundUrl(chatUrl && localMode ? await getLocalAssetUrl(user.id, chatUrl) : chatUrl);
+      setGlobalBackgroundUrl(globalUrl && localMode ? await getLocalAssetUrl(user.id, globalUrl) : globalUrl);
+      setVideoBackgroundUrl(videoUrl && localMode ? await getLocalAssetUrl(user.id, videoUrl) : videoUrl);
       if (data.theme) setCurrentTheme(data.theme);
       if ((data as any).font_family) setCurrentFont((data as any).font_family);
       if ((data as any).font_color) setFontColor((data as any).font_color);
@@ -229,6 +266,16 @@ const CustomizePage: React.FC = () => {
       // 压缩背景图（最大宽度1920px，质量0.8）
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1920, 0.8);
+      if (localMode) {
+        const sourceUrl = `local-asset://chat-bg-${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, sourceUrl, compressedBlob);
+        setStoredChatBackgroundUrl(sourceUrl);
+        setChatBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
+        setUploading(false);
+        toast.dismiss();
+        toast.success('背景图已保存到本机');
+        return;
+      }
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const fileName = `${user.id}/chat-bg-${Date.now()}.jpg`;
@@ -246,7 +293,9 @@ const CustomizePage: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      setChatBackgroundUrl(publicUrl + '?t=' + Date.now());
+      const nextUrl = publicUrl + '?t=' + Date.now();
+      setStoredChatBackgroundUrl(nextUrl);
+      setChatBackgroundUrl(nextUrl);
       toast.dismiss();
       toast.success('背景图上传成功');
     } catch (error) {
@@ -273,6 +322,16 @@ const CustomizePage: React.FC = () => {
       // 压缩全局背景（最大宽度1920px，质量0.8）
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1920, 0.8);
+      if (localMode) {
+        const sourceUrl = `local-asset://global-bg-${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, sourceUrl, compressedBlob);
+        setStoredGlobalBackgroundUrl(sourceUrl);
+        setGlobalBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
+        setGlobalUploading(false);
+        toast.dismiss();
+        toast.success('全局背景已保存到本机');
+        return;
+      }
       const compressedFile = blobToFile(compressedBlob, file.name);
       
       const fileName = `${user.id}/global-bg-${Date.now()}.jpg`;
@@ -290,7 +349,9 @@ const CustomizePage: React.FC = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      setGlobalBackgroundUrl(publicUrl + '?t=' + Date.now());
+      const nextUrl = publicUrl + '?t=' + Date.now();
+      setStoredGlobalBackgroundUrl(nextUrl);
+      setGlobalBackgroundUrl(nextUrl);
       toast.dismiss();
       toast.success('全局背景图上传成功');
     } catch (error) {
@@ -318,6 +379,16 @@ const CustomizePage: React.FC = () => {
 
     setVideoUploading(true);
     toast.loading('正在上传视频...');
+    if (localMode) {
+      const sourceUrl = `local-asset://video-bg-${crypto.randomUUID()}`;
+      await saveLocalAsset(user.id, sourceUrl, file);
+      setStoredVideoBackgroundUrl(sourceUrl);
+      setVideoBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
+      setVideoUploading(false);
+      toast.dismiss();
+      toast.success('动态背景已保存到本机');
+      return;
+    }
     
     const fileName = `${user.id}/video-bg-${Date.now()}.${file.name.split('.').pop()}`;
     
@@ -334,7 +405,9 @@ const CustomizePage: React.FC = () => {
     }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-    setVideoBackgroundUrl(publicUrl + '?t=' + Date.now());
+    const nextUrl = publicUrl + '?t=' + Date.now();
+    setStoredVideoBackgroundUrl(nextUrl);
+    setVideoBackgroundUrl(nextUrl);
     setVideoUploading(false);
     toast.dismiss();
     toast.success('动态背景上传成功');
@@ -352,7 +425,8 @@ const CustomizePage: React.FC = () => {
     }
 
     // Clear session cache to force reload
-    sessionStorage.removeItem(`bg_${user.id}`);
+    sessionStorage.removeItem(`bg_${user.id}_local`);
+    sessionStorage.removeItem(`bg_${user.id}_cloud`);
 
     // Full payload with all fields
     const fullPayload: Record<string, any> = {
@@ -362,9 +436,9 @@ const CustomizePage: React.FC = () => {
       bubble_style: bubbleStyle,
       bubble_opacity: opacity[0],
       bubble_size: bubbleSize[0],
-      chat_background_url: chatBackgroundUrl || null,
-      global_background_url: globalBackgroundUrl || null,
-      video_background_url: videoBackgroundUrl || null,
+      chat_background_url: storedChatBackgroundUrl || null,
+      global_background_url: storedGlobalBackgroundUrl || null,
+      video_background_url: storedVideoBackgroundUrl || null,
       theme: currentTheme,
       font_family: currentFont,
       font_color: fontColor,
@@ -383,6 +457,19 @@ const CustomizePage: React.FC = () => {
 
     console.log('[Save] Attempting upsert with full payload');
 
+    if (localMode) {
+      await upsertLocalRow(
+        user.id,
+        'customization',
+        (row) => row.user_id === user.id,
+        fullPayload,
+      );
+      applyGlobalTextColor(globalTextColor);
+      applyGlobalTextSize(globalTextSize);
+      toast.success('美化设置已保存到本机');
+      return;
+    }
+
     const { data, error } = await supabase
       .from('customization')
       .upsert(fullPayload as any, { onConflict: 'user_id' })
@@ -398,7 +485,7 @@ const CustomizePage: React.FC = () => {
         friend_bubble_color: friendBubbleColor,
         bubble_style: bubbleStyle,
         bubble_opacity: opacity[0],
-        chat_background_url: chatBackgroundUrl || null,
+        chat_background_url: storedChatBackgroundUrl || null,
         theme: currentTheme,
         font_color: fontColor,
         friend_font_color: friendFontColor,
@@ -408,8 +495,8 @@ const CustomizePage: React.FC = () => {
       // Try adding optional fields one concept at a time
       const optionalFields: Record<string, any> = {
         bubble_size: bubbleSize[0],
-        global_background_url: globalBackgroundUrl || null,
-        video_background_url: videoBackgroundUrl || null,
+        global_background_url: storedGlobalBackgroundUrl || null,
+        video_background_url: storedVideoBackgroundUrl || null,
         font_family: currentFont,
         avatar_frame_url: avatarFrame || null,
         friend_avatar_frame_url: friendAvatarFrame || null,
@@ -507,7 +594,7 @@ const CustomizePage: React.FC = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => { setVideoBackgroundUrl(''); toast.success('已清空动态背景'); }}
+                onClick={() => { setVideoBackgroundUrl(''); setStoredVideoBackgroundUrl(''); toast.success('已清空动态背景'); }}
                 className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
               >
                 <X className="w-4 h-4 mr-1" />
@@ -791,7 +878,7 @@ const CustomizePage: React.FC = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => { setGlobalBackgroundUrl(''); toast.success('已清空全局背景'); }}
+                onClick={() => { setGlobalBackgroundUrl(''); setStoredGlobalBackgroundUrl(''); toast.success('已清空全局背景'); }}
                 className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
               >
                 <X className="w-4 h-4 mr-1" />

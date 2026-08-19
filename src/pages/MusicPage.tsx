@@ -8,6 +8,15 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMusicPlayer } from '@/contexts/MusicContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, insertLocalRow, isLocalModeEnabled, saveLocalAsset, updateLocalRows } from '@/lib/localDataStore';
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(blob);
+  });
 
 const MusicPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +52,15 @@ const MusicPage: React.FC = () => {
   const [showTrackList, setShowTrackList] = useState(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -60,6 +78,22 @@ const MusicPage: React.FC = () => {
     setUploadProgress(0);
     
     try {
+      const title = file.name.replace(/\.[^/.]+$/, '');
+      if (localMode) {
+        const assetKey = `local-music:${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, assetKey, file);
+        await insertLocalRow(user.id, 'music', {
+          title,
+          audio_url: assetKey,
+          user_id: user.id,
+          cover_url: defaultCoverUrl,
+        });
+        setUploadProgress(100);
+        toast.success('音乐已保存到本机');
+        await fetchTracks();
+        return;
+      }
+
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const fileName = `${user.id}/${Date.now()}_${safeName}`;
       
@@ -87,7 +121,6 @@ const MusicPage: React.FC = () => {
       
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
       
-      const title = file.name.replace(/\.[^/.]+$/, '');
       const { error: insertError } = await supabase
         .from('music')
         .insert({ 
@@ -150,6 +183,18 @@ const MusicPage: React.FC = () => {
       // 压缩图片
       const compressedBlob = await compressImage(file);
       const compressedFile = new File([compressedBlob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+      if (localMode) {
+        const localCoverUrl = await blobToDataUrl(compressedFile);
+        if (trackId) {
+          await updateLocalRows(user.id, 'music', (row) => row.id === trackId, { cover_url: localCoverUrl });
+          await fetchTracks();
+          toast.success('封面已更新');
+        } else {
+          await saveDefaultCover(localCoverUrl);
+          toast.success('唱片封面已保存');
+        }
+        return;
+      }
       
       const fileName = `${user.id}/covers/${Date.now()}_${compressedFile.name}`;
       const { error: uploadError } = await supabase.storage
@@ -188,7 +233,11 @@ const MusicPage: React.FC = () => {
 
   const handleUpdateTitle = async (trackId: string) => {
     if (!editTitle.trim()) return;
-    await supabase.from('music').update({ title: editTitle }).eq('id', trackId);
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'music', (row) => row.id === trackId, { title: editTitle });
+    } else {
+      await supabase.from('music').update({ title: editTitle }).eq('id', trackId);
+    }
     setEditingId(null);
     setEditTitle('');
     fetchTracks();
@@ -196,7 +245,11 @@ const MusicPage: React.FC = () => {
   };
 
   const handleDelete = async (trackId: string) => {
-    await supabase.from('music').delete().eq('id', trackId);
+    if (localMode && user?.id) {
+      await deleteLocalRows(user.id, 'music', (row) => row.id === trackId);
+    } else {
+      await supabase.from('music').delete().eq('id', trackId);
+    }
     fetchTracks();
     toast.success('已删除');
   };

@@ -1,7 +1,8 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { getLocalAssetUrl, getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 
 /**
  * Hook to trigger push notifications when user is not actively viewing the chat
@@ -12,6 +13,15 @@ export function usePushTrigger() {
   const isPageVisible = useRef(true);
   const currentChatId = useRef<string | null>(null);
   const navigateRef = useRef<((path: string) => void) | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
 
   // Track page visibility
   useEffect(() => {
@@ -46,12 +56,13 @@ export function usePushTrigger() {
     // Fetch avatar for better notification
     let avatarUrl: string | undefined;
     try {
-      const { data } = await supabase
-        .from('characters')
-        .select('avatar_url')
-        .eq('id', characterId)
-        .single();
-      avatarUrl = data?.avatar_url || undefined;
+      const data = localMode && user
+        ? (await getLocalTable(user.id, 'characters')).find((row) => row.id === characterId)
+        : (await supabase.from('characters').select('avatar_url').eq('id', characterId).single()).data;
+      const storedAvatar = data?.avatar_url ? String(data.avatar_url) : undefined;
+      avatarUrl = storedAvatar && localMode && user
+        ? await getLocalAssetUrl(user.id, storedAvatar)
+        : storedAvatar;
     } catch {
       // Ignore errors
     }
@@ -113,7 +124,7 @@ export function usePushTrigger() {
         position: 'top-center',
       }
     );
-  }, []);
+  }, [localMode, user]);
 
   // Trigger push notification for new message
   const triggerPush = useCallback(async (
@@ -135,6 +146,9 @@ export function usePushTrigger() {
       await showInAppNotification(characterId, characterName, messageContent);
       return;
     }
+
+    // 本机模式不向云端上传推送订阅或消息内容。
+    if (localMode) return;
 
     // Page is hidden (background), send system push notification
     const truncatedBody = messageContent.length > 100 
@@ -163,7 +177,7 @@ export function usePushTrigger() {
     } catch (err) {
       console.error('[Push] Error triggering push:', err);
     }
-  }, [user, showInAppNotification]);
+  }, [user, showInAppNotification, localMode]);
 
   return {
     setCurrentChat,

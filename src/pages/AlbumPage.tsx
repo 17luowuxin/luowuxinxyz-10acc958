@@ -9,6 +9,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
 
 interface Album {
   id: string;
@@ -34,15 +43,29 @@ const AlbumPage: React.FC = () => {
   const [newAlbumName, setNewAlbumName] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [deleteAlbumId, setDeleteAlbumId] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchAlbums();
       fetchPhotos();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchAlbums = async () => {
+    if (localMode && user?.id) {
+      const data = await getLocalTable(user.id, 'albums');
+      setAlbums(data.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as Album[]);
+      return;
+    }
     const { data } = await supabase
       .from('albums')
       .select('*')
@@ -52,6 +75,13 @@ const AlbumPage: React.FC = () => {
   };
 
   const fetchPhotos = async (albumId?: string) => {
+    if (localMode && user?.id) {
+      const data = (await getLocalTable(user.id, 'photos'))
+        .filter((photo) => albumId ? photo.album_id === albumId : !photo.album_id)
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+      setPhotos(data as unknown as Photo[]);
+      return;
+    }
     let query = supabase
       .from('photos')
       .select('*')
@@ -77,6 +107,16 @@ const AlbumPage: React.FC = () => {
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        await insertLocalRow(user.id, 'photos', {
+          user_id: user.id,
+          url: await fileToDataUrl(compressedFile),
+          album_id: currentAlbum?.id || null,
+        });
+        toast.success('照片已保存到本机');
+        await fetchPhotos(currentAlbum?.id);
+        return;
+      }
       
       const filePath = `${user.id}/${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile);
@@ -102,11 +142,12 @@ const AlbumPage: React.FC = () => {
 
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim() || !user) return;
-    
-    const { error } = await supabase.from('albums').insert({
-      user_id: user.id,
-      name: newAlbumName.trim()
-    });
+    let error = null;
+    if (localMode) {
+      await insertLocalRow(user.id, 'albums', { user_id: user.id, name: newAlbumName.trim() });
+    } else {
+      error = (await supabase.from('albums').insert({ user_id: user.id, name: newAlbumName.trim() })).error;
+    }
     
     if (error) {
       toast.error('创建失败');
@@ -121,14 +162,13 @@ const AlbumPage: React.FC = () => {
 
   const handleDeleteAlbum = async () => {
     if (!deleteAlbumId) return;
-    
-    // 将相册中的照片移到未分类
-    await supabase
-      .from('photos')
-      .update({ album_id: null })
-      .eq('album_id', deleteAlbumId);
-    
-    await supabase.from('albums').delete().eq('id', deleteAlbumId);
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'photos', (row) => row.album_id === deleteAlbumId, { album_id: null });
+      await deleteLocalRows(user.id, 'albums', (row) => row.id === deleteAlbumId);
+    } else {
+      await supabase.from('photos').update({ album_id: null }).eq('album_id', deleteAlbumId);
+      await supabase.from('albums').delete().eq('id', deleteAlbumId);
+    }
     toast.success('相册已删除');
     setDeleteAlbumId(null);
     fetchAlbums();
@@ -139,7 +179,11 @@ const AlbumPage: React.FC = () => {
   };
 
   const handleDeletePhoto = async (photoId: string) => {
-    await supabase.from('photos').delete().eq('id', photoId);
+    if (localMode && user?.id) {
+      await deleteLocalRows(user.id, 'photos', (row) => row.id === photoId);
+    } else {
+      await supabase.from('photos').delete().eq('id', photoId);
+    }
     toast.success('照片已删除');
     setSelectedPhoto(null);
     fetchPhotos(currentAlbum?.id);

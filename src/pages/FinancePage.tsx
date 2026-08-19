@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
 
 interface Transaction {
   id: string;
@@ -26,27 +27,46 @@ const FinancePage: React.FC = () => {
   const [totalReceived, setTotalReceived] = useState(0);
   const [showDeleteMode, setShowDeleteMode] = useState(false);
   const [deleteClickCount, setDeleteClickCount] = useState(0);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
-      fetchTransactions();
+    if (!user) {
+      setLocalMode(false);
+      return;
     }
+    isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
+  useEffect(() => {
+    if (user && localMode !== null) {
+      fetchTransactions();
+    }
+  }, [user, localMode]);
+
   const fetchTransactions = async () => {
-    const { data, error } = await supabase
-      .from('dream_transactions')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+    if (!user) return;
+    const result = localMode
+      ? {
+          data: (await getLocalTable(user.id, 'dream_transactions'))
+            .filter((row) => row.user_id === user.id)
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+          error: null,
+        }
+      : await supabase
+          .from('dream_transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+    const { data, error } = result;
 
     if (!error && data) {
-      setTransactions(data);
+      const typedData = data as Transaction[];
+      setTransactions(typedData);
       
       // Calculate totals
-      const received = data.filter(t => t.is_received);
+      const received = typedData.filter(t => t.is_received);
       const balance = received.reduce((sum, t) => sum + Number(t.amount), 0);
-      const total = data.reduce((sum, t) => sum + Number(t.amount), 0);
+      const total = typedData.reduce((sum, t) => sum + Number(t.amount), 0);
       
       setTotalBalance(balance);
       setTotalReceived(total);
@@ -55,10 +75,10 @@ const FinancePage: React.FC = () => {
   };
 
   const handleReceive = async (transactionId: string) => {
-    const { error } = await supabase
-      .from('dream_transactions')
-      .update({ is_received: true })
-      .eq('id', transactionId);
+    if (!user) return;
+    const error = localMode
+      ? (await updateLocalRows(user.id, 'dream_transactions', (row) => row.id === transactionId, { is_received: true }), null)
+      : (await supabase.from('dream_transactions').update({ is_received: true }).eq('id', transactionId)).error;
 
     if (!error) {
       fetchTransactions();
@@ -79,10 +99,10 @@ const FinancePage: React.FC = () => {
   };
 
   const handleDeleteTransaction = async (transactionId: string) => {
-    const { error } = await supabase
-      .from('dream_transactions')
-      .delete()
-      .eq('id', transactionId);
+    if (!user) return;
+    const error = localMode
+      ? (await deleteLocalRows(user.id, 'dream_transactions', (row) => row.id === transactionId), null)
+      : (await supabase.from('dream_transactions').delete().eq('id', transactionId)).error;
 
     if (!error) {
       toast.success('已删除');
@@ -95,10 +115,10 @@ const FinancePage: React.FC = () => {
   const handleClearAll = async () => {
     if (!confirm('确定要清空所有转账记录吗？此操作不可撤销！')) return;
     
-    const { error } = await supabase
-      .from('dream_transactions')
-      .delete()
-      .eq('user_id', user?.id);
+    if (!user) return;
+    const error = localMode
+      ? (await deleteLocalRows(user.id, 'dream_transactions', (row) => row.user_id === user.id), null)
+      : (await supabase.from('dream_transactions').delete().eq('user_id', user.id)).error;
 
     if (!error) {
       toast.success('已清空所有记录');

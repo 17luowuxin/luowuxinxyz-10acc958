@@ -5,6 +5,7 @@ import { ChevronLeft, MessageCircle, Users, Heart, Calendar, TrendingUp, Clock }
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 
 interface Stats {
   totalMessages: number;
@@ -28,13 +29,57 @@ const StatsPage: React.FC = () => {
     recentDays: 0
   });
   const [loading, setLoading] = useState(true);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) fetchStats();
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
+  useEffect(() => {
+    if (user && localMode !== null) fetchStats();
+  }, [user, localMode]);
+
   const fetchStats = async () => {
+    if (!user) return;
     setLoading(true);
+
+    if (localMode) {
+      const [messages, characters, diaries, photos, moments] = await Promise.all([
+        getLocalTable(user.id, 'chat_messages'),
+        getLocalTable(user.id, 'characters'),
+        getLocalTable(user.id, 'diaries'),
+        getLocalTable(user.id, 'photos'),
+        getLocalTable(user.id, 'moments'),
+      ]);
+      const characterNames = new Map(characters.map((row) => [String(row.id), String(row.name || '好友')]));
+      const characterCounts = new Map<string, number>();
+      messages.forEach((message) => {
+        if (!message.character_id) return;
+        const id = String(message.character_id);
+        characterCounts.set(id, (characterCounts.get(id) || 0) + 1);
+      });
+      const favorite = [...characterCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+      const recentDays = new Set(
+        messages
+          .filter((message) => message.created_at)
+          .map((message) => new Date(String(message.created_at)).toDateString()),
+      ).size;
+      setStats({
+        totalMessages: messages.length,
+        totalCharacters: characters.length,
+        totalDiaries: diaries.length,
+        totalPhotos: photos.length,
+        totalMoments: moments.length,
+        recentDays,
+        favoriteCharacter: favorite ? { name: characterNames.get(favorite[0]) || '好友', count: favorite[1] } : undefined,
+      });
+      setLoading(false);
+      return;
+    }
     
     // 获取消息总数
     const { count: msgCount } = await supabase

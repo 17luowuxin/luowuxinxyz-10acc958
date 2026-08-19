@@ -18,6 +18,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
 
 interface Character {
   id: string;
@@ -121,24 +136,32 @@ const GiftShopPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'exchange' | 'collect' | 'mine'>('exchange');
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [giftHistory, setGiftHistory] = useState<HistoryItem[]>([]);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchBalance();
       fetchCharacters();
       fetchFavorites();
       fetchGiftHistory();
       fetchCustomImages();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   // 加载自定义图片
   const fetchCustomImages = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('gift_custom_images')
-      .select('gift_id, image_url')
-      .eq('user_id', user.id);
+    const data = localMode
+      ? await getLocalTable(user.id, 'gift_custom_images')
+      : (await supabase.from('gift_custom_images').select('gift_id, image_url').eq('user_id', user.id)).data;
     
     if (data && data.length > 0) {
       setGifts(prevGifts => prevGifts.map(gift => {
@@ -149,11 +172,10 @@ const GiftShopPage: React.FC = () => {
   };
 
   const fetchBalance = async () => {
-    const { data } = await supabase
-      .from('dream_transactions')
-      .select('amount, is_received')
-      .eq('user_id', user?.id)
-      .eq('is_received', true);
+    if (!user?.id) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'dream_transactions')).filter((row) => row.is_received === true)
+      : (await supabase.from('dream_transactions').select('amount, is_received').eq('user_id', user.id).eq('is_received', true)).data;
 
     if (data) {
       const total = data.reduce((sum, t) => sum + Number(t.amount), 0);
@@ -162,11 +184,10 @@ const GiftShopPage: React.FC = () => {
   };
 
   const fetchCharacters = async () => {
-    const { data } = await supabase
-      .from('characters')
-      .select('id, name, avatar_url')
-      .eq('user_id', user?.id)
-      .order('name');
+    if (!user?.id) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'characters')).sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      : (await supabase.from('characters').select('id, name, avatar_url').eq('user_id', user.id).order('name')).data;
 
     if (data) {
       setCharacters(data);
@@ -175,11 +196,9 @@ const GiftShopPage: React.FC = () => {
 
   const fetchFavorites = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('gift_favorites')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    const data = localMode
+      ? (await getLocalTable(user.id, 'gift_favorites')).sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+      : (await supabase.from('gift_favorites').select('*').eq('user_id', user.id).order('created_at', { ascending: false })).data;
 
     if (data) {
       setFavorites(data as FavoriteItem[]);
@@ -188,11 +207,9 @@ const GiftShopPage: React.FC = () => {
 
   const fetchGiftHistory = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('gift_history')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    const data = localMode
+      ? (await getLocalTable(user.id, 'gift_history')).sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+      : (await supabase.from('gift_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false })).data;
 
     if (data) {
       setGiftHistory(data as HistoryItem[]);
@@ -207,18 +224,14 @@ const GiftShopPage: React.FC = () => {
     
     if (existing) {
       // 取消收藏
-      await supabase
-        .from('gift_favorites')
-        .delete()
-        .eq('id', existing.id);
+      if (localMode) await deleteLocalRows(user.id, 'gift_favorites', (row) => row.id === existing.id);
+      else await supabase.from('gift_favorites').delete().eq('id', existing.id);
       
       setFavorites(favorites.filter(f => f.id !== existing.id));
       toast.success('已取消收藏');
     } else {
       // 添加收藏
-      const { data, error } = await supabase
-        .from('gift_favorites')
-        .insert({
+      const favoriteRow = {
           user_id: user.id,
           gift_id: gift.id,
           gift_name: gift.name,
@@ -226,9 +239,10 @@ const GiftShopPage: React.FC = () => {
           gift_color: gift.color,
           gift_category: gift.category,
           custom_image: gift.customImage || null,
-        })
-        .select()
-        .single();
+      };
+      const { data, error } = localMode
+        ? { data: await insertLocalRow(user.id, 'gift_favorites', favoriteRow), error: null }
+        : await supabase.from('gift_favorites').insert(favoriteRow).select().single();
 
       if (data && !error) {
         setFavorites([data as FavoriteItem, ...favorites]);
@@ -279,6 +293,20 @@ const GiftShopPage: React.FC = () => {
     if (!file || !editingGiftId || !user) return;
 
     try {
+      if (localMode) {
+        const localUrl = await fileToDataUrl(file);
+        await upsertLocalRow(
+          user.id,
+          'gift_custom_images',
+          (row) => row.gift_id === editingGiftId,
+          { user_id: user.id, gift_id: editingGiftId, image_url: localUrl },
+        );
+        setGifts(gifts.map((gift) => gift.id === editingGiftId ? { ...gift, customImage: localUrl } : gift));
+        setEditingGiftId(null);
+        toast.success('图片已保存到本机');
+        return;
+      }
+
       // 上传到存储
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/gift-${editingGiftId}-${Date.now()}.${fileExt}`;
@@ -361,9 +389,7 @@ const GiftShopPage: React.FC = () => {
       // 创建交易记录
       const giftNames = giftList.map(item => `${item.gift.name}x${item.quantity}`).join('、');
       
-      const { error } = await supabase
-        .from('dream_transactions')
-        .insert({
+      const transactionRow = {
           user_id: user.id,
           character_id: selectedCharacter.id,
           character_name: selectedCharacter.name,
@@ -371,13 +397,16 @@ const GiftShopPage: React.FC = () => {
           message: `赠送了${giftNames}`,
           is_received: true,
           is_user_transfer: true,
-        });
+      };
+      let error = null;
+      if (localMode) await insertLocalRow(user.id, 'dream_transactions', transactionRow);
+      else error = (await supabase.from('dream_transactions').insert(transactionRow)).error;
 
       if (error) throw error;
 
       // 保存礼物历史记录
       for (const item of giftList) {
-        await supabase.from('gift_history').insert({
+        const historyRow = {
           user_id: user.id,
           character_id: selectedCharacter.id,
           character_name: selectedCharacter.name,
@@ -385,26 +414,28 @@ const GiftShopPage: React.FC = () => {
           gift_name: item.gift.name,
           gift_price: item.gift.price,
           quantity: item.quantity,
-        });
+        };
+        if (localMode) await insertLocalRow(user.id, 'gift_history', historyRow);
+        else await supabase.from('gift_history').insert(historyRow);
       }
 
       // 发送聊天消息给角色
       const userMessage = `我给你送了${giftNames}，希望你喜欢！💝`;
       
-      await supabase.from('chat_messages').insert({
+      const userChatRow = {
         user_id: user.id,
         character_id: selectedCharacter.id,
         role: 'user',
         content: userMessage,
-      });
+      };
+      if (localMode) await insertLocalRow(user.id, 'chat_messages', userChatRow);
+      else await supabase.from('chat_messages').insert(userChatRow);
 
       // 触发角色自动回复（调用chat edge function）
       try {
-        const { data: charData } = await supabase
-          .from('characters')
-          .select('persona, name')
-          .eq('id', selectedCharacter.id)
-          .single();
+        const charData = localMode
+          ? (await getLocalTable(user.id, 'characters')).find((row) => row.id === selectedCharacter.id)
+          : (await supabase.from('characters').select('persona, name').eq('id', selectedCharacter.id).single()).data;
 
           if (charData) {
             const response = await supabase.functions.invoke('chat', {
@@ -420,12 +451,14 @@ const GiftShopPage: React.FC = () => {
 
             const replyText = (response.data as any)?.response || (response.data as any)?.reply;
             if (replyText) {
-              await supabase.from('chat_messages').insert({
+              const replyRow = {
                 user_id: user.id,
                 character_id: selectedCharacter.id,
                 role: 'assistant',
                 content: replyText,
-              });
+              };
+              if (localMode) await insertLocalRow(user.id, 'chat_messages', replyRow);
+              else await supabase.from('chat_messages').insert(replyRow);
             }
           }
       } catch (chatError) {
@@ -734,7 +767,8 @@ const GiftShopPage: React.FC = () => {
                         <motion.button
                           whileTap={{ scale: 0.9 }}
                           onClick={async () => {
-                            await supabase.from('gift_favorites').delete().eq('id', fav.id);
+                            if (localMode && user?.id) await deleteLocalRows(user.id, 'gift_favorites', (row) => row.id === fav.id);
+                            else await supabase.from('gift_favorites').delete().eq('id', fav.id);
                             setFavorites(favorites.filter(f => f.id !== fav.id));
                             toast.success('已取消收藏');
                           }}

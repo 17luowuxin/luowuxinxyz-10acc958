@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalTable } from '@/lib/localDataStore';
 
 interface BlockStatus {
   isBlocked: boolean;
@@ -9,7 +10,7 @@ interface BlockStatus {
   blockedAt: string | null;
 }
 
-export const useCharacterBlock = (characterId: string | null) => {
+export const useCharacterBlock = (characterId: string | null, localMode = false) => {
   const { user } = useAuth();
   const [blockStatus, setBlockStatus] = useState<BlockStatus>({
     isBlocked: false,
@@ -26,6 +27,19 @@ export const useCharacterBlock = (characterId: string | null) => {
     }
 
     try {
+      if (localMode) {
+        const data = (await getLocalTable(user.id, 'character_blocks')).find(
+          (row) => row.character_id === characterId && row.is_active === true,
+        );
+        setBlockStatus({
+          isBlocked: !!data,
+          messageCount: Number(data?.message_count || 0),
+          lastMessageAt: data?.last_message_at ? String(data.last_message_at) : null,
+          blockedAt: data?.blocked_at ? String(data.blocked_at) : null,
+        });
+        return;
+      }
+
       const { data, error } = await supabase
         .from('character_blocks')
         .select('is_active, message_count, last_message_at, blocked_at')
@@ -47,7 +61,7 @@ export const useCharacterBlock = (characterId: string | null) => {
     } finally {
       setLoading(false);
     }
-  }, [user, characterId]);
+  }, [user, characterId, localMode]);
 
   useEffect(() => {
     fetchBlockStatus();
@@ -55,7 +69,7 @@ export const useCharacterBlock = (characterId: string | null) => {
 
   // 订阅实时更新
   useEffect(() => {
-    if (!user || !characterId) return;
+    if (!user || !characterId || localMode) return;
 
     const channel = supabase
       .channel(`block_${characterId}`)
@@ -76,7 +90,7 @@ export const useCharacterBlock = (characterId: string | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, characterId, fetchBlockStatus]);
+  }, [user, characterId, fetchBlockStatus, localMode]);
 
   const setBlocked = (blocked: boolean) => {
     setBlockStatus(prev => ({

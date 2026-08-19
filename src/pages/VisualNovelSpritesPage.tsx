@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import SpriteManager from "@/components/visual-novel/SpriteManager";
+import SpriteManager from "@/components/customize/SpriteManager";
 
 const VisualNovelSpritesPage: React.FC = () => {
   const navigate = useNavigate();

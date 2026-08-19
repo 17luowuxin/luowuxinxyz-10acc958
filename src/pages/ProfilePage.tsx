@@ -7,6 +7,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { getLocalTable, isLocalModeEnabled, upsertLocalRow } from '@/lib/localDataStore';
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'));
+    reader.readAsDataURL(blob);
+  });
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -14,17 +23,29 @@ const ProfilePage: React.FC = () => {
   const [nickname, setNickname] = useState('');
   const [persona, setPersona] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) fetchProfile();
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
+  useEffect(() => {
+    if (user && localMode !== null) fetchProfile();
+  }, [user, localMode]);
+
   const fetchProfile = async () => {
-    const { data } = await supabase.from('profiles').select('*').eq('user_id', user?.id).maybeSingle();
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
+      : (await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle()).data;
     if (data) {
-      setNickname(data.nickname || '');
-      setPersona(data.persona || '');
-      setAvatarUrl(data.avatar_url || '');
+      setNickname(String(data.nickname || ''));
+      setPersona(String(data.persona || ''));
+      setAvatarUrl(String(data.avatar_url || ''));
     }
   };
 
@@ -35,20 +56,26 @@ const ProfilePage: React.FC = () => {
     try {
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 512, 0.85);
-      const compressedFile = blobToFile(compressedBlob, file.name);
-      
-      const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError);
-        toast.error('头像上传失败: ' + uploadError.message);
-        return;
+      let nextAvatarUrl: string;
+
+      if (localMode) {
+        nextAvatarUrl = await blobToDataUrl(compressedBlob);
+      } else {
+        const compressedFile = blobToFile(compressedBlob, file.name);
+        const filePath = `${user.id}/avatar-${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, compressedFile, { upsert: true });
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          toast.error('头像上传失败: ' + uploadError.message);
+          return;
+        }
+        nextAvatarUrl = supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl;
       }
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      setAvatarUrl(publicUrl);
+
+      setAvatarUrl(nextAvatarUrl);
       
       // 更新 profile 头像
-      await saveProfile({ avatar_url: publicUrl });
+      await saveProfile({ avatar_url: nextAvatarUrl });
       toast.success('头像已更新');
     } catch (error) {
       console.error('Avatar upload error:', error);
@@ -58,6 +85,17 @@ const ProfilePage: React.FC = () => {
 
   const saveProfile = async (extraFields: Record<string, string> = {}) => {
     if (!user) return false;
+    const payload = { nickname, persona, ...extraFields };
+
+    if (localMode) {
+      await upsertLocalRow(
+        user.id,
+        'profiles',
+        (row) => row.user_id === user.id,
+        { id: user.id, user_id: user.id, ...payload },
+      );
+      return true;
+    }
     
     // 先查是否存在
     const { data: existing } = await supabase
@@ -65,8 +103,6 @@ const ProfilePage: React.FC = () => {
       .select('id')
       .eq('user_id', user.id)
       .maybeSingle();
-    
-    const payload = { nickname, persona, ...extraFields };
     
     let error;
     if (existing) {

@@ -251,6 +251,23 @@ const ChatMessageBubble = memo(({
     };
   }, [msg.created_at, prevMsg?.created_at]);
 
+  const { displayContent, transferData, isCallRecord, callType, callDuration, showBubble } = useMemo(() => {
+    const transferCmd = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
+    const rawContent = transferCmd ? removeTransferCommand(msg.content) : msg.content;
+    const content = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
+    const shouldShowBubble = content && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
+    const callMatch = content?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
+
+    return {
+      displayContent: content,
+      transferData: transferCmd,
+      isCallRecord: !!callMatch,
+      callType: callMatch?.[1],
+      callDuration: callMatch?.[3],
+      showBubble: shouldShowBubble,
+    };
+  }, [msg.content, msg.role, msg.image_url, parseTransferCommand, removeTransferCommand]);
+
   // 处理转账消息
   if (msg.role === 'transfer') {
     const transfer = msg.transferData || pendingTransfers.find((t: any) => msg.content.includes(t.id));
@@ -289,25 +306,6 @@ const ChatMessageBubble = memo(({
       </div>
     );
   }
-
-  // 计算显示内容
-  const { displayContent, transferData, isCallRecord, callType, callDuration, showBubble } = useMemo(() => {
-    const transferCmd = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
-    const rawContent = transferCmd ? removeTransferCommand(msg.content) : msg.content;
-    const content = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
-    const shouldShowBubble = content && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
-    
-    const callMatch = content?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
-    
-    return {
-      displayContent: content,
-      transferData: transferCmd,
-      isCallRecord: !!callMatch,
-      callType: callMatch?.[1],
-      callDuration: callMatch?.[3],
-      showBubble: shouldShowBubble,
-    };
-  }, [msg.content, msg.role, msg.image_url, parseTransferCommand, removeTransferCommand]);
 
   const avatarFrame = isUser ? userAvatarFrame : friendAvatarFrame;
   const avatarUrl = isUser ? profile?.avatar_url : character?.avatar_url;

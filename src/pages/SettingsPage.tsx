@@ -11,6 +11,13 @@ import { toast } from 'sonner';
 import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
 import { PushNotificationCard } from '@/components/settings/PushNotificationCard';
 import DataMigrationCard from '@/components/settings/DataMigrationCard';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 
 const DEFAULT_MODELS = [
   { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
@@ -145,14 +152,66 @@ const SettingsPage: React.FC = () => {
 
   // 时间同步 state
   const [timeSyncEnabled, setTimeSyncEnabled] = useState(false);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) fetchApiKeys();
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
+  useEffect(() => {
+    if (user && localMode !== null) fetchApiKeys();
+  }, [user, localMode]);
+
+  const removeApiKeys = async (userId: string, providers?: string[]) => {
+    if (localMode) {
+      await deleteLocalRows(
+        userId,
+        'api_keys',
+        (row) => row.user_id === userId && (!providers || providers.includes(String(row.provider))),
+      );
+      return { error: null as any };
+    }
+    let query = supabase.from('api_keys').delete().eq('user_id', userId);
+    if (providers?.length === 1) query = query.eq('provider', providers[0]);
+    if (providers && providers.length > 1) query = query.in('provider', providers);
+    return query;
+  };
+
+  const removeApiKeysMatching = async (userId: string, matches: (provider: string) => boolean) => {
+    if (localMode) {
+      await deleteLocalRows(
+        userId,
+        'api_keys',
+        (row) => row.user_id === userId && matches(String(row.provider || '')),
+      );
+      return { error: null as any };
+    }
+    const rows = await supabase.from('api_keys').select('id, provider').eq('user_id', userId);
+    if (rows.error) return { error: rows.error };
+    const ids = (rows.data || []).filter((row) => matches(row.provider)).map((row) => row.id);
+    if (ids.length === 0) return { error: null as any };
+    return supabase.from('api_keys').delete().in('id', ids);
+  };
+
+  const addApiKeyRows = async (rows: Array<{ user_id: string; provider: string; api_key: string }>) => {
+    if (localMode) {
+      const data = await Promise.all(rows.map((row) => insertLocalRow(row.user_id, 'api_keys', row)));
+      return { data, error: null as any };
+    }
+    return supabase.from('api_keys').insert(rows).select();
+  };
+
   const fetchApiKeys = async () => {
-    console.log('[Settings] Fetching api_keys for user:', user?.id);
-    const { data, error } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+    console.log('[Settings] Fetching API settings');
+    if (!user) return;
+    const result = localMode
+      ? { data: await getLocalTable(user.id, 'api_keys'), error: null }
+      : await supabase.from('api_keys').select('*').eq('user_id', user.id);
+    const { data, error } = result;
     if (error) {
       console.error('[Settings] Failed to fetch api_keys:', JSON.stringify(error, null, 2));
       toast.error(`加载设置失败: [${error.code}] ${error.message}`, { duration: 10000 });
@@ -335,6 +394,16 @@ const SettingsPage: React.FC = () => {
   };
 
   const upsertApiKey = async (userId: string, provider: string, value: string) => {
+    if (localMode) {
+      await upsertLocalRow(
+        userId,
+        'api_keys',
+        (row) => row.user_id === userId && row.provider === provider,
+        { user_id: userId, provider, api_key: value },
+      );
+      return null;
+    }
+
     // First try upsert (works if unique constraint is on user_id+provider)
     const { error: upsertErr } = await supabase
       .from('api_keys')
@@ -366,10 +435,10 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    console.log('[Settings] Saving custom API config for user:', user.id);
+    console.log('[Settings] Saving custom API config');
 
     // Clear default API flag when saving custom
-    await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'use_default_api');
+    await removeApiKeys(user.id, ['use_default_api']);
 
     const errors: any[] = [];
     let err: any;
@@ -448,7 +517,7 @@ const SettingsPage: React.FC = () => {
     }
     
     // Clear custom API settings
-    await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'custom');
+    await removeApiKeys(user.id, ['custom']);
     
     setUsingDefaultApi(true);
     setApiKey('');
@@ -504,13 +573,9 @@ const SettingsPage: React.FC = () => {
       'novelai_auto_generate',
     ];
 
-    console.log('Saving NovelAI settings for user:', user.id, 'key length:', trimmedKey.length);
+    console.log('Saving NovelAI settings');
 
-    const { error: delErr } = await supabase
-      .from('api_keys')
-      .delete()
-      .eq('user_id', user.id)
-      .in('provider', providersToReplace);
+    const { error: delErr } = await removeApiKeys(user.id, providersToReplace);
 
     if (delErr) {
       console.error('Delete error:', delErr);
@@ -525,7 +590,7 @@ const SettingsPage: React.FC = () => {
       { user_id: user.id, provider: 'novelai_auto_generate', api_key: novelaiAutoGenerate ? 'true' : 'false' },
     ];
 
-    const { data: insData, error: insErr } = await supabase.from('api_keys').insert(rows).select();
+    const { data: insData, error: insErr } = await addApiKeyRows(rows);
     
     if (insErr) {
       console.error('Insert error:', insErr);
@@ -563,7 +628,7 @@ const SettingsPage: React.FC = () => {
     ];
 
     const providers = settingsToSave.map(s => s.provider);
-    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+    await removeApiKeys(user.id, providers);
 
     const rows = settingsToSave.map(s => ({
       user_id: user.id,
@@ -571,7 +636,7 @@ const SettingsPage: React.FC = () => {
       api_key: s.value,
     }));
 
-    const { error } = await supabase.from('api_keys').insert(rows);
+    const { error } = await addApiKeyRows(rows);
     if (error) {
       toast.error('保存失败: ' + error.message);
       return;
@@ -749,11 +814,7 @@ const SettingsPage: React.FC = () => {
       ];
       
       // 删除所有NovelAI配置
-      const { error } = await supabase
-        .from('api_keys')
-        .delete()
-        .eq('user_id', user.id)
-        .in('provider', novelaiProviders);
+      const { error } = await removeApiKeys(user.id, novelaiProviders);
       
       if (error) {
         toast.error('清除失败: ' + error.message);
@@ -761,11 +822,10 @@ const SettingsPage: React.FC = () => {
       }
       
       // 同时删除所有角色专属的NAI提示词
-      const { error: charError } = await supabase
-        .from('api_keys')
-        .delete()
-        .eq('user_id', user.id)
-        .or('provider.like.nai_positive_%,provider.like.nai_negative_%');
+      const { error: charError } = await removeApiKeysMatching(
+        user.id,
+        (provider) => provider.startsWith('nai_positive_') || provider.startsWith('nai_negative_'),
+      );
       
       if (charError) {
         console.error('清除角色NAI提示词失败:', charError);
@@ -821,7 +881,7 @@ const SettingsPage: React.FC = () => {
 
     const providersToReplace = ['tts_enabled', 'tts_base_url', 'tts_api_key', 'tts_model'];
     
-    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    await removeApiKeys(user.id, providersToReplace);
     
     const rows = [
       { user_id: user.id, provider: 'tts_enabled', api_key: ttsEnabled ? 'true' : 'false' },
@@ -833,7 +893,7 @@ const SettingsPage: React.FC = () => {
       rows.push({ user_id: user.id, provider: 'tts_model', api_key: ttsModel.trim() });
     }
     
-    const { error } = await supabase.from('api_keys').insert(rows);
+    const { error } = await addApiKeyRows(rows);
     if (error) {
       toast.error('保存失败: ' + error.message);
       return;
@@ -902,7 +962,7 @@ const SettingsPage: React.FC = () => {
 
     const providersToReplace = ['space_image_enabled', 'space_image_api_key', 'space_image_api_url', 'space_image_model', 'space_image_size', 'space_image_style_prompt'];
     
-    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    await removeApiKeys(user.id, providersToReplace);
     
     const rows = [
       { user_id: user.id, provider: 'space_image_enabled', api_key: spaceImageEnabled ? 'true' : 'false' },
@@ -920,7 +980,7 @@ const SettingsPage: React.FC = () => {
       rows.push({ user_id: user.id, provider: 'space_image_style_prompt', api_key: spaceImageStylePrompt.trim() });
     }
     
-    const { error } = await supabase.from('api_keys').insert(rows);
+    const { error } = await addApiKeyRows(rows);
     if (error) {
       toast.error('保存失败: ' + error.message);
       return;
@@ -1097,7 +1157,7 @@ const SettingsPage: React.FC = () => {
 
     const providersToReplace = ['unsplash_enabled', 'unsplash_access_key', 'unsplash_category'];
     
-    await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providersToReplace);
+    await removeApiKeys(user.id, providersToReplace);
     
     const rows = [
       { user_id: user.id, provider: 'unsplash_enabled', api_key: unsplashEnabled ? 'true' : 'false' },
@@ -1105,7 +1165,7 @@ const SettingsPage: React.FC = () => {
       { user_id: user.id, provider: 'unsplash_category', api_key: unsplashCategory },
     ];
     
-    const { error } = await supabase.from('api_keys').insert(rows);
+    const { error } = await addApiKeyRows(rows);
     if (error) {
       toast.error('保存失败: ' + error.message);
       return;
@@ -1159,18 +1219,7 @@ const SettingsPage: React.FC = () => {
     ];
 
     for (const item of keysToUpsert) {
-      const { data: existing } = await supabase
-        .from('api_keys')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('provider', item.provider)
-        .maybeSingle();
-
-      if (existing) {
-        await supabase.from('api_keys').update({ api_key: item.value }).eq('id', existing.id);
-      } else {
-        await supabase.from('api_keys').insert({ user_id: user.id, provider: item.provider, api_key: item.value });
-      }
+      await upsertApiKey(user.id, item.provider, item.value);
     }
 
     setVnConfigured(true);
@@ -1257,8 +1306,7 @@ const SettingsPage: React.FC = () => {
                 const newVal = !timeSyncEnabled;
                 setTimeSyncEnabled(newVal);
                 if (user) {
-                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'time_sync_enabled');
-                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'time_sync_enabled', api_key: newVal ? 'true' : 'false' });
+                  await upsertApiKey(user.id, 'time_sync_enabled', newVal ? 'true' : 'false');
                   toast.success(newVal ? '时间同步已开启' : '时间同步已关闭');
                 }
               }}
@@ -1493,8 +1541,7 @@ const SettingsPage: React.FC = () => {
                 setNovelaiEnabled(newVal);
                 // 立即保存开关状态到数据库，即使还没配置 API Key
                 if (user) {
-                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'novelai_enabled');
-                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'novelai_enabled', api_key: newVal ? 'true' : 'false' });
+                  await upsertApiKey(user.id, 'novelai_enabled', newVal ? 'true' : 'false');
                 }
               }}
               className={`w-14 h-8 rounded-full transition-all ${
@@ -2078,8 +2125,7 @@ const SettingsPage: React.FC = () => {
                 const newVal = !ttsEnabled;
                 setTtsEnabled(newVal);
                 if (user) {
-                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'tts_enabled');
-                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'tts_enabled', api_key: newVal ? 'true' : 'false' });
+                  await upsertApiKey(user.id, 'tts_enabled', newVal ? 'true' : 'false');
                 }
               }}
               className={`w-14 h-8 rounded-full transition-all ${
@@ -2223,8 +2269,7 @@ const SettingsPage: React.FC = () => {
                 const newVal = !spaceImageEnabled;
                 setSpaceImageEnabled(newVal);
                 if (user) {
-                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'space_image_enabled');
-                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'space_image_enabled', api_key: newVal ? 'true' : 'false' });
+                  await upsertApiKey(user.id, 'space_image_enabled', newVal ? 'true' : 'false');
                 }
               }}
               className={`w-14 h-8 rounded-full transition-all ${
@@ -2483,8 +2528,7 @@ const SettingsPage: React.FC = () => {
                 const newVal = !unsplashEnabled;
                 setUnsplashEnabled(newVal);
                 if (user) {
-                  await supabase.from('api_keys').delete().eq('user_id', user.id).eq('provider', 'unsplash_enabled');
-                  await supabase.from('api_keys').insert({ user_id: user.id, provider: 'unsplash_enabled', api_key: newVal ? 'true' : 'false' });
+                  await upsertApiKey(user.id, 'unsplash_enabled', newVal ? 'true' : 'false');
                 }
               }}
               className={`w-14 h-8 rounded-full transition-all ${
@@ -2698,7 +2742,7 @@ const SettingsPage: React.FC = () => {
               if (!window.confirm('确定要恢复所有设置为默认值吗？此操作不可撤销。')) return;
               
               // Reset customization - including lock screen, theme, app icons, all backgrounds
-              await supabase.from('customization').update({
+              const resetCustomization = {
                 bubble_color: '#FFB5C5',
                 friend_bubble_color: '#B5D8FF',
                 bubble_style: 'rounded',
@@ -2727,10 +2771,20 @@ const SettingsPage: React.FC = () => {
                 novel_narration_color: null,
                 novel_thought_color: null,
                 novel_action_color: null,
-              } as any).eq('user_id', user.id);
+              };
+              if (localMode) {
+                await upsertLocalRow(
+                  user.id,
+                  'customization',
+                  (row) => row.user_id === user.id,
+                  { user_id: user.id, ...resetCustomization },
+                );
+              } else {
+                await supabase.from('customization').update(resetCustomization as any).eq('user_id', user.id);
+              }
               
               // Reset API settings
-              await supabase.from('api_keys').delete().eq('user_id', user.id);
+              await removeApiKeys(user.id);
               
               // Clear localStorage
               localStorage.removeItem('selectedFont');
@@ -2761,8 +2815,15 @@ const SettingsPage: React.FC = () => {
         {/* Data Migration */}
         <DataMigrationCard />
 
-        {/* Push Notification Settings */}
-        <PushNotificationCard />
+        {/* 云推送需要服务器保存设备订阅，本机模式下不启用 */}
+        {localMode ? (
+          <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-gray-100/50">
+            <h2 className="font-bold text-gray-700">消息推送通知</h2>
+            <p className="text-xs text-gray-500 mt-1">本机模式下不上传设备信息，因此关闭后台云推送；软件打开时仍会显示站内提醒。</p>
+          </div>
+        ) : (
+          <PushNotificationCard />
+        )}
 
         {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 

@@ -7,6 +7,12 @@ import { cloudSupabase } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  getLocalTable,
+  isLocalModeEnabled,
+  saveLocalAsset,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 
 interface Theme {
   id: string;
@@ -34,10 +40,19 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [applying, setApplying] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchThemes();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
 
   const fetchThemes = async () => {
     const { data, error } = await cloudSupabase
@@ -59,6 +74,10 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
   const applyTheme = async (theme: Theme) => {
     if (!user) {
       toast.error('请先登录');
+      return;
+    }
+    if (localMode === null) {
+      toast.info('正在读取本地设置，请稍候');
       return;
     }
 
@@ -85,11 +104,13 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       }
       
       // 先获取现有的 app_icons
-      const { data: existingData } = await supabase
-        .from('customization')
-        .select('app_icons')
-        .eq('user_id', user.id)
-        .single();
+      const existingData = localMode
+        ? (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id)
+        : (await supabase
+            .from('customization')
+            .select('app_icons')
+            .eq('user_id', user.id)
+            .single()).data;
       
       const existingIcons = (existingData?.app_icons as Record<string, string>) || {};
       
@@ -118,10 +139,37 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
         updateData.app_icons = mergedIcons;
       }
 
-      const { error } = await supabase
-        .from('customization')
-        .update(updateData)
-        .eq('user_id', user.id);
+      let error: { message?: string } | null = null;
+      if (localMode) {
+        const assetUrls = [
+          theme.chat_background_url,
+          theme.global_background_url,
+          theme.lock_screen_bg_url,
+          theme.lock_screen_video_url,
+          theme.video_background_url,
+          ...Object.values(theme.app_icons || {}),
+          ...(theme.desktop_widgets || []),
+        ].filter((url): url is string => Boolean(url));
+        await Promise.all(assetUrls.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (response.ok) await saveLocalAsset(user.id, url, await response.blob());
+          } catch (assetError) {
+            console.warn('Theme asset could not be cached locally:', assetError);
+          }
+        }));
+        await upsertLocalRow(
+          user.id,
+          'customization',
+          (row) => row.user_id === user.id,
+          { user_id: user.id, ...updateData },
+        );
+      } else {
+        error = (await supabase
+          .from('customization')
+          .update(updateData)
+          .eq('user_id', user.id)).error;
+      }
 
       if (error) {
         console.error('Error applying theme:', error);
@@ -130,7 +178,8 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       }
 
       // 清除缓存
-      sessionStorage.removeItem(`bg_${user.id}`);
+      sessionStorage.removeItem(`bg_${user.id}_local`);
+      sessionStorage.removeItem(`bg_${user.id}_cloud`);
       
       const iconCount = theme.app_icons ? Object.keys(theme.app_icons).length : 0;
       const widgetCount = theme.desktop_widgets ? theme.desktop_widgets.filter(w => w).length : 0;

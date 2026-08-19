@@ -1,115 +1,23 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    const { code, email, consume } = await req.json()
-
-    if (!code || !email) {
-      return new Response(
-        JSON.stringify({ valid: false, message: '邀请码和邮箱不能为空' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
-
-    const normalizedCode = code.toUpperCase().trim()
-
-    // 构建两个客户端：Cloud + External（管理员可能在任一实例创建邀请码）
-    const clients: { name: string; client: ReturnType<typeof createClient> }[] = []
-
-    const cloudUrl = Deno.env.get('SUPABASE_URL')
-    const cloudKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    if (cloudUrl && cloudKey) {
-      clients.push({ name: 'cloud', client: createClient(cloudUrl, cloudKey) })
-    }
-
-    const externalUrl = Deno.env.get('EXTERNAL_SUPABASE_URL')
-    const externalKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY')
-    if (externalUrl && externalKey) {
-      clients.push({ name: 'external', client: createClient(externalUrl, externalKey) })
-    }
-
-    // 在两个库中查找邀请码
-    let foundClient: typeof clients[number] | null = null
-    let inviteCode: any = null
-
-    for (const c of clients) {
-      try {
-        const { data, error } = await c.client
-          .from('invite_codes')
-          .select('*')
-          .eq('code', normalizedCode)
-          .maybeSingle()
-        if (!error && data) {
-          foundClient = c
-          inviteCode = data
-          break
-        }
-      } catch (e) {
-        console.error(`Error querying ${c.name}:`, e)
-      }
-    }
-
-    if (!foundClient || !inviteCode) {
-      console.log('Invite code validation failed: code not found in any database')
-      return new Response(
-        JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (inviteCode.is_used) {
-      console.log(`Invite code validation failed: code already used (${foundClient.name})`)
-      return new Response(
-        JSON.stringify({ valid: false, message: '邀请码无效或已过期' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // 仅校验模式：不消费邀请码，注册成功后前端再次调用 consume=true 消费
-    if (!consume) {
-      console.log(`Invite code check-only OK from ${foundClient.name}`)
-      return new Response(
-        JSON.stringify({ valid: true, message: '邀请码有效' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const { error: updateError } = await foundClient.client
-      .from('invite_codes')
-      .update({
-        is_used: true,
-        used_by_email: email,
-        used_at: new Date().toISOString()
-      })
-      .eq('id', inviteCode.id)
-
-    if (updateError) {
-      console.error('Update error:', updateError)
-      return new Response(
-        JSON.stringify({ valid: false, message: '验证失败，请重试' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
-    }
-
-    console.log(`Invite code consumed from ${foundClient.name}`)
-    return new Response(
-      JSON.stringify({ valid: true, message: '邀请码验证成功' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-  } catch (error) {
-    console.error('Error:', error)
-    return new Response(
-      JSON.stringify({ valid: false, message: '服务错误，请稍后重试' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-  }
+  // 旧的“先校验、注册后再消费”流程存在并发复用和恶意消耗邀请码的风险。
+  // 新客户端统一使用 register-with-invite 在服务端完成注册和消费。
+  return json({
+    valid: false,
+    message: '注册流程已升级，请刷新页面后重新注册',
+  }, 410)
 })

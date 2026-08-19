@@ -12,6 +12,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  updateLocalRows,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
 
 // Emoji categories
 const EMOJI_CATEGORIES = {
@@ -76,6 +92,7 @@ const GroupChatPage: React.FC = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user, authSource } = useAuth();
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [group, setGroup] = useState<any>(null);
@@ -108,14 +125,29 @@ const GroupChatPage: React.FC = () => {
   const [showInteractionSettings, setShowInteractionSettings] = useState(false);
 
   useEffect(() => {
-    if (user && groupId) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && groupId && localMode !== null) {
       fetchGroup();
       fetchMessages();
       fetchCustomization();
       fetchApiConfig();
       fetchUserProfile();
     }
-  }, [user, groupId]);
+  }, [user, groupId, localMode]);
+
+  const saveGroupMessage = async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) {
+      return { data: await insertLocalRow(user.id, 'group_messages', row), error: null };
+    }
+    return supabase.from('group_messages').insert(row as any).select().single();
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -123,6 +155,37 @@ const GroupChatPage: React.FC = () => {
 
   const fetchGroup = async () => {
     try {
+      if (localMode && user?.id) {
+        const [groups, groupMembers, characters] = await Promise.all([
+          getLocalTable(user.id, 'group_chats'),
+          getLocalTable(user.id, 'group_members'),
+          getLocalTable(user.id, 'characters'),
+        ]);
+        const localGroup = groups.find((row) => row.id === groupId);
+        if (!localGroup) {
+          toast.error('群聊不存在');
+          navigate('/group');
+          return;
+        }
+        const chars = groupMembers
+          .filter((member) => member.group_id === groupId)
+          .map((member) => characters.find((character) => character.id === member.character_id))
+          .filter(Boolean);
+        setGroup(localGroup);
+        setMembers(chars);
+        if (localGroup.lively_mode !== undefined) setLivelyMode(Boolean(localGroup.lively_mode));
+        if (localGroup.interaction_settings) {
+          const settings = localGroup.interaction_settings as Record<string, number>;
+          setInteractionSettings({
+            maxRounds: settings.maxRounds ?? 3,
+            firstTriggerChance: settings.firstTriggerChance ?? 50,
+            continueChanceBase: settings.continueChanceBase ?? 40,
+            continueChanceDecay: settings.continueChanceDecay ?? 10,
+          });
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from('group_chats')
         .select('*, group_members(character_id, characters(id, name, avatar_url, persona))')
@@ -175,10 +238,12 @@ const GroupChatPage: React.FC = () => {
       updateData.lively_mode = newLivelyMode;
     }
     
-    const { error } = await supabase
-      .from('group_chats')
-      .update(updateData)
-      .eq('id', groupId);
+    let error = null;
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'group_chats', (row) => row.id === groupId, updateData);
+    } else {
+      error = (await supabase.from('group_chats').update(updateData).eq('id', groupId)).error;
+    }
     
     if (error) {
       console.error('保存设置失败:', error);
@@ -200,6 +265,21 @@ const GroupChatPage: React.FC = () => {
   };
 
   const fetchMessages = async () => {
+    if (localMode && user?.id) {
+      const [localMessages, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'group_messages'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      setMessages(localMessages
+        .filter((message) => message.group_id === groupId)
+        .sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime())
+        .map((message: any) => {
+          const character = localCharacters.find((item) => item.id === message.character_id);
+          return { ...message, characterName: character?.name, characterAvatar: character?.avatar_url };
+        }));
+      return;
+    }
+
     const { data } = await supabase
       .from('group_messages')
       .select('*, characters(name, avatar_url)')
@@ -216,6 +296,11 @@ const GroupChatPage: React.FC = () => {
   };
 
   const fetchCustomization = async () => {
+    if (localMode && user?.id) {
+      const data = (await getLocalTable(user.id, 'customization'))[0];
+      if (data) setCustomization(data);
+      return;
+    }
     const { data } = await supabase
       .from('customization')
       .select('*')
@@ -227,7 +312,9 @@ const GroupChatPage: React.FC = () => {
   const fetchApiConfig = async () => {
     setApiConfigLoading(true);
     try {
-      const { data: apiKeys } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+      const apiKeys = localMode && user?.id
+        ? await getLocalTable(user.id, 'api_keys')
+        : (await supabase.from('api_keys').select('*').eq('user_id', user?.id)).data;
       if (apiKeys && apiKeys.length > 0) {
         const customKey = apiKeys.find(k => k.provider === 'custom');
         const deepseekKey = apiKeys.find(k => k.provider === 'deepseek');
@@ -264,6 +351,11 @@ const GroupChatPage: React.FC = () => {
   };
 
   const fetchUserProfile = async () => {
+    if (localMode && user?.id) {
+      const data = (await getLocalTable(user.id, 'profiles'))[0];
+      if (data) setUserProfile(data);
+      return;
+    }
     const { data } = await supabase
       .from('profiles')
       .select('nickname, persona, avatar_url')
@@ -326,7 +418,11 @@ const GroupChatPage: React.FC = () => {
   // 清空全部聊天记录
   const clearAllMessages = async () => {
     try {
-      await supabase.from('group_messages').delete().eq('group_id', groupId);
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'group_messages', (row) => row.group_id === groupId);
+      } else {
+        await supabase.from('group_messages').delete().eq('group_id', groupId);
+      }
       setMessages([]);
       toast.success('已清空全部聊天记录');
     } catch (err) {
@@ -343,7 +439,12 @@ const GroupChatPage: React.FC = () => {
       const messagesToDelete = messages.slice(msgIndex);
       const idsToDelete = messagesToDelete.map(m => m.id);
       
-      await supabase.from('group_messages').delete().in('id', idsToDelete);
+      if (localMode && user?.id) {
+        const idSet = new Set(idsToDelete);
+        await deleteLocalRows(user.id, 'group_messages', (row) => idSet.has(row.id));
+      } else {
+        await supabase.from('group_messages').delete().in('id', idsToDelete);
+      }
       setMessages(prev => prev.slice(0, msgIndex));
       setLongPressedMsg(null);
       toast.success('已删除该消息及之后的记录');
@@ -373,6 +474,18 @@ const GroupChatPage: React.FC = () => {
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        const localUrl = await fileToDataUrl(compressedFile);
+        await upsertLocalRow(
+          user.id,
+          'customization',
+          () => true,
+          { user_id: user.id, ...customization, group_chat_background_url: localUrl },
+        );
+        setCustomization((prev: any) => ({ ...prev, group_chat_background_url: localUrl }));
+        toast.success('群聊背景已保存到本机');
+        return;
+      }
       
       const fileName = `${user.id}/group-bg-${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedFile);
@@ -418,15 +531,11 @@ const GroupChatPage: React.FC = () => {
     setShowMentionList(false);
     setLoading(true);
 
-    const { data: insertedMsg } = await supabase
-      .from('group_messages')
-      .insert({
+    const { data: insertedMsg } = await saveGroupMessage({
         group_id: groupId,
         sender_type: 'user',
         content: userMessage
-      })
-      .select()
-      .single();
+      });
 
     if (insertedMsg) {
       setMessages(prev => [...prev, { ...insertedMsg, sender_type: 'user' as const }]);
@@ -475,23 +584,19 @@ const GroupChatPage: React.FC = () => {
         const cleanedContent = sanitizeMessageContent(response.content);
         if (!cleanedContent) continue; // 跳过空内容
         
-        const { data: charMsg } = await supabase
-          .from('group_messages')
-          .insert({
+        const { data: charMsg } = await saveGroupMessage({
             group_id: groupId,
             sender_type: 'character',
             character_id: response.characterId,
             content: cleanedContent
-          })
-          .select('*, characters(name, avatar_url)')
-          .single();
+          });
 
         if (charMsg) {
           setMessages(prev => [...prev, {
             ...charMsg,
             sender_type: 'character' as const,
-            characterName: charMsg.characters?.name,
-            characterAvatar: charMsg.characters?.avatar_url
+            characterName: (charMsg as any).characters?.name || response.characterName,
+            characterAvatar: (charMsg as any).characters?.avatar_url || members.find((member) => member.id === response.characterId)?.avatar_url,
           }]);
           currentMessages.push({
             sender_type: 'character',
@@ -550,23 +655,19 @@ const GroupChatPage: React.FC = () => {
                 continue; // 跳过空内容但继续下一轮
               }
               
-              const { data: c2cMsg } = await supabase
-                .from('group_messages')
-                .insert({
+              const { data: c2cMsg } = await saveGroupMessage({
                   group_id: groupId,
                   sender_type: 'character',
                   character_id: c2cResponse.characterId,
                   content: cleanedC2cContent
-                })
-                .select('*, characters(name, avatar_url)')
-                .single();
+                });
 
               if (c2cMsg) {
                 setMessages(prev => [...prev, {
                   ...c2cMsg,
                   sender_type: 'character' as const,
-                  characterName: c2cMsg.characters?.name,
-                  characterAvatar: c2cMsg.characters?.avatar_url
+                  characterName: (c2cMsg as any).characters?.name || c2cResponse.characterName,
+                  characterAvatar: (c2cMsg as any).characters?.avatar_url || members.find((member) => member.id === c2cResponse.characterId)?.avatar_url,
                 }]);
                 
                 currentMessages.push({

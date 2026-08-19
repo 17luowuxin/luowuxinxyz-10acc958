@@ -10,6 +10,15 @@ import {
   Eye, Edit, Trash2, Save, FolderOpen, X
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows, upsertLocalRow } from '@/lib/localDataStore';
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(blob);
+  });
 
 interface Character {
   id: string;
@@ -65,6 +74,7 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
   const [userSprite, setUserSprite] = useState<UserSprite>({ url: null });
   const [uploadingUser, setUploadingUser] = useState(false);
   const [uploadingChar, setUploadingChar] = useState(false);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
   
   const userSpriteRef = useRef<HTMLInputElement>(null);
   const charSpriteRef = useRef<HTMLInputElement>(null);
@@ -79,23 +89,28 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || localMode === null) return;
     
     const loadData = async () => {
       // 加载角色
-      const { data } = await supabase
-        .from('characters')
-        .select('id, name, avatar_url, persona, sprite_url, voice_id')
-        .eq('user_id', user.id);
+      const data = localMode
+        ? await getLocalTable(user.id, 'characters')
+        : (await supabase.from('characters').select('id, name, avatar_url, persona, sprite_url, voice_id').eq('user_id', user.id)).data;
       
-      if (data) setAllCharacters(data);
+      if (data) setAllCharacters(data as unknown as Character[]);
       
       // 加载用户立绘
-      const { data: customData } = await supabase
-        .from('customization')
-        .select('app_icons')
-        .eq('user_id', user.id)
-        .single();
+      const customData = localMode
+        ? (await getLocalTable(user.id, 'customization'))[0]
+        : (await supabase.from('customization').select('app_icons').eq('user_id', user.id).single()).data;
       
       if (customData?.app_icons) {
         const icons = customData.app_icons as Record<string, string>;
@@ -108,7 +123,7 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
     };
     
     loadData();
-  }, [user]);
+  }, [user, localMode]);
 
   const selectCharacter = (char: Character) => {
     const exists = settings.characters.find(c => c.id === char.id);
@@ -140,6 +155,16 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        const spriteUrl = await blobToDataUrl(compressedFile);
+        setUserSprite({ url: spriteUrl });
+        const existing = (await getLocalTable(user.id, 'customization'))[0];
+        const icons = { ...((existing?.app_icons as Record<string, string>) || {}), user_sprite: spriteUrl };
+        await upsertLocalRow(user.id, 'customization', () => true, { user_id: user.id, app_icons: icons });
+        toast.dismiss();
+        toast.success('立绘已保存到本机');
+        return;
+      }
       
       const fileName = `${user.id}/user-sprite/main-${Date.now()}.jpg`;
       await supabase.storage.from('avatars').upload(fileName, compressedFile, { upsert: true });
@@ -187,6 +212,18 @@ const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId:
       const { compressImage, blobToFile } = await import('@/utils/imageCompressor');
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+      if (localMode) {
+        const spriteUrl = await blobToDataUrl(compressedFile);
+        await updateLocalRows(user.id, 'characters', (row) => row.id === charId, { sprite_url: spriteUrl });
+        setAllCharacters((prev) => prev.map((character) => character.id === charId ? { ...character, sprite_url: spriteUrl } : character));
+        setSettings((prev) => ({
+          ...prev,
+          characters: prev.characters.map((character) => character.id === charId ? { ...character, sprite_url: spriteUrl } : character),
+        }));
+        toast.dismiss();
+        toast.success('角色立绘已保存到本机');
+        return;
+      }
       
       const fileName = `${user.id}/sprites/${charId}/main-${Date.now()}.jpg`;
       await supabase.storage.from('avatars').upload(fileName, compressedFile, { upsert: true });
@@ -560,23 +597,35 @@ const VisualNovelChatPage: React.FC<{
   const [typedText, setTypedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spriteInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
   // 加载角色并初始化开场白（全新聊天，不加载历史）
   useEffect(() => {
-    if (!characterId || !user) return;
+    if (!characterId || !user || localMode === null) return;
 
     const loadCharacter = async () => {
       try {
-        const { data, error } = await supabase
-          .from('characters')
-          .select('id, name, avatar_url, persona, sprite_url, voice_id, opening_line')
-          .eq('id', characterId)
-          .eq('user_id', user.id)
-          .single();
+        const result = localMode
+          ? { data: (await getLocalTable(user.id, 'characters')).find((row) => row.id === characterId), error: null }
+          : await supabase
+              .from('characters')
+              .select('id, name, avatar_url, persona, sprite_url, voice_id, opening_line')
+              .eq('id', characterId)
+              .eq('user_id', user.id)
+              .single();
+        const { data, error } = result;
 
         if (error) {
           console.error('Load character error:', error);
@@ -586,14 +635,12 @@ const VisualNovelChatPage: React.FC<{
         }
 
         if (data) {
-          setCharacter(data);
+          setCharacter(data as unknown as Character);
 
           // 加载自定义背景
-          const { data: customData } = await supabase
-            .from('customization')
-            .select('app_icons')
-            .eq('user_id', user.id)
-            .single();
+          const customData = localMode
+            ? (await getLocalTable(user.id, 'customization'))[0]
+            : (await supabase.from('customization').select('app_icons').eq('user_id', user.id).single()).data;
 
           if (customData?.app_icons) {
             const icons = customData.app_icons as Record<string, string>;
@@ -622,7 +669,7 @@ const VisualNovelChatPage: React.FC<{
     };
 
     loadCharacter();
-  }, [characterId, user, navigate, storySettings]);
+  }, [characterId, user, navigate, storySettings, localMode]);
 
   // 打字机效果
   useEffect(() => {
@@ -683,7 +730,7 @@ const VisualNovelChatPage: React.FC<{
         }
       }
 
-      console.log('Sending chat request with config:', { characterId: character.id, userId: user.id, effectiveApiConfig });
+      console.log('Sending visual novel chat request');
 
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
@@ -763,6 +810,16 @@ const VisualNovelChatPage: React.FC<{
 
     try {
       toast.loading('上传中...');
+      if (localMode) {
+        const localUrl = await blobToDataUrl(file);
+        setBackgroundUrl(localUrl);
+        const existing = (await getLocalTable(user.id, 'customization'))[0];
+        const icons = { ...((existing?.app_icons as Record<string, string>) || {}), [`vn_bg_${characterId}`]: localUrl };
+        await upsertLocalRow(user.id, 'customization', () => true, { user_id: user.id, app_icons: icons });
+        toast.dismiss();
+        toast.success('背景已保存到本机');
+        return;
+      }
       const fileName = `${user.id}/vn-bg/${characterId}-${Date.now()}.jpg`;
       
       await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
@@ -799,6 +856,14 @@ const VisualNovelChatPage: React.FC<{
 
     try {
       toast.loading('上传中...');
+      if (localMode) {
+        const localUrl = await blobToDataUrl(file);
+        setCharacter((prev) => prev ? { ...prev, sprite_url: localUrl } : null);
+        await updateLocalRows(user.id, 'characters', (row) => row.id === characterId, { sprite_url: localUrl });
+        toast.dismiss();
+        toast.success('立绘已保存到本机');
+        return;
+      }
       const fileName = `${user.id}/sprites/${characterId}/main-${Date.now()}.png`;
       
       await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
@@ -822,13 +887,11 @@ const VisualNovelChatPage: React.FC<{
   // 加载存档列表
   const loadSaves = async () => {
     if (!user || !characterId) return;
-    
-    const { data } = await supabase
-      .from('vn_saves')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('character_id', characterId)
-      .order('updated_at', { ascending: false });
+    const data = localMode
+      ? (await getLocalTable(user.id, 'vn_saves'))
+          .filter((row) => row.character_id === characterId)
+          .sort((a, b) => new Date(String(b.updated_at || b.created_at)).getTime() - new Date(String(a.updated_at || a.created_at)).getTime())
+      : (await supabase.from('vn_saves').select('*').eq('user_id', user.id).eq('character_id', characterId).order('updated_at', { ascending: false })).data;
     
     if (data) {
       setSaves(data.map(s => ({
@@ -860,7 +923,9 @@ const VisualNovelChatPage: React.FC<{
         current_index: currentMessageIndex
       };
       
-      const { error } = await supabase.from('vn_saves').insert(saveData);
+      let error = null;
+      if (localMode) await insertLocalRow(user.id, 'vn_saves', saveData);
+      else error = (await supabase.from('vn_saves').insert(saveData)).error;
 
       if (error) {
         console.error('Save error:', error);
@@ -891,7 +956,8 @@ const VisualNovelChatPage: React.FC<{
   // 删除存档
   const deleteSave = async (saveId: string) => {
     try {
-      await supabase.from('vn_saves').delete().eq('id', saveId);
+      if (localMode && user?.id) await deleteLocalRows(user.id, 'vn_saves', (row) => row.id === saveId);
+      else await supabase.from('vn_saves').delete().eq('id', saveId);
       toast.success('存档已删除');
       loadSaves();
     } catch (error) {

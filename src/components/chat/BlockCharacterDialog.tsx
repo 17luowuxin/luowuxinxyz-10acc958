@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Ban, UserPlus } from 'lucide-react';
+import { getLocalTable, insertLocalRow, updateLocalRows, upsertLocalRow } from '@/lib/localDataStore';
 
 interface BlockCharacterDialogProps {
   open: boolean;
@@ -22,15 +23,15 @@ interface BlockCharacterDialogProps {
   characterPersona?: string;
   characterReplyMode?: 'online' | 'novel';
   isBlocked: boolean;
+  localMode: boolean;
   onBlockStatusChange: (blocked: boolean) => void;
 }
 
 // 获取用户API配置
-const fetchApiConfig = async (userId: string) => {
-  const { data: apiSettings } = await supabase
-    .from('api_keys')
-    .select('api_key, provider')
-    .eq('user_id', userId);
+const fetchApiConfig = async (userId: string, localMode: boolean) => {
+  const apiSettings = localMode
+    ? await getLocalTable(userId, 'api_keys')
+    : (await supabase.from('api_keys').select('api_key, provider').eq('user_id', userId)).data;
 
   const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
   const customKey = apiSettings?.find(s => s.provider === 'custom');
@@ -51,6 +52,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
   characterPersona,
   characterReplyMode,
   isBlocked,
+  localMode,
   onBlockStatusChange,
 }) => {
   const { user } = useAuth();
@@ -61,6 +63,21 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
+      if (localMode) {
+        await upsertLocalRow(
+          user.id,
+          'character_blocks',
+          (row) => row.character_id === characterId,
+          {
+            user_id: user.id,
+            character_id: characterId,
+            is_active: true,
+            blocked_at: new Date().toISOString(),
+            message_count: 0,
+            last_message_at: null,
+          },
+        );
+      } else {
       // 1. 快速更新/创建拉黑记录
       const { data: existingBlock } = await supabase
         .from('character_blocks')
@@ -91,6 +108,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
             last_message_at: null,
           });
       }
+      }
 
       // 2. 立即关闭弹窗、更新状态，不等AI生成
       toast.success(`已将 ${characterName} 移出好友列表`);
@@ -103,7 +121,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
       const charId = characterId;
       (async () => {
         try {
-          const apiConfig = await fetchApiConfig(userId);
+          const apiConfig = await fetchApiConfig(userId, localMode);
           const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
             body: {
               action: 'generate_block_message',
@@ -124,22 +142,25 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           const messages = (data as any)?.messages as string[] | undefined;
           if (Array.isArray(messages) && messages.length > 0) {
             for (let i = 0; i < messages.length; i++) {
-              await supabase.from('chat_messages').insert({
+              const messageRow = {
                 user_id: userId,
                 character_id: charId,
                 role: 'assistant',
                 content: messages[i],
                 created_at: new Date(Date.now() + i * 1000).toISOString(),
-              });
+              };
+              if (localMode) await insertLocalRow(userId, 'chat_messages', messageRow);
+              else await supabase.from('chat_messages').insert(messageRow);
             }
-            await supabase
-              .from('character_blocks')
-              .update({
+            const changes = {
                 message_count: messages.length,
                 last_message_at: new Date().toISOString(),
-              })
-              .eq('user_id', userId)
-              .eq('character_id', charId);
+            };
+            if (localMode) {
+              await updateLocalRows(userId, 'character_blocks', (row) => row.character_id === charId, changes);
+            } else {
+              await supabase.from('character_blocks').update(changes).eq('user_id', userId).eq('character_id', charId);
+            }
           }
         } catch (e) {
           console.error('Background block message error:', e);
@@ -157,6 +178,14 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
     setLoading(true);
 
     try {
+      let messageCount = 0;
+      if (localMode) {
+        const blockRecord = (await getLocalTable(user.id, 'character_blocks')).find(
+          (row) => row.character_id === characterId && row.is_active === true,
+        );
+        messageCount = Number(blockRecord?.message_count || 0);
+        await updateLocalRows(user.id, 'character_blocks', (row) => row.character_id === characterId, { is_active: false });
+      } else {
       // 1. 获取消息数 + 更新记录（并行）
       const [{ data: blockRecord }] = await Promise.all([
         supabase
@@ -173,7 +202,8 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           .eq('character_id', characterId),
       ]);
 
-      const messageCount = blockRecord?.message_count || 0;
+      messageCount = blockRecord?.message_count || 0;
+      }
 
       // 2. 立即关闭弹窗
       toast.success(`已重新添加 ${characterName} 为好友`);
@@ -186,7 +216,7 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
       const charId = characterId;
       (async () => {
         try {
-          const apiConfig = await fetchApiConfig(userId);
+          const apiConfig = await fetchApiConfig(userId, localMode);
           const { data, error: invokeError } = await supabase.functions.invoke('block-message', {
             body: {
               action: 'generate_unblock_message',
@@ -210,13 +240,15 @@ export const BlockCharacterDialog: React.FC<BlockCharacterDialogProps> = ({
           const allMsgs = Array.isArray(messages) && messages.length > 0 ? messages : (singleMsg ? [singleMsg] : []);
           
           for (let i = 0; i < allMsgs.length; i++) {
-            await supabase.from('chat_messages').insert({
+            const messageRow = {
               user_id: userId,
               character_id: charId,
               role: 'assistant',
               content: allMsgs[i],
               created_at: new Date(Date.now() + i * 1000).toISOString(),
-            });
+            };
+            if (localMode) await insertLocalRow(userId, 'chat_messages', messageRow);
+            else await supabase.from('chat_messages').insert(messageRow);
           }
         } catch (e) {
           console.error('Background unblock message error:', e);

@@ -8,37 +8,38 @@ import { MusicProvider } from "@/contexts/MusicContext";
 import PhoneFrame from "@/components/phone/PhoneFrame";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
-import AlbumPage from "./pages/AlbumPage";
-import ProfilePage from "./pages/ProfilePage";
-import SettingsPage from "./pages/SettingsPage";
-import CustomizePage from "./pages/CustomizePage";
-import FriendsPage from "./pages/FriendsPage";
-import ChatPage from "./pages/ChatPage";
-import SpacePage from "./pages/SpacePage";
-import GamesPage from "./pages/GamesPage";
-import GroupPage from "./pages/GroupPage";
-import GroupChatPage from "./pages/GroupChatPage";
-import MusicPage from "./pages/MusicPage";
-import BottlePage from "./pages/BottlePage";
-import CameraPage from "./pages/CameraPage";
-import WerewolfPage from "./pages/WerewolfPage";
-import ScriptMurderPage from "./pages/ScriptMurderPage";
-import TruthDarePage from "./pages/TruthDarePage";
-import RiddlePage from "./pages/RiddlePage";
-import DiaryPage from "./pages/DiaryPage";
-import StatsPage from "./pages/StatsPage";
-import WorkshopPage from "./pages/WorkshopPage";
-import PrivacyPage from "./pages/PrivacyPage";
-import TermsPage from "./pages/TermsPage";
-import FinancePage from "./pages/FinancePage";
-import GiftShopPage from "./pages/GiftShopPage";
-import VisualNovelPage from "./pages/VisualNovelPage";
-import VisualNovelSpritesPage from "./pages/VisualNovelSpritesPage";
 import RequireAuth from "@/components/auth/RequireAuth";
-import AdminPage from "./pages/AdminPage";
-import NotFound from "./pages/NotFound";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
-import { useEffect } from "react";
+import React, { lazy, Suspense } from "react";
+
+const AlbumPage = lazy(() => import("./pages/AlbumPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const CustomizePage = lazy(() => import("./pages/CustomizePage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const ChatPage = lazy(() => import("./pages/ChatPage"));
+const SpacePage = lazy(() => import("./pages/SpacePage"));
+const GamesPage = lazy(() => import("./pages/GamesPage"));
+const GroupPage = lazy(() => import("./pages/GroupPage"));
+const GroupChatPage = lazy(() => import("./pages/GroupChatPage"));
+const MusicPage = lazy(() => import("./pages/MusicPage"));
+const BottlePage = lazy(() => import("./pages/BottlePage"));
+const CameraPage = lazy(() => import("./pages/CameraPage"));
+const WerewolfPage = lazy(() => import("./pages/WerewolfPage"));
+const ScriptMurderPage = lazy(() => import("./pages/ScriptMurderPage"));
+const TruthDarePage = lazy(() => import("./pages/TruthDarePage"));
+const RiddlePage = lazy(() => import("./pages/RiddlePage"));
+const DiaryPage = lazy(() => import("./pages/DiaryPage"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
+const WorkshopPage = lazy(() => import("./pages/WorkshopPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const FinancePage = lazy(() => import("./pages/FinancePage"));
+const GiftShopPage = lazy(() => import("./pages/GiftShopPage"));
+const VisualNovelPage = lazy(() => import("./pages/VisualNovelPage"));
+const VisualNovelSpritesPage = lazy(() => import("./pages/VisualNovelSpritesPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,16 @@ const WithPhoneFrame = ({ children }: { children: React.ReactNode }) => (
   <PhoneFrame>{children}</PhoneFrame>
 );
 
+const ProtectedPhoneFrame = ({ children }: { children: React.ReactNode }) => (
+  <RequireAuth><PhoneFrame>{children}</PhoneFrame></RequireAuth>
+);
+
+const RouteLoading = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+  </div>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -62,35 +73,36 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <Suspense fallback={<RouteLoading />}>
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/home" element={<Index />} />
                 <Route path="/lock" element={<Index />} />
                 <Route path="/auth" element={<AuthPage />} />
-                <Route path="/album" element={<WithPhoneFrame><AlbumPage /></WithPhoneFrame>} />
-                <Route path="/profile" element={<WithPhoneFrame><ProfilePage /></WithPhoneFrame>} />
-                <Route path="/settings" element={<WithPhoneFrame><SettingsPage /></WithPhoneFrame>} />
-                <Route path="/customize" element={<WithPhoneFrame><CustomizePage /></WithPhoneFrame>} />
-                <Route path="/friends" element={<WithPhoneFrame><FriendsPage /></WithPhoneFrame>} />
-                <Route path="/chat/:characterId" element={<WithPhoneFrame><ChatPage /></WithPhoneFrame>} />
-                <Route path="/space" element={<WithPhoneFrame><SpacePage /></WithPhoneFrame>} />
-                <Route path="/games" element={<WithPhoneFrame><GamesPage /></WithPhoneFrame>} />
-                <Route path="/werewolf" element={<WithPhoneFrame><WerewolfPage /></WithPhoneFrame>} />
-                <Route path="/script-murder" element={<WithPhoneFrame><ScriptMurderPage /></WithPhoneFrame>} />
-                <Route path="/truth-dare" element={<WithPhoneFrame><TruthDarePage /></WithPhoneFrame>} />
-                <Route path="/riddle" element={<WithPhoneFrame><RiddlePage /></WithPhoneFrame>} />
-                <Route path="/group" element={<WithPhoneFrame><GroupPage /></WithPhoneFrame>} />
-                <Route path="/group-chat/:groupId" element={<WithPhoneFrame><GroupChatPage /></WithPhoneFrame>} />
-                <Route path="/music" element={<WithPhoneFrame><MusicPage /></WithPhoneFrame>} />
-                <Route path="/bottle" element={<WithPhoneFrame><BottlePage /></WithPhoneFrame>} />
-                <Route path="/camera" element={<WithPhoneFrame><CameraPage /></WithPhoneFrame>} />
-                <Route path="/diary" element={<WithPhoneFrame><DiaryPage /></WithPhoneFrame>} />
-                <Route path="/stats" element={<WithPhoneFrame><StatsPage /></WithPhoneFrame>} />
-                <Route path="/workshop" element={<WithPhoneFrame><WorkshopPage /></WithPhoneFrame>} />
+                <Route path="/album" element={<ProtectedPhoneFrame><AlbumPage /></ProtectedPhoneFrame>} />
+                <Route path="/profile" element={<ProtectedPhoneFrame><ProfilePage /></ProtectedPhoneFrame>} />
+                <Route path="/settings" element={<ProtectedPhoneFrame><SettingsPage /></ProtectedPhoneFrame>} />
+                <Route path="/customize" element={<ProtectedPhoneFrame><CustomizePage /></ProtectedPhoneFrame>} />
+                <Route path="/friends" element={<ProtectedPhoneFrame><FriendsPage /></ProtectedPhoneFrame>} />
+                <Route path="/chat/:characterId" element={<ProtectedPhoneFrame><ChatPage /></ProtectedPhoneFrame>} />
+                <Route path="/space" element={<ProtectedPhoneFrame><SpacePage /></ProtectedPhoneFrame>} />
+                <Route path="/games" element={<ProtectedPhoneFrame><GamesPage /></ProtectedPhoneFrame>} />
+                <Route path="/werewolf" element={<ProtectedPhoneFrame><WerewolfPage /></ProtectedPhoneFrame>} />
+                <Route path="/script-murder" element={<ProtectedPhoneFrame><ScriptMurderPage /></ProtectedPhoneFrame>} />
+                <Route path="/truth-dare" element={<ProtectedPhoneFrame><TruthDarePage /></ProtectedPhoneFrame>} />
+                <Route path="/riddle" element={<ProtectedPhoneFrame><RiddlePage /></ProtectedPhoneFrame>} />
+                <Route path="/group" element={<ProtectedPhoneFrame><GroupPage /></ProtectedPhoneFrame>} />
+                <Route path="/group-chat/:groupId" element={<ProtectedPhoneFrame><GroupChatPage /></ProtectedPhoneFrame>} />
+                <Route path="/music" element={<ProtectedPhoneFrame><MusicPage /></ProtectedPhoneFrame>} />
+                <Route path="/bottle" element={<ProtectedPhoneFrame><BottlePage /></ProtectedPhoneFrame>} />
+                <Route path="/camera" element={<ProtectedPhoneFrame><CameraPage /></ProtectedPhoneFrame>} />
+                <Route path="/diary" element={<ProtectedPhoneFrame><DiaryPage /></ProtectedPhoneFrame>} />
+                <Route path="/stats" element={<ProtectedPhoneFrame><StatsPage /></ProtectedPhoneFrame>} />
+                <Route path="/workshop" element={<ProtectedPhoneFrame><WorkshopPage /></ProtectedPhoneFrame>} />
                 <Route path="/privacy" element={<WithPhoneFrame><PrivacyPage /></WithPhoneFrame>} />
                 <Route path="/terms" element={<WithPhoneFrame><TermsPage /></WithPhoneFrame>} />
-                <Route path="/finance" element={<WithPhoneFrame><FinancePage /></WithPhoneFrame>} />
-                <Route path="/gift-shop" element={<WithPhoneFrame><GiftShopPage /></WithPhoneFrame>} />
+                <Route path="/finance" element={<ProtectedPhoneFrame><FinancePage /></ProtectedPhoneFrame>} />
+                <Route path="/gift-shop" element={<ProtectedPhoneFrame><GiftShopPage /></ProtectedPhoneFrame>} />
                 <Route
                   path="/visual-novel"
                   element={
@@ -124,6 +136,7 @@ const App = () => (
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </Suspense>
             </BrowserRouter>
           </TooltipProvider>
         </MusicProvider>

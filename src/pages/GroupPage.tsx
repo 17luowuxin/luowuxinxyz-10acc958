@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled } from '@/lib/localDataStore';
 
 const GroupPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,15 +22,46 @@ const GroupPage: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchGroups();
       fetchCharacters();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchGroups = async () => {
+    if (!user?.id) return;
+    if (localMode) {
+      const [localGroups, localMembers, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'group_chats'),
+        getLocalTable(user.id, 'group_members'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      const groupsWithMembers = localGroups
+        .map((group) => ({
+          ...group,
+          group_members: localMembers
+            .filter((member) => member.group_id === group.id)
+            .map((member) => ({
+              character_id: member.character_id,
+              characters: localCharacters.find((character) => character.id === member.character_id),
+            })),
+        }))
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+      setGroups(groupsWithMembers);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('group_chats')
       .select('*, group_members(character_id, characters(id, name, avatar_url))')
@@ -44,6 +76,11 @@ const GroupPage: React.FC = () => {
   };
 
   const fetchCharacters = async () => {
+    if (!user?.id) return;
+    if (localMode) {
+      setCharacters(await getLocalTable(user.id, 'characters'));
+      return;
+    }
     const { data } = await supabase
       .from('characters')
       .select('*')
@@ -63,6 +100,20 @@ const GroupPage: React.FC = () => {
 
     setCreating(true);
     try {
+      if (!user?.id) return;
+      if (localMode) {
+        const group = await insertLocalRow(user.id, 'group_chats', { user_id: user.id, name: groupName });
+        for (const characterId of selectedCharacters) {
+          await insertLocalRow(user.id, 'group_members', { group_id: group.id, character_id: characterId });
+        }
+        toast.success('群聊创建成功!');
+        setGroupName('');
+        setSelectedCharacters([]);
+        setOpen(false);
+        await fetchGroups();
+        return;
+      }
+
       const { data: group, error } = await supabase
         .from('group_chats')
         .insert({ user_id: user?.id, name: groupName })
@@ -111,6 +162,17 @@ const GroupPage: React.FC = () => {
     e.stopPropagation();
     setDeleting(groupId);
     try {
+      if (localMode && user?.id) {
+        await Promise.all([
+          deleteLocalRows(user.id, 'group_members', (row) => row.group_id === groupId),
+          deleteLocalRows(user.id, 'group_messages', (row) => row.group_id === groupId),
+          deleteLocalRows(user.id, 'group_chats', (row) => row.id === groupId),
+        ]);
+        toast.success('群聊已删除');
+        await fetchGroups();
+        return;
+      }
+
       // 先删除群成员
       await supabase.from('group_members').delete().eq('group_id', groupId);
       // 删除群消息

@@ -4,6 +4,15 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
 
 interface Character {
   id: string;
@@ -37,12 +46,21 @@ const SpriteManager: React.FC = () => {
   const [selectedEmotion, setSelectedEmotion] = useState('normal');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mainSpriteInputRef = useRef<HTMLInputElement>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchCharacters();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   useEffect(() => {
     if (selectedCharacter) {
@@ -51,6 +69,12 @@ const SpriteManager: React.FC = () => {
   }, [selectedCharacter]);
 
   const fetchCharacters = async () => {
+    if (localMode && user?.id) {
+      const data = await getLocalTable(user.id, 'characters');
+      setCharacters(data as unknown as Character[]);
+      if (data.length > 0 && !selectedCharacter) setSelectedCharacter(data[0] as unknown as Character);
+      return;
+    }
     const { data } = await supabase
       .from('characters')
       .select('id, name, avatar_url, sprite_url')
@@ -64,6 +88,11 @@ const SpriteManager: React.FC = () => {
   };
 
   const fetchSprites = async (characterId: string) => {
+    if (localMode && user?.id) {
+      const data = (await getLocalTable(user.id, 'character_sprites')).filter((row) => row.character_id === characterId);
+      setSprites(data as unknown as Sprite[]);
+      return;
+    }
     const { data } = await supabase
       .from('character_sprites')
       .select('*')
@@ -87,6 +116,16 @@ const SpriteManager: React.FC = () => {
     toast.loading('上传立绘中...');
 
     try {
+      if (localMode) {
+        const localUrl = await fileToDataUrl(file);
+        await updateLocalRows(user.id, 'characters', (row) => row.id === selectedCharacter.id, { sprite_url: localUrl });
+        setSelectedCharacter({ ...selectedCharacter, sprite_url: localUrl });
+        await fetchCharacters();
+        toast.dismiss();
+        toast.success('主立绘已保存到本机');
+        return;
+      }
+
       const fileName = `${user.id}/sprites/${selectedCharacter.id}/main-${Date.now()}.png`;
       
       const { error: uploadError } = await supabase.storage
@@ -131,6 +170,25 @@ const SpriteManager: React.FC = () => {
     toast.loading('上传表情立绘中...');
 
     try {
+      if (localMode) {
+        const localUrl = await fileToDataUrl(file);
+        const existing = sprites.find((sprite) => sprite.emotion === selectedEmotion);
+        if (existing) {
+          await updateLocalRows(user.id, 'character_sprites', (row) => row.id === existing.id, { sprite_url: localUrl });
+        } else {
+          await insertLocalRow(user.id, 'character_sprites', {
+            character_id: selectedCharacter.id,
+            user_id: user.id,
+            emotion: selectedEmotion,
+            sprite_url: localUrl,
+          });
+        }
+        await fetchSprites(selectedCharacter.id);
+        toast.dismiss();
+        toast.success(`${emotions.find((emotion) => emotion.id === selectedEmotion)?.name}表情已保存到本机`);
+        return;
+      }
+
       const fileName = `${user.id}/sprites/${selectedCharacter.id}/${selectedEmotion}-${Date.now()}.png`;
       
       const { error: uploadError } = await supabase.storage
@@ -176,7 +234,8 @@ const SpriteManager: React.FC = () => {
 
   const handleDeleteSprite = async (spriteId: string) => {
     try {
-      await supabase.from('character_sprites').delete().eq('id', spriteId);
+      if (localMode && user?.id) await deleteLocalRows(user.id, 'character_sprites', (row) => row.id === spriteId);
+      else await supabase.from('character_sprites').delete().eq('id', spriteId);
       setSprites(sprites.filter(s => s.id !== spriteId));
       toast.success('已删除');
     } catch (error) {
@@ -186,11 +245,11 @@ const SpriteManager: React.FC = () => {
 
   const handleClearMainSprite = async () => {
     if (!selectedCharacter) return;
-    
-    await supabase
-      .from('characters')
-      .update({ sprite_url: null })
-      .eq('id', selectedCharacter.id);
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'characters', (row) => row.id === selectedCharacter.id, { sprite_url: null });
+    } else {
+      await supabase.from('characters').update({ sprite_url: null }).eq('id', selectedCharacter.id);
+    }
     
     setSelectedCharacter({ ...selectedCharacter, sprite_url: null });
     fetchCharacters();

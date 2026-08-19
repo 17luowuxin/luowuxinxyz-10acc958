@@ -1,6 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { z } from 'npm:zod@3.25.76'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 const BodySchema = z.object({
   code: z.string().min(1).max(64),
@@ -10,7 +14,7 @@ const BodySchema = z.object({
 
 type ClientEntry = {
   name: InviteSource
-  client: ReturnType<typeof createClient>
+  client: any
 }
 
 type InviteSource = 'cloud' | 'external'
@@ -86,12 +90,13 @@ Deno.serve(async (req) => {
       return json({ success: false, message: '注册服务未配置，请联系管理员' }, 500)
     }
 
-    console.log(`[register-with-invite] registering ${email} in ${entry.name}`)
+    console.log(`[register-with-invite] registering user in ${entry.name}`)
 
     const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
+      app_metadata: { invite_registration: true },
     })
 
     if (createError) {
@@ -104,7 +109,7 @@ Deno.serve(async (req) => {
       return json({ success: false, message: '注册失败，请稍后重试' }, 500)
     }
 
-    const { error: consumeError } = await entry.client
+    const { data: consumedInvite, error: consumeError } = await entry.client
       .from('invite_codes')
       .update({
         is_used: true,
@@ -113,11 +118,13 @@ Deno.serve(async (req) => {
       })
       .eq('id', inviteCode.id)
       .eq('is_used', false)
+      .select('id')
+      .maybeSingle()
 
-    if (consumeError) {
+    if (consumeError || !consumedInvite) {
       console.error('[register-with-invite] consume invite failed:', consumeError)
       if (created.user?.id) {
-        await authAdmin.auth.admin.deleteUser(created.user.id).catch((error) => {
+        await authAdmin.auth.admin.deleteUser(created.user.id).catch((error: unknown) => {
           console.error('[register-with-invite] rollback user failed:', error)
         })
       }

@@ -15,17 +15,22 @@ const AuthPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const normalizedEmail = email.trim().toLowerCase();
+    const getRedirectPath = () => {
+      const requested = (location.state as { from?: string } | null)?.from;
+      return requested?.startsWith('/') && !requested.startsWith('//') ? requested : '/';
+    };
 
     try {
       if (mode === 'login') {
-        const { error } = await signIn(email, password);
+        const { error } = await signIn(normalizedEmail, password);
         if (error) {
           const msg = error.message || '';
           if (msg.includes('Invalid login credentials')) {
@@ -41,8 +46,7 @@ const AuthPage: React.FC = () => {
           }
         } else {
           toast.success('登录成功!');
-          const redirectTo = (location.state as { from?: string } | null)?.from || '/';
-          navigate(redirectTo, { replace: true });
+          navigate(getRedirectPath(), { replace: true });
         }
       } else if (mode === 'signup') {
         if (password.length < 6) {
@@ -56,85 +60,35 @@ const AuthPage: React.FC = () => {
           return;
         }
         
-        // 验证邀请码
-        // 1) 先仅校验邀请码（不消费）
-        const { data: validateData, error: validateError } = await supabase.functions.invoke('validate-invite-code', {
-          body: { code: inviteCode, email, consume: false }
+        // 注册和消费邀请码必须由服务端一次完成，避免同一个邀请码被并发重复使用。
+        const { data, error } = await supabase.functions.invoke('register-with-invite', {
+          body: { code: inviteCode.trim().toUpperCase(), email: normalizedEmail, password }
         });
-        
-        if (validateError || !validateData?.valid) {
-          toast.error(validateData?.message || '邀请码验证失败');
-          setLoading(false);
+
+        if (error || !data?.success) {
+          toast.error(data?.message || '注册失败，请稍后重试（邀请码未消耗）');
           return;
         }
-        
-        // 2) 注册
-        const { error } = await signUp(email, password);
-        if (error) {
-          const msg = error.message || '';
-          const shouldUseServerRegister = msg.includes('Failed to fetch') ||
-            msg.includes('network') ||
-            msg.includes('fetch') ||
-            msg.toLowerCase().includes('load failed') ||
-            msg.includes('timed out') ||
-            msg.includes('Unexpected token') ||
-            msg.includes('JSON');
 
-          if (shouldUseServerRegister) {
-            const { data: fallbackData, error: fallbackError } = await supabase.functions.invoke('register-with-invite', {
-              body: { code: inviteCode, email, password }
-            });
-
-            if (fallbackError || !fallbackData?.success) {
-              toast.error(fallbackData?.message || '注册失败，请稍后重试（邀请码未消耗）');
-              setLoading(false);
-              return;
-            }
-
-            if (fallbackData.session) {
-              if (fallbackData.authSource === 'cloud') {
-                await cloudSupabase.auth.setSession(fallbackData.session);
-              } else {
-                await externalSupabase.auth.setSession(fallbackData.session);
-              }
-            }
-
-            toast.success(fallbackData.message || '注册成功!');
-            const redirectTo = (location.state as { from?: string } | null)?.from || '/';
-            navigate(redirectTo, { replace: true });
-          } else if (msg.includes('already registered')) {
-            toast.error('该邮箱已注册');
-          } else if (msg.includes('Signup is disabled') || msg.includes('not allowed')) {
-            toast.error('注册通道未开启，请联系管理员');
-          } else if (msg.includes('Email rate limit exceeded') || msg.includes('over_email_send_rate_limit') || msg.includes('rate limit')) {
-            toast.error('注册邮件发送过于频繁，请稍后再试');
-          } else if (msg.includes('503') || msg.includes('upstream') || msg.includes('Service Unavailable')) {
-            toast.error('服务暂时不可用，请稍后再试');
-          } else if (msg) {
-            toast.error(msg);
+        if (data.session) {
+          if (data.authSource === 'cloud') {
+            await cloudSupabase.auth.setSession(data.session);
           } else {
-            toast.error('注册失败，请稍后重试');
+            await externalSupabase.auth.setSession(data.session);
           }
+          toast.success(data.message || '注册成功!');
+          navigate(getRedirectPath(), { replace: true });
         } else {
-          // 3) 注册成功后消费邀请码
-          try {
-            await supabase.functions.invoke('validate-invite-code', {
-              body: { code: inviteCode, email, consume: true }
-            });
-          } catch (e) {
-            console.warn('Failed to consume invite code after signup:', e);
-          }
-          toast.success('注册成功!');
-          const redirectTo = (location.state as { from?: string } | null)?.from || '/';
-          navigate(redirectTo, { replace: true });
+          setMode('login');
+          toast.success(data.message || '注册成功，请登录');
         }
       }
     } catch (error: any) {
       console.error('Auth error:', error);
       toast.error('服务暂时不可用，请稍后再试');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const getTitle = () => {
@@ -204,12 +158,12 @@ const AuthPage: React.FC = () => {
           <p className="text-sm text-muted-foreground text-center mb-4">
             {getSubtitle()}
           </p>
-          {/* 数据清理政策说明 */}
+          {/* 本机数据说明 */}
           <div className="bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 mb-4">
             <p className="text-xs text-blue-700 dark:text-blue-300 text-center leading-relaxed">
-              📢 为保障服务质量，超过3个月未登录的账号数据将被清理。
+              📱 聊天记录、角色和个人资料保存在本机。
               <br />
-              请定期登录以保留您的聊天记录和角色数据。
+              清除浏览器数据或换设备前，请先在设置中导出备份。
             </p>
           </div>
 

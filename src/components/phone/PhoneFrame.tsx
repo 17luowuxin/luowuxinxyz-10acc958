@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalAssetUrl, getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 
 interface PhoneFrameProps {
   children: React.ReactNode;
@@ -15,11 +16,20 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       // 使用缓存优先策略
-      const cacheKey = `bg_${user.id}`;
+      const cacheKey = `bg_${user.id}_${localMode ? 'local' : 'cloud'}`;
       const cached = sessionStorage.getItem(cacheKey);
       
       if (cached) {
@@ -28,22 +38,33 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
         if (data.video_background_url) setVideoBg(data.video_background_url);
       }
       
-      // 同时从数据库获取最新数据
-      supabase
-        .from('customization')
-        .select('global_background_url, video_background_url')
-        .eq('user_id', user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            const typedData = data as { global_background_url?: string; video_background_url?: string };
-            sessionStorage.setItem(cacheKey, JSON.stringify(typedData));
-            if (typedData.global_background_url) setGlobalBg(typedData.global_background_url);
-            if (typedData.video_background_url) setVideoBg(typedData.video_background_url);
-          }
-        });
+      const loadLatest = async () => {
+        const data = localMode
+          ? (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id)
+          : (await supabase
+              .from('customization')
+              .select('global_background_url, video_background_url')
+              .eq('user_id', user.id)
+              .maybeSingle()).data;
+        if (!data) return;
+        const typedData = data as { global_background_url?: string; video_background_url?: string };
+        const resolvedData = localMode
+          ? {
+              global_background_url: typedData.global_background_url
+                ? await getLocalAssetUrl(user.id, typedData.global_background_url)
+                : undefined,
+              video_background_url: typedData.video_background_url
+                ? await getLocalAssetUrl(user.id, typedData.video_background_url)
+                : undefined,
+            }
+          : typedData;
+        sessionStorage.setItem(cacheKey, JSON.stringify(resolvedData));
+        setGlobalBg(resolvedData.global_background_url || null);
+        setVideoBg(resolvedData.video_background_url || null);
+      };
+      loadLatest();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   // 优化视频播放 - 仅在视频URL变化时加载
   useEffect(() => {

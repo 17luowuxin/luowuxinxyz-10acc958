@@ -16,6 +16,14 @@ import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
 import { useCharactersCache } from '@/hooks/useLocalCache';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  updateLocalRows,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 
 
 // 格式化消息时间
@@ -48,6 +56,14 @@ const truncateMessage = (content: string, maxLength: number = 30): string => {
   return cleaned.slice(0, maxLength) + '...';
 };
 
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
+
 const FriendsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, authSource, getActiveClient } = useAuth();
@@ -74,6 +90,7 @@ const FriendsPage: React.FC = () => {
   const ringtoneInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
   
   // 敏感词检测相关状态
   const [sensitiveWarningOpen, setSensitiveWarningOpen] = useState(false);
@@ -93,6 +110,14 @@ const FriendsPage: React.FC = () => {
   // 本地缓存 Hook
   const { getCache: getCachedCharacters, setCache: cacheCharacters } = useCharactersCache(user?.id);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
   // 全部标记已读
   const markAllAsRead = async () => {
     if (!user || characters.length === 0) return;
@@ -102,6 +127,16 @@ const FriendsPage: React.FC = () => {
     const unreadChars = characters.filter(c => c.unreadCount > 0);
     const now = new Date().toISOString();
     
+    if (localMode) {
+      for (const c of unreadChars) {
+        await upsertLocalRow(
+          user.id,
+          'chat_read_status',
+          (row) => row.character_id === c.id,
+          { user_id: user.id, character_id: c.id, last_read_at: now },
+        );
+      }
+    } else {
     // 逐个处理，先尝试 update，失败则 insert，避免 upsert 在无唯一约束时静默失败
     for (const c of unreadChars) {
       const { data: existing } = await supabase
@@ -117,6 +152,7 @@ const FriendsPage: React.FC = () => {
         await supabase.from('chat_read_status').insert({ user_id: user.id, character_id: c.id, last_read_at: now });
       }
     }
+    }
     
     setCharacters(prev => prev.map(c => ({ ...c, unreadCount: 0 })));
     cacheCharacters(characters.map(c => ({ ...c, unreadCount: 0 })));
@@ -125,7 +161,7 @@ const FriendsPage: React.FC = () => {
 
   // 初始化：先读取缓存，再从服务器更新
   useEffect(() => {
-    if (user) {
+    if (user && localMode !== null) {
       // 1. 先从缓存快速显示
       const cached = getCachedCharacters();
       if (cached && cached.length > 0) {
@@ -135,35 +171,40 @@ const FriendsPage: React.FC = () => {
       // 2. 然后从服务器获取最新数据
       fetchCharacters();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchCharacters = async () => {
     if (!user?.id) return;
-    // 获取角色列表
-    const { data: charData } = await supabase
-      .from('characters')
-      .select('*')
-      .eq('user_id', user.id);
-    
-    if (!charData) return;
-    
-    // 并行获取：最后消息 + 已读状态（减少等待时间，提升列表打开速度）
-    const [lastMessagesRes, readStatusRes] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('character_id, created_at, content, role')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        // 只需要最近一段用于：最后一条消息 + 未读计数，避免拉取过多导致卡顿
-        .limit(500),
-      supabase
-        .from('chat_read_status')
-        .select('character_id, last_read_at')
-        .eq('user_id', user.id),
-    ]);
+    let charData: any[];
+    let lastMessages: any[];
+    let readStatus: any[];
 
-    const lastMessages = lastMessagesRes.data;
-    const readStatus = readStatusRes.data;
+    if (localMode) {
+      const [localCharacters, localMessages, localReadStatus] = await Promise.all([
+        getLocalTable(user.id, 'characters'),
+        getLocalTable(user.id, 'chat_messages'),
+        getLocalTable(user.id, 'chat_read_status'),
+      ]);
+      charData = localCharacters;
+      lastMessages = localMessages
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .slice(0, 500);
+      readStatus = localReadStatus;
+    } else {
+      const [charactersRes, lastMessagesRes, readStatusRes] = await Promise.all([
+        supabase.from('characters').select('*').eq('user_id', user.id),
+        supabase
+          .from('chat_messages')
+          .select('character_id, created_at, content, role')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase.from('chat_read_status').select('character_id, last_read_at').eq('user_id', user.id),
+      ]);
+      charData = charactersRes.data || [];
+      lastMessages = lastMessagesRes.data || [];
+      readStatus = readStatusRes.data || [];
+    }
     
     // 创建已读时间映射
     const readTimeMap: Record<string, string> = {};
@@ -227,6 +268,8 @@ const FriendsPage: React.FC = () => {
 
   const uploadAvatar = async (): Promise<string | null> => {
     if (!avatarFile || !user) return null;
+
+    if (localMode) return fileToDataUrl(avatarFile);
     
     const fileExt = avatarFile.name.split('.').pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -285,6 +328,14 @@ const FriendsPage: React.FC = () => {
 
     setUploadingRingtone(true);
     try {
+      if (localMode) {
+        const localUrl = await fileToDataUrl(file);
+        setRingtoneUrl(localUrl);
+        await updateLocalRows(user.id, 'characters', (row) => row.id === editingChar.id, { ringtone_url: localUrl });
+        toast.success('铃声已保存到本机');
+        return;
+      }
+
       // 使用已存在且可用的 bucket（avatars）存储铃声，避免 bucket 权限/不存在导致上传失败
       const bucket = 'avatars';
       const fileName = `${user.id}/ringtones/${Date.now()}.${ext || 'mp3'}`;
@@ -399,18 +450,23 @@ const FriendsPage: React.FC = () => {
       if (uploadedUrl) finalAvatarUrl = uploadedUrl;
     }
 
-    const { error } = await supabase.from('characters').insert({ 
-      user_id: user?.id, 
-      name, 
-      persona, 
+    const characterData = {
+      user_id: user?.id,
+      name,
+      persona,
       opening_line: openingLine || '你好呀~',
-      avatar_url: finalAvatarUrl
-    });
-    
-    if (error) {
-      console.error('Character creation error:', error);
-      toast.error('创建失败: ' + error.message);
-      return;
+      avatar_url: finalAvatarUrl,
+    };
+
+    if (localMode && user?.id) {
+      await insertLocalRow(user.id, 'characters', characterData);
+    } else {
+      const { error } = await supabase.from('characters').insert(characterData);
+      if (error) {
+        console.error('Character creation error:', error);
+        toast.error('创建失败: ' + error.message);
+        return;
+      }
     }
     
     toast.success('角色创建成功!');
@@ -437,9 +493,7 @@ const FriendsPage: React.FC = () => {
       if (uploadedUrl) finalAvatarUrl = uploadedUrl;
     }
 
-    await supabase
-      .from('characters')
-      .update({ 
+    const changes = {
         name, 
         persona, 
         opening_line: openingLine,
@@ -450,9 +504,14 @@ const FriendsPage: React.FC = () => {
         use_novel_format: useNovelFormat,
         voice_id: voiceId || null,
         ringtone_url: ringtoneUrl || null,
-        auto_reply_enabled: autoReplyEnabled
-      })
-      .eq('id', editingChar.id);
+        auto_reply_enabled: autoReplyEnabled,
+    };
+
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'characters', (row) => row.id === editingChar.id, changes);
+    } else {
+      await supabase.from('characters').update(changes).eq('id', editingChar.id);
+    }
     
     // 同时保存角色专属NAI设置（垫图、提示词）
     await saveNaiPrompts(true);
@@ -475,6 +534,20 @@ const FriendsPage: React.FC = () => {
       toast.error('未登录，无法删除');
       return;
     }
+    if (localMode) {
+      await Promise.all([
+        deleteLocalRows(user.id, 'characters', (row) => row.id === id),
+        deleteLocalRows(user.id, 'chat_messages', (row) => row.character_id === id),
+        deleteLocalRows(user.id, 'chat_read_status', (row) => row.character_id === id),
+        deleteLocalRows(user.id, 'character_memories', (row) => row.character_id === id),
+      ]);
+      const nextCharacters = characters.filter((char) => char.id !== id);
+      setCharacters(nextCharacters);
+      cacheCharacters(nextCharacters);
+      toast.success('角色已从本机删除');
+      return;
+    }
+
     const activeClient = getActiveClient();
     const { data: { session } } = await activeClient.auth.getSession();
 
@@ -546,6 +619,24 @@ const FriendsPage: React.FC = () => {
     // 并行加载记忆摘要和NAI提示词（包括垫图设置）
     setMemoryLoading(true);
     try {
+      if (localMode && user?.id) {
+        const [memories, apiKeys] = await Promise.all([
+          getLocalTable(user.id, 'character_memories'),
+          getLocalTable(user.id, 'api_keys'),
+        ]);
+        const memory = memories
+          .filter((row) => row.character_id === char.id)
+          .sort((a, b) => new Date(String(b.updated_at || 0)).getTime() - new Date(String(a.updated_at || 0)).getTime())[0];
+        const positiveRow = apiKeys.find((row) => row.provider === `nai_positive_${char.id}`);
+        const negativeRow = apiKeys.find((row) => row.provider === `nai_negative_${char.id}`);
+        const refImageRow = apiKeys.find((row) => row.provider === `nai_ref_image_${char.id}`);
+        if (memory?.summary) setMemorySummary(String(memory.summary));
+        if (positiveRow?.api_key) setNaiPositivePrompt(String(positiveRow.api_key));
+        if (negativeRow?.api_key) setNaiNegativePrompt(String(negativeRow.api_key));
+        if (refImageRow?.api_key) setNaiReferenceImage(String(refImageRow.api_key));
+        return;
+      }
+
       const [memoryRes, naiRes] = await Promise.all([
         supabase
           .from('character_memories')
@@ -598,6 +689,12 @@ const FriendsPage: React.FC = () => {
     
     setUploadingRefImage(true);
     try {
+      if (localMode) {
+        setNaiReferenceImage(await fileToDataUrl(file));
+        toast.success('垫图已保存到本机');
+        return;
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/nai-ref/${editingChar.id}-${Date.now()}.${fileExt}`;
       
@@ -636,7 +733,11 @@ const FriendsPage: React.FC = () => {
         `nai_negative_${editingChar.id}`,
         `nai_ref_image_${editingChar.id}`
       ];
-      await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      if (localMode) {
+        await deleteLocalRows(user.id, 'api_keys', (row) => providers.includes(String(row.provider)));
+      } else {
+        await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      }
       
       const rows = [];
       if (naiPositivePrompt.trim()) {
@@ -650,7 +751,11 @@ const FriendsPage: React.FC = () => {
       }
       
       if (rows.length > 0) {
-        await supabase.from('api_keys').insert(rows);
+        if (localMode) {
+          for (const row of rows) await insertLocalRow(user.id, 'api_keys', row);
+        } else {
+          await supabase.from('api_keys').insert(rows);
+        }
       }
       
       if (!silent) setNaiPromptOpen(false);
@@ -671,7 +776,11 @@ const FriendsPage: React.FC = () => {
         `nai_negative_${editingChar.id}`,
         `nai_ref_image_${editingChar.id}`
       ];
-      await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      if (localMode) {
+        await deleteLocalRows(user.id, 'api_keys', (row) => providers.includes(String(row.provider)));
+      } else {
+        await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
+      }
       
       setNaiPositivePrompt('');
       setNaiNegativePrompt('');
@@ -707,6 +816,17 @@ const FriendsPage: React.FC = () => {
         ...basePayload,
         manually_edited: true,
       };
+
+      if (localMode) {
+        await upsertLocalRow(
+          user.id,
+          'character_memories',
+          (row) => row.character_id === editingChar.id,
+          payload,
+        );
+        toast.success('记忆已保存到本机');
+        return;
+      }
 
       const hasMissingOnConflictConstraint = (error: any) =>
         error?.code === '42P10' ||
@@ -814,18 +934,22 @@ const FriendsPage: React.FC = () => {
         return;
       }
       
-      // 创建角色
-      const { error } = await supabase.from('characters').insert({
+      const characterData = {
         user_id: user.id,
         name: data.name,
         persona: data.persona || '',
         opening_line: data.opening_line || '',
-      });
-      
-      if (error) {
-        console.error('Import character error:', error);
-        toast.error('导入角色失败: ' + error.message);
-        return;
+      };
+
+      if (localMode) {
+        await insertLocalRow(user.id, 'characters', characterData);
+      } else {
+        const { error } = await supabase.from('characters').insert(characterData);
+        if (error) {
+          console.error('Import character error:', error);
+          toast.error('导入角色失败: ' + error.message);
+          return;
+        }
       }
       
       toast.success(`成功导入角色: ${data.name}`);

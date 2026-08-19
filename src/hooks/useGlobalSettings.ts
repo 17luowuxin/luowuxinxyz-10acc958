@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 
 // Font options mapping
 const fontFamilyMap: Record<string, string> = {
@@ -60,6 +61,15 @@ export const useGlobalSettings = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
 
   // Apply saved settings from localStorage on mount (before user loads)
   useEffect(() => {
@@ -77,13 +87,16 @@ export const useGlobalSettings = () => {
       setLoading(false);
       return;
     }
+    if (localMode === null) return;
     
     try {
-      const { data } = await supabase
-        .from('customization')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const data = localMode
+        ? (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id)
+        : (await supabase
+            .from('customization')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle()).data;
 
       if (data) {
         setSettings(data);
@@ -111,7 +124,7 @@ export const useGlobalSettings = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, localMode]);
 
   useEffect(() => {
     loadSettings();

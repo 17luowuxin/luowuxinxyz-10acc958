@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
 
 interface Preset {
   id: string;
@@ -56,16 +57,30 @@ const WorkshopPage: React.FC = () => {
   const [worldBookContent, setWorldBookContent] = useState('');
   const [worldBookGlobal, setWorldBookGlobal] = useState(false);
   const [worldBookCharacter, setWorldBookCharacter] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchCharacters();
       fetchPresets();
       fetchWorldBooks();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchCharacters = async () => {
+    if (localMode && user?.id) {
+      const data = await getLocalTable(user.id, 'characters');
+      setCharacters(data.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()));
+      return;
+    }
     const { data } = await supabase
       .from('characters')
       .select('*')
@@ -75,6 +90,20 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchPresets = async () => {
+    if (localMode && user?.id) {
+      const [data, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'presets'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      setPresets(data
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .map((preset: any) => ({
+          ...preset,
+          character_name: localCharacters.find((character) => character.id === preset.character_id)?.name,
+        })));
+      return;
+    }
+
     // 先尝试联表查询，失败则回退到简单查询
     let { data, error } = await supabase
       .from('presets')
@@ -100,6 +129,20 @@ const WorkshopPage: React.FC = () => {
   };
 
   const fetchWorldBooks = async () => {
+    if (localMode && user?.id) {
+      const [data, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'world_books'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      setWorldBooks(data
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .map((worldBook: any) => ({
+          ...worldBook,
+          character_name: localCharacters.find((character) => character.id === worldBook.character_id)?.name,
+        })));
+      return;
+    }
+
     let { data, error } = await supabase
       .from('world_books')
       .select('*, characters(name)')
@@ -138,12 +181,18 @@ const WorkshopPage: React.FC = () => {
       };
 
       if (editingPreset) {
-        const { error } = await supabase.from('presets').update(presetData).eq('id', editingPreset.id);
-        if (error) throw error;
+        if (localMode && user?.id) await updateLocalRows(user.id, 'presets', (row) => row.id === editingPreset.id, presetData);
+        else {
+          const { error } = await supabase.from('presets').update(presetData).eq('id', editingPreset.id);
+          if (error) throw error;
+        }
         toast.success('预设已更新');
       } else {
-        const { error } = await supabase.from('presets').insert(presetData);
-        if (error) throw error;
+        if (localMode && user?.id) await insertLocalRow(user.id, 'presets', presetData);
+        else {
+          const { error } = await supabase.from('presets').insert(presetData);
+          if (error) throw error;
+        }
         toast.success('预设已创建');
       }
 
@@ -171,12 +220,18 @@ const WorkshopPage: React.FC = () => {
       };
 
       if (editingWorldBook) {
-        const { error } = await supabase.from('world_books').update(worldBookData).eq('id', editingWorldBook.id);
-        if (error) throw error;
+        if (localMode && user?.id) await updateLocalRows(user.id, 'world_books', (row) => row.id === editingWorldBook.id, worldBookData);
+        else {
+          const { error } = await supabase.from('world_books').update(worldBookData).eq('id', editingWorldBook.id);
+          if (error) throw error;
+        }
         toast.success('世界书已更新');
       } else {
-        const { error } = await supabase.from('world_books').insert(worldBookData);
-        if (error) throw error;
+        if (localMode && user?.id) await insertLocalRow(user.id, 'world_books', worldBookData);
+        else {
+          const { error } = await supabase.from('world_books').insert(worldBookData);
+          if (error) throw error;
+        }
         toast.success('世界书已创建');
       }
 
@@ -193,13 +248,19 @@ const WorkshopPage: React.FC = () => {
     
     try {
       if (deleteId.type === 'preset') {
-        const { error } = await supabase.from('presets').delete().eq('id', deleteId.id);
-        if (error) throw error;
+        if (localMode && user?.id) await deleteLocalRows(user.id, 'presets', (row) => row.id === deleteId.id);
+        else {
+          const { error } = await supabase.from('presets').delete().eq('id', deleteId.id);
+          if (error) throw error;
+        }
         toast.success('预设已删除');
         fetchPresets();
       } else if (deleteId.type === 'worldbook') {
-        const { error } = await supabase.from('world_books').delete().eq('id', deleteId.id);
-        if (error) throw error;
+        if (localMode && user?.id) await deleteLocalRows(user.id, 'world_books', (row) => row.id === deleteId.id);
+        else {
+          const { error } = await supabase.from('world_books').delete().eq('id', deleteId.id);
+          if (error) throw error;
+        }
         toast.success('世界书已删除');
         fetchWorldBooks();
       }

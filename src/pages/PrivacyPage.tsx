@@ -27,36 +27,36 @@ const PrivacyPage: React.FC = () => {
       <div className="p-4 space-y-4">
         <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-5 shadow-lg border border-purple-100/50">
           <div className="prose prose-sm max-w-none text-gray-700 space-y-4">
-            <p className="text-sm text-gray-500">最后更新日期：2025年1月1日</p>
+            <p className="text-sm text-gray-500">最后更新日期：2026年8月19日</p>
             
             <h2 className="text-base font-bold text-purple-700 mt-4">1. 信息收集</h2>
             <p className="text-sm leading-relaxed">
-              我们收集您在使用本应用时提供的信息，包括但不限于：账户信息（邮箱地址）、用户创建的内容（角色设定、对话记录、日记等）、自定义设置。
+              服务器仅保存登录所需的账户信息、邀请码和权限信息。启用本机模式后，角色、对话、日记、图片、API 设置等内容保存在您的设备中。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">2. 信息使用</h2>
             <p className="text-sm leading-relaxed">
-              我们使用收集的信息用于：提供、维护和改进我们的服务；处理您的请求和交易；发送服务相关通知。
+              当您主动使用 AI 对话、画图、语音等功能时，当前请求所需的内容会发送到对应的接口进行处理。请勿在提示词中填写不希望交给接口处理的敏感信息。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">3. 信息存储</h2>
             <p className="text-sm leading-relaxed">
-              您的数据存储在安全的云服务器上。我们采取合理的技术和组织措施来保护您的个人信息。
+              本机内容使用浏览器本地数据库保存，不占用开发者云数据库。迁移前已有的云端旧记录会保留且不再更新，以避免迁移时丢失；清除浏览器数据或卸载前请先导出备份。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">4. 信息共享</h2>
             <p className="text-sm leading-relaxed">
-              我们不会出售、交易或以其他方式向外部各方转让您的个人信息，除非法律要求或您明确同意。
+              我们不会出售您的个人内容。AI、图片、语音等功能会按您的操作把必要请求发送给您选择的第三方接口服务商。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">5. 数据安全</h2>
             <p className="text-sm leading-relaxed">
-              我们实施适当的安全措施来保护您的个人信息免受未经授权的访问、更改、披露或销毁。
+              本机备份文件可能包含聊天内容和 API 密钥，请由您自行妥善保管，不要发送给不可信的人。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">6. 您的权利</h2>
             <p className="text-sm leading-relaxed">
-              您有权访问、更正或删除您的个人信息。如需行使这些权利，请通过应用内的设置功能操作或联系我们。
+              您可以在应用中修改本机内容，并可在设置中一键导出或导入完整备份。账户和历史云端记录相关请求可联系管理员处理。
             </p>
 
             <h2 className="text-base font-bold text-purple-700 mt-4">7. 政策更新</h2>

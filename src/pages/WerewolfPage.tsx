@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
+import { getLocalAssetUrl, getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,21 +91,32 @@ const WerewolfPage: React.FC = () => {
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
   const [playerRole, setPlayerRole] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchCharacters();
       fetchUserProfile();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchUserProfile = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('avatar_url')
-      .eq('user_id', user!.id)
-      .maybeSingle();
-    if (data) setUserProfile(data);
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'profiles')).find((row) => row.user_id === user.id)
+      : (await supabase.from('profiles').select('avatar_url').eq('user_id', user.id).maybeSingle()).data;
+    if (data) {
+      const avatarUrl = data.avatar_url ? String(data.avatar_url) : null;
+      setUserProfile({ avatar_url: avatarUrl && localMode ? await getLocalAssetUrl(user.id, avatarUrl) : avatarUrl });
+    }
   };
 
   useEffect(() => {
@@ -112,14 +124,17 @@ const WerewolfPage: React.FC = () => {
   }, [logs]);
 
   const fetchCharacters = async () => {
-    const { data } = await supabase
-      .from('characters')
-      .select('*')
-      .eq('user_id', user!.id)
-      .limit(8);
+    if (!user) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'characters')).filter((row) => row.user_id === user.id).slice(0, 8)
+      : (await supabase.from('characters').select('*').eq('user_id', user.id).limit(8)).data;
     
     if (data) {
-      setCharacters(data);
+      const resolved = await Promise.all(data.map(async (row: any) => ({
+        ...row,
+        avatar_url: row.avatar_url && localMode ? await getLocalAssetUrl(user.id, row.avatar_url) : row.avatar_url,
+      })));
+      setCharacters(resolved as Character[]);
     }
   };
 

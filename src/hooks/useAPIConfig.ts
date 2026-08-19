@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
 
 export interface APIConfig {
   apiKey?: string;
@@ -46,10 +47,11 @@ export const useAPIConfig = () => {
     
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('api_keys')
-        .select('*')
-        .eq('user_id', user.id);
+      const localMode = await isLocalModeEnabled(user.id);
+      const result = localMode
+        ? { data: await getLocalTable(user.id, 'api_keys'), error: null }
+        : await supabase.from('api_keys').select('*').eq('user_id', user.id);
+      const { data, error } = result;
 
       if (error) {
         console.error('Error fetching API config:', error);

@@ -27,6 +27,14 @@ import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
 import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hooks/useLocalCache';
 import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
+import {
+  deleteLocalRows,
+  getLocalTable,
+  insertLocalRow,
+  isLocalModeEnabled,
+  updateLocalRows,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 // 头像装饰图片
 // 挂断音效 (base64 短音效)
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
@@ -60,6 +68,14 @@ const isMeaningfulForTTS = (text: string): boolean => {
   // 至少2个有意义的字符
   return cleaned.length >= 2;
 };
+
+const fileToDataUrl = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('读取本机文件失败'));
+    reader.readAsDataURL(file);
+  });
 
 // 格式化时间 - 放在组件外避免每条消息都重新创建
 const formatMessageTime = (date: Date) => {
@@ -249,6 +265,7 @@ const ChatPage: React.FC = () => {
   const { characterId } = useParams();
   const navigate = useNavigate();
   const { user, authSource } = useAuth();
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
   // 使用分页消息 - 初始加载20条，向上滚动加载更多
   const [messages, setMessages] = useState<any[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -350,7 +367,7 @@ const ChatPage: React.FC = () => {
   const [callVideoPlaying, setCallVideoPlaying] = useState(false);
   // 拉黑相关状态
   const [showBlockDialog, setShowBlockDialog] = useState(false);
-  const { isBlocked, blockedAt, setBlocked, refetch: refetchBlockStatus } = useCharacterBlock(characterId || null);
+  const { isBlocked, blockedAt, setBlocked, refetch: refetchBlockStatus } = useCharacterBlock(characterId || null, localMode === true);
   
   // 沉默自动回复相关状态（仅线上模式生效）
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,6 +392,44 @@ const ChatPage: React.FC = () => {
 
   // 音频播放队列 - 确保语音串行播放
   const audioQueue = useAudioPlaybackQueue();
+
+  useEffect(() => {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  const saveChatMessage = useCallback(async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) {
+      return { data: await insertLocalRow(user.id, 'chat_messages', row), error: null };
+    }
+    return supabase.from('chat_messages').insert(row as any).select().single();
+  }, [localMode, user?.id]);
+
+  const saveTransfer = useCallback(async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) {
+      return { data: await insertLocalRow(user.id, 'dream_transactions', row), error: null };
+    }
+    return supabase.from('dream_transactions').insert(row as any).select().single();
+  }, [localMode, user?.id]);
+
+  const saveCharacterChanges = useCallback(async (changes: Record<string, unknown>) => {
+    if (!characterId) return;
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'characters', (row) => row.id === characterId, changes);
+      return;
+    }
+    await supabase.from('characters').update(changes as any).eq('id', characterId);
+  }, [characterId, localMode, user?.id]);
+
+  const saveSticker = useCallback(async (row: Record<string, unknown>) => {
+    if (localMode && user?.id) {
+      return { data: await insertLocalRow(user.id, 'user_stickers', row), error: null };
+    }
+    return supabase.from('user_stickers').insert(row as any).select().single();
+  }, [localMode, user?.id]);
   
   // 推送通知触发器
   const { setCurrentChat, setNavigate, triggerPush, isPageVisible } = usePushTrigger();
@@ -407,19 +462,17 @@ const ChatPage: React.FC = () => {
     // 页面不可见时不自动标记已读（避免后台刷新把未读清掉）
     if (!isPageVisible.current) return;
 
-    await supabase
-      .from('chat_read_status')
-      .upsert(
-        {
+    const readStatus = {
           user_id: user.id,
           character_id: characterId,
           last_read_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'user_id,character_id',
-        }
-      );
-  }, [user, characterId, isPageVisible]);
+    };
+    if (localMode) {
+      await upsertLocalRow(user.id, 'chat_read_status', (row) => row.character_id === characterId, readStatus);
+    } else {
+      await supabase.from('chat_read_status').upsert(readStatus, { onConflict: 'user_id,character_id' });
+    }
+  }, [user, characterId, isPageVisible, localMode]);
 
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -428,21 +481,21 @@ const ChatPage: React.FC = () => {
   // 先定义 fetchProfile - 需要在 useEffect 之前
   const fetchProfile = useCallback(async () => {
     if (!user?.id) return;
-    const { data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
-    if (error) {
-      console.error('Fetch profile error:', error);
-      return;
-    }
+    const data = localMode
+      ? (await getLocalTable(user.id, 'profiles'))[0]
+      : (await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle()).data;
     if (data) {
       console.log('Profile loaded:', data.nickname, 'avatar:', data.avatar_url?.slice(0, 50));
       setProfile(data);
       cacheProfile(data); // 缓存用户资料
     }
-  }, [user?.id, cacheProfile]);
+  }, [user?.id, cacheProfile, localMode]);
 
   const fetchCharacter = useCallback(async () => {
-    if (!characterId) return;
-    const { data } = await supabase.from('characters').select('*').eq('id', characterId).single();
+    if (!characterId || !user?.id || localMode === null) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'characters')).find((row) => row.id === characterId)
+      : (await supabase.from('characters').select('*').eq('id', characterId).single()).data;
     if (data) {
       console.log('[fetchCharacter] loaded:', data.name, 'ringtone_url:', data.ringtone_url);
       setCharacter(data);
@@ -462,16 +515,19 @@ const ChatPage: React.FC = () => {
       // 加载视频通话动态视频URL
       setSavedCallVideoUrl((data as any).call_video_url || null);
     }
-  }, [characterId]);
+  }, [characterId, localMode, user?.id]);
 
   // 加载用户自定义表情包
   const fetchUserStickers = useCallback(async () => {
     if (!user?.id) return;
-    const { data } = await supabase
-      .from('user_stickers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    const data = localMode
+      ? (await getLocalTable(user.id, 'user_stickers'))
+          .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+      : (await supabase
+          .from('user_stickers')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })).data;
     
     if (data) {
       setUserStickers(data.map(s => ({
@@ -481,20 +537,19 @@ const ChatPage: React.FC = () => {
         text: (s.keywords || [])[0] || ''
       })));
     }
-  }, [user?.id]);
+  }, [user?.id, localMode]);
 
   // 加载角色专属NAI提示词和垫图设置
   const fetchCharNaiPrompts = useCallback(async () => {
     if (!user?.id || !characterId) return;
-    const { data } = await supabase
-      .from('api_keys')
-      .select('provider, api_key')
-      .eq('user_id', user.id)
-      .in('provider', [
-        `nai_positive_${characterId}`, 
-        `nai_negative_${characterId}`,
-        `nai_ref_image_${characterId}`
-      ]);
+    const providers = [
+      `nai_positive_${characterId}`,
+      `nai_negative_${characterId}`,
+      `nai_ref_image_${characterId}`,
+    ];
+    const data = localMode
+      ? (await getLocalTable(user.id, 'api_keys')).filter((row) => providers.includes(String(row.provider)))
+      : (await supabase.from('api_keys').select('provider, api_key').eq('user_id', user.id).in('provider', providers)).data;
     
     if (data) {
       const positiveRow = data.find(r => r.provider === `nai_positive_${characterId}`);
@@ -509,10 +564,10 @@ const ChatPage: React.FC = () => {
         refImage: refImageRow?.api_key ? 'set' : 'none',
       });
     }
-  }, [user?.id, characterId]);
+  }, [user?.id, characterId, localMode]);
 
   useEffect(() => {
-    if (user && characterId) {
+    if (user && characterId && localMode !== null) {
       // 1. 先从缓存快速加载，实现秒开
       const cachedMsgs = getCachedMessages();
       const cachedCust = getCachedCustomization();
@@ -548,7 +603,7 @@ const ChatPage: React.FC = () => {
     return () => {
       setCurrentChat(null);
     };
-  }, [user, characterId, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, setCurrentChat]);
+  }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, setCurrentChat]);
 
   // 消息变化时自动同步缓存（解决发送新消息后退出重进缓存不同步的问题）
   useEffect(() => {
@@ -563,32 +618,49 @@ const ChatPage: React.FC = () => {
 
 
   const fetchMessagesWithTransfers = async () => {
-    // 并行获取最新20条消息、转账记录和消息总数
-    const [chatResult, transferResult, countResult] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
-        .eq('character_id', characterId)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(20), // 只加载最新的20条
-      supabase
-        .from('dream_transactions')
-        .select('*')
-        .eq('character_id', characterId)
-        .eq('user_id', user?.id)
-        .order('created_at'),
-      supabase
-        .from('chat_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('character_id', characterId)
-        .eq('user_id', user?.id)
-    ]);
-    
-    // 翻转回正序（因为我们是按降序获取的）
-    const chatData = (chatResult.data || []).reverse();
-    const transferData = transferResult.data;
-    const totalCount = countResult.count || 0;
+    if (!user?.id || !characterId || localMode === null) return;
+
+    let chatData: any[];
+    let transferData: any[];
+    let totalCount: number;
+    if (localMode) {
+      const [allMessages, allTransfers] = await Promise.all([
+        getLocalTable(user.id, 'chat_messages'),
+        getLocalTable(user.id, 'dream_transactions'),
+      ]);
+      const matchingMessages = allMessages
+        .filter((row) => row.character_id === characterId)
+        .sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime());
+      chatData = matchingMessages.slice(-20);
+      transferData = allTransfers
+        .filter((row) => row.character_id === characterId)
+        .sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime());
+      totalCount = matchingMessages.length;
+    } else {
+      const [chatResult, transferResult, countResult] = await Promise.all([
+        supabase
+          .from('chat_messages')
+          .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
+          .eq('character_id', characterId)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('dream_transactions')
+          .select('*')
+          .eq('character_id', characterId)
+          .eq('user_id', user.id)
+          .order('created_at'),
+        supabase
+          .from('chat_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('character_id', characterId)
+          .eq('user_id', user.id),
+      ]);
+      chatData = (chatResult.data || []).reverse();
+      transferData = transferResult.data || [];
+      totalCount = countResult.count || 0;
+    }
     
     // 记录最老的消息时间戳，用于加载更多
     if (chatData.length > 0) {
@@ -679,6 +751,33 @@ const ChatPage: React.FC = () => {
     setIsLoadingMoreMessages(true);
     
     try {
+      if (localMode) {
+        const allMessages = await getLocalTable(user.id, 'chat_messages');
+        const olderMessages = allMessages
+          .filter((row) => row.character_id === characterId && String(row.created_at) < oldestMessageTimeRef.current!)
+          .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+          .slice(0, 20);
+
+        if (olderMessages.length === 0) {
+          setHasMoreMessages(false);
+          return;
+        }
+        const orderedMessages = olderMessages.reverse();
+        oldestMessageTimeRef.current = String(orderedMessages[0].created_at);
+        if (olderMessages.length < 20) setHasMoreMessages(false);
+        const newMessages = orderedMessages.map((msg) => ({
+          ...msg,
+          audioBase64: msg.audio_url || undefined,
+          timestamp: new Date(String(msg.created_at)).getTime(),
+          quotedMessage: null,
+        }));
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((message) => message.id));
+          return [...newMessages.filter((message) => !existingIds.has(message.id)), ...prev];
+        });
+        return;
+      }
+
       const { data: olderMessages, error } = await supabase
         .from('chat_messages')
         .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
@@ -730,7 +829,7 @@ const ChatPage: React.FC = () => {
     } finally {
       setIsLoadingMoreMessages(false);
     }
-  }, [user?.id, characterId, hasMoreMessages, isLoadingMoreMessages]);
+  }, [user?.id, characterId, hasMoreMessages, isLoadingMoreMessages, localMode]);
   
   // 重新请求AI回复
   const retryLastMessage = async (chatData: any[]) => {
@@ -849,7 +948,7 @@ const ChatPage: React.FC = () => {
         setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', content: assistantContent }]);
         
         // 保存到数据库
-        await supabase.from('chat_messages').insert({ 
+        await saveChatMessage({
           user_id: user?.id, 
           character_id: characterId, 
           role: 'assistant', 
@@ -871,7 +970,10 @@ const ChatPage: React.FC = () => {
   };
 
   const fetchCustomization = async () => {
-    const { data } = await supabase.from('customization').select('*').eq('user_id', user?.id).single();
+    if (!user?.id) return;
+    const data = localMode
+      ? (await getLocalTable(user.id, 'customization'))[0]
+      : (await supabase.from('customization').select('*').eq('user_id', user.id).single()).data;
     if (data) {
       setCustomization(data);
       cacheCustomization(data); // 缓存个性化设置
@@ -881,7 +983,11 @@ const ChatPage: React.FC = () => {
   const fetchApiConfig = async () => {
     setApiConfigLoading(true);
     try {
-      const { data: apiKeys } = await supabase.from('api_keys').select('*').eq('user_id', user?.id);
+      const apiKeys = user?.id
+        ? (localMode
+            ? await getLocalTable(user.id, 'api_keys')
+            : (await supabase.from('api_keys').select('*').eq('user_id', user.id)).data)
+        : [];
       if (apiKeys && apiKeys.length > 0) {
         const pickLatest = (provider: string) =>
           apiKeys
@@ -1173,11 +1279,17 @@ const ChatPage: React.FC = () => {
   // 清空全部聊天记录
   const clearAllMessages = async () => {
     try {
-      // 同时删除聊天记录和转账记录
-      await Promise.all([
-        supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id),
-        supabase.from('dream_transactions').delete().eq('character_id', characterId).eq('user_id', user?.id)
-      ]);
+      if (localMode && user?.id) {
+        await Promise.all([
+          deleteLocalRows(user.id, 'chat_messages', (row) => row.character_id === characterId),
+          deleteLocalRows(user.id, 'dream_transactions', (row) => row.character_id === characterId),
+        ]);
+      } else {
+        await Promise.all([
+          supabase.from('chat_messages').delete().eq('character_id', characterId).eq('user_id', user?.id),
+          supabase.from('dream_transactions').delete().eq('character_id', characterId).eq('user_id', user?.id),
+        ]);
+      }
       setMessages([]);
       setPendingTransfers([]); // 同时清除本地转账卡片状态
       clearMessagesCache(); // 同时清除本地缓存，避免重进时显示旧数据
@@ -1196,26 +1308,35 @@ const ChatPage: React.FC = () => {
       const messagesToDelete = messages.slice(msgIndex);
       const idsToDelete = messagesToDelete.map(m => m.id);
       
-      await supabase.from('chat_messages').delete().in('id', idsToDelete);
+      if (localMode && user?.id) {
+        const idSet = new Set(idsToDelete);
+        await deleteLocalRows(user.id, 'chat_messages', (row) => idSet.has(row.id));
+      } else {
+        await supabase.from('chat_messages').delete().in('id', idsToDelete);
+      }
       setMessages(prev => prev.slice(0, msgIndex));
       setLongPressedMsg(null);
       toast.success('已删除该消息及之后的记录');
     } catch (err) {
       toast.error('删除失败');
     }
-  }, [messages]);
+  }, [messages, localMode, user?.id]);
 
   // 单条消息删除（彻底删除）
   const deleteSingleMessage = useCallback(async (msg: any) => {
     try {
-      await supabase.from('chat_messages').delete().eq('id', msg.id);
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'chat_messages', (row) => row.id === msg.id);
+      } else {
+        await supabase.from('chat_messages').delete().eq('id', msg.id);
+      }
       setMessages(prev => prev.filter(m => m.id !== msg.id));
       setLongPressedMsg(null);
       toast.success('已删除该消息');
     } catch (err) {
       toast.error('删除失败');
     }
-  }, []);
+  }, [localMode, user?.id]);
 
   // 引用消息
   const quoteMessage = useCallback((msg: any) => {
@@ -1297,18 +1418,14 @@ const ChatPage: React.FC = () => {
   const createTransfer = async (amount: number, message?: string) => {
     if (!user?.id || !character) return null;
     
-    const { data, error } = await supabase
-      .from('dream_transactions')
-      .insert({
+    const { data, error } = await saveTransfer({
         user_id: user.id,
         character_id: characterId,
         character_name: character.name,
         amount: amount,
         message: message || null,
         is_received: false
-      })
-      .select()
-      .single();
+      });
     
     if (error) {
       console.error('Create transfer error:', error);
@@ -1319,10 +1436,12 @@ const ChatPage: React.FC = () => {
   };
   
   const handleReceiveTransfer = async (transferId: string) => {
-    const { error } = await supabase
-      .from('dream_transactions')
-      .update({ is_received: true })
-      .eq('id', transferId);
+    let error = null;
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'dream_transactions', (row) => row.id === transferId, { is_received: true });
+    } else {
+      error = (await supabase.from('dream_transactions').update({ is_received: true }).eq('id', transferId)).error;
+    }
     
     if (!error) {
       setPendingTransfers(prev => prev.map(t => 
@@ -1333,10 +1452,12 @@ const ChatPage: React.FC = () => {
   };
   
   const handleDeleteTransfer = async (transferId: string) => {
-    const { error } = await supabase
-      .from('dream_transactions')
-      .delete()
-      .eq('id', transferId);
+    let error = null;
+    if (localMode && user?.id) {
+      await deleteLocalRows(user.id, 'dream_transactions', (row) => row.id === transferId);
+    } else {
+      error = (await supabase.from('dream_transactions').delete().eq('id', transferId)).error;
+    }
     
     if (!error) {
       setPendingTransfers(prev => prev.filter(t => t.id !== transferId));
@@ -1356,9 +1477,7 @@ const ChatPage: React.FC = () => {
     }
     
     // 保存转账记录
-    const { data: transfer, error } = await supabase
-      .from('dream_transactions')
-      .insert({
+    const { data: transfer, error } = await saveTransfer({
         user_id: user.id,
         character_id: characterId,
         character_name: character.name,
@@ -1366,9 +1485,7 @@ const ChatPage: React.FC = () => {
         message: userTransferMessage || null,
         is_received: true, // 用户转给角色的，角色自动收到
         is_user_transfer: true,
-      })
-      .select()
-      .single();
+      });
 
     if (error || !transfer) {
       toast.error('转账失败');
@@ -1398,16 +1515,12 @@ const ChatPage: React.FC = () => {
     const transferContext = `[用户转账:${amount}:${transferMsg}]`;
     
     // 保存用户消息到数据库
-    const { data: savedMsg } = await supabase
-      .from('chat_messages')
-      .insert({
+    const { data: savedMsg } = await saveChatMessage({
         user_id: user.id,
         character_id: characterId,
         role: 'user',
         content: transferContext,
-      })
-      .select()
-      .single();
+      });
 
     if (!savedMsg) return;
 
@@ -1513,9 +1626,7 @@ const ChatPage: React.FC = () => {
         const returnAmount = parseFloat(returnMatch[1]);
         const returnReason = returnMatch[2].trim();
         // 创建角色退回的转账记录
-        const { data: returnTransfer } = await supabase
-          .from('dream_transactions')
-          .insert({
+        const { data: returnTransfer } = await saveTransfer({
             user_id: user.id,
             character_id: characterId,
             character_name: character.name,
@@ -1523,9 +1634,7 @@ const ChatPage: React.FC = () => {
             message: returnReason || '退回给你~',
             is_received: false,
             is_user_transfer: false,
-          })
-          .select()
-          .single();
+          });
 
         if (returnTransfer) {
           setPendingTransfers(prev => [...prev, returnTransfer]);
@@ -1564,7 +1673,7 @@ const ChatPage: React.FC = () => {
           role: 'assistant',
           content: assistantContent,
         }]);
-        await supabase.from('chat_messages').insert({
+        await saveChatMessage({
           user_id: user?.id,
           character_id: characterId,
           role: 'assistant',
@@ -2245,7 +2354,7 @@ const ChatPage: React.FC = () => {
 
         setMessages(prev => [...prev, imageMsg]);
 
-        await supabase.from('chat_messages').insert({
+        await saveChatMessage({
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
@@ -2292,6 +2401,8 @@ const ChatPage: React.FC = () => {
       // 压缩图片（最大宽度1080px，质量0.8）
       const compressedBlob = await compressImage(file, 1080, 0.8);
       const compressedFile = blobToFile(compressedBlob, file.name);
+
+      if (localMode) return fileToDataUrl(compressedFile);
       
       const fileName = `${user.id}/${Date.now()}.jpg`;
       
@@ -2337,17 +2448,13 @@ const ChatPage: React.FC = () => {
       const messageContent = textContent ? `[图片] ${textContent}` : '[图片]';
       
       // 保存用户消息到数据库
-      const { data: savedMsg, error: saveError } = await supabase
-        .from('chat_messages')
-        .insert({ 
+      const { data: savedMsg, error: saveError } = await saveChatMessage({
           user_id: user?.id, 
           character_id: characterId, 
           role: 'user', 
           content: messageContent,
           image_url: imageUrl
-        })
-        .select()
-        .single();
+        });
       
       if (saveError) {
         toast.error('发送失败');
@@ -2497,7 +2604,7 @@ const ChatPage: React.FC = () => {
       if (assistantContent.trim()) {
         setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
         
-        await supabase.from('chat_messages').insert({ 
+        await saveChatMessage({
           user_id: user?.id, 
           character_id: characterId, 
           role: 'assistant', 
@@ -2565,17 +2672,13 @@ const ChatPage: React.FC = () => {
     }
     
     // 先保存到数据库，确保消息不丢失
-    const { data: savedMsg, error: saveError } = await supabase
-      .from('chat_messages')
-      .insert({ 
+    const { data: savedMsg, error: saveError } = await saveChatMessage({
         user_id: user?.id, 
         character_id: characterId, 
         role: 'user', 
         content: messageContent,
         quoted_message_id: currentQuotedMessage?.id || null
-      })
-      .select()
-      .single();
+      });
     
     if (saveError) {
       console.error('Save message error:', saveError);
@@ -2917,7 +3020,7 @@ const ChatPage: React.FC = () => {
               }]);
               
               // 保存到数据库，包括audio_url
-              await supabase.from('chat_messages').insert({ 
+              await saveChatMessage({
                 user_id: user?.id, 
                 character_id: characterId, 
                 role: 'assistant', 
@@ -2994,7 +3097,7 @@ const ChatPage: React.FC = () => {
                     .enqueue({ src: `data:audio/mpeg;base64,${voiceAudio}` })
                     .catch(console.error);
 
-                  await supabase.from('chat_messages').insert({
+                  await saveChatMessage({
                     user_id: user?.id,
                     character_id: characterId,
                     role: 'assistant',
@@ -3032,7 +3135,7 @@ const ChatPage: React.FC = () => {
               };
               setMessages(prev => [...prev, stickerMsg]);
 
-              await supabase.from('chat_messages').insert({
+              await saveChatMessage({
                 user_id: user?.id,
                 character_id: characterId,
                 role: 'assistant',
@@ -3077,7 +3180,7 @@ const ChatPage: React.FC = () => {
           audioBase64: audioBase64 || undefined,
         }]);
 
-        await supabase.from('chat_messages').insert({ 
+        await saveChatMessage({
           user_id: user?.id, 
           character_id: characterId, 
           role: 'assistant', 
@@ -3126,7 +3229,7 @@ const ChatPage: React.FC = () => {
                   .enqueue({ src: `data:audio/mpeg;base64,${voiceAudio}` })
                   .catch(console.error);
 
-                await supabase.from('chat_messages').insert({
+                await saveChatMessage({
                   user_id: user?.id,
                   character_id: characterId,
                   role: 'assistant',
@@ -3164,7 +3267,7 @@ const ChatPage: React.FC = () => {
               setMessages(prev => [...prev, stickerMsg]);
 
               // 保存表情包消息到数据库
-              await supabase.from('chat_messages').insert({
+              await saveChatMessage({
                 user_id: user?.id,
                 character_id: characterId,
                 role: 'assistant',
@@ -3191,6 +3294,8 @@ const ChatPage: React.FC = () => {
         }
       }
       
+      // 本机模式不调用会回读云端聊天记录的旧摘要功能
+      if (!localMode) {
       // 触发记忆摘要生成 - 基于上次摘要以来的新消息数
       const { count: dbMessageCount } = await supabase
         .from('chat_messages')
@@ -3251,6 +3356,7 @@ const ChatPage: React.FC = () => {
           triggerSummarize(characterId, user?.id || '', recentForMemory, authSource);
         }).catch(err => console.error('Memory service import error:', err));
       }
+      }
     } catch (err: any) {
       console.error('Chat error:', err);
       toast.error('发送失败，请检查网络或API设置');
@@ -3298,21 +3404,23 @@ const ChatPage: React.FC = () => {
       isBlockMessageSendingRef.current = true;
 
       try {
-        // 获取当前拉黑记录的消息数
-        const { data: blockRecord } = await supabase
-          .from('character_blocks')
-          .select('message_count')
-          .eq('user_id', user.id)
-          .eq('character_id', characterId)
-          .eq('is_active', true)
-          .maybeSingle();
+        const blockRecord = localMode
+          ? (await getLocalTable(user.id, 'character_blocks')).find(
+              (row) => row.character_id === characterId && row.is_active === true,
+            )
+          : (await supabase
+              .from('character_blocks')
+              .select('message_count')
+              .eq('user_id', user.id)
+              .eq('character_id', characterId)
+              .eq('is_active', true)
+              .maybeSingle()).data;
 
         const currentMsgCount = blockRecord?.message_count || 0;
 
-        const { data: apiSettings } = await supabase
-          .from('api_keys')
-          .select('api_key, provider')
-          .eq('user_id', user.id);
+        const apiSettings = localMode
+          ? await getLocalTable(user.id, 'api_keys')
+          : (await supabase.from('api_keys').select('api_key, provider').eq('user_id', user.id)).data;
 
         const customUrl = apiSettings?.find(s => s.provider === 'custom_base_url');
         const customKey = apiSettings?.find(s => s.provider === 'custom');
@@ -3339,22 +3447,22 @@ const ChatPage: React.FC = () => {
           if (Array.isArray(msgs) && msgs.length > 0) {
             // 前端插入消息到DB（通过代理→外部DB）
             for (const msg of msgs) {
-              await supabase.from('chat_messages').insert({
+              await saveChatMessage({
                 user_id: user.id,
                 character_id: characterId,
                 role: 'assistant',
                 content: msg,
               });
             }
-            // 更新拉黑记录消息计数
-            await supabase
-              .from('character_blocks')
-              .update({
+            const blockChanges = {
                 message_count: currentMsgCount + msgs.length,
                 last_message_at: new Date().toISOString(),
-              })
-              .eq('user_id', user.id)
-              .eq('character_id', characterId);
+            };
+            if (localMode) {
+              await updateLocalRows(user.id, 'character_blocks', (row) => row.character_id === characterId, blockChanges);
+            } else {
+              await supabase.from('character_blocks').update(blockChanges).eq('user_id', user.id).eq('character_id', characterId);
+            }
           }
           await refetchBlockStatus();
           await fetchMessagesWithTransfers();
@@ -3366,7 +3474,7 @@ const ChatPage: React.FC = () => {
         resetBlockedMessageTimer();
       }
     }, BLOCKED_MESSAGE_TIMEOUT_MS);
-  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, refetchBlockStatus, fetchMessagesWithTransfers]);
+  }, [isBlocked, replyMode, user?.id, characterId, character?.name, character?.persona, localMode, refetchBlockStatus, fetchMessagesWithTransfers]);
 
   const triggerAutoReply = async () => {
     // 防止重复触发
@@ -3508,7 +3616,7 @@ const ChatPage: React.FC = () => {
           content: msgContent
         }]);
 
-        await supabase.from('chat_messages').insert({
+        await saveChatMessage({
           user_id: user?.id,
           character_id: characterId,
           role: 'assistant',
@@ -3685,34 +3793,26 @@ const ChatPage: React.FC = () => {
     
     try {
       const file = pendingStickerFile.file;
-      const fileExt = file.name.split('.').pop();
-      // 重要：photos 桶的上传策略要求第一层目录必须是 user.id
-      const fileName = `${user.id}/stickers/${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file);
-      
-      if (uploadError) {
-        toast.error('上传失败: ' + uploadError.message);
-        setUploadingSticker(false);
-        return;
+      let publicUrl: string;
+      if (localMode) {
+        publicUrl = await fileToDataUrl(file);
+      } else {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/stickers/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file);
+        if (uploadError) {
+          toast.error('上传失败: ' + uploadError.message);
+          return;
+        }
+        publicUrl = supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
       }
       
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-      
       // 保存到数据库
-      const { data, error } = await supabase
-        .from('user_stickers')
-        .insert({
+      const { data, error } = await saveSticker({
           user_id: user.id,
           image_url: publicUrl,
           keywords: keywords
-        })
-        .select()
-        .single();
+        });
       
       if (error) {
         toast.error('保存失败: ' + error.message);
@@ -3754,7 +3854,11 @@ const ChatPage: React.FC = () => {
   const handleDeleteSticker = async (stickerId: string) => {
     if (!user?.id) return;
     
-    await supabase.from('user_stickers').delete().eq('id', stickerId);
+    if (localMode) {
+      await deleteLocalRows(user.id, 'user_stickers', (row) => row.id === stickerId);
+    } else {
+      await supabase.from('user_stickers').delete().eq('id', stickerId);
+    }
     setUserStickers(prev => prev.filter(s => s.id !== stickerId));
     toast.success('已删除');
   };
@@ -3812,15 +3916,11 @@ const ChatPage: React.FC = () => {
     try {
       for (const item of parsedItems) {
         try {
-          const { data, error } = await supabase
-            .from('user_stickers')
-            .insert({
+          const { data, error } = await saveSticker({
               user_id: user.id,
               image_url: item.url,
               keywords: item.keywords
-            })
-            .select()
-            .single();
+            });
           
           if (!error && data) {
             setUserStickers(prev => [{
@@ -3861,10 +3961,12 @@ const ChatPage: React.FC = () => {
       return;
     }
     
-    const { error } = await supabase
-      .from('user_stickers')
-      .update({ keywords })
-      .eq('id', editingStickerKeywords.id);
+    let error = null;
+    if (localMode) {
+      await updateLocalRows(user.id, 'user_stickers', (row) => row.id === editingStickerKeywords.id, { keywords });
+    } else {
+      error = (await supabase.from('user_stickers').update({ keywords }).eq('id', editingStickerKeywords.id)).error;
+    }
     
     if (error) {
       toast.error('更新失败');
@@ -3895,7 +3997,7 @@ const ChatPage: React.FC = () => {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    await supabase.from('chat_messages').insert({
+    await saveChatMessage({
       user_id: user.id,
       character_id: characterId,
       role: 'user',
@@ -4002,7 +4104,7 @@ const ChatPage: React.FC = () => {
       
       if (assistantContent) {
         setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: assistantContent }]);
-        await supabase.from('chat_messages').insert({ 
+        await saveChatMessage({
           user_id: user.id, 
           character_id: characterId, 
           role: 'assistant', 
@@ -4220,7 +4322,7 @@ const ChatPage: React.FC = () => {
       // 后台保存到数据库（不等待）
       (async () => {
         for (const msg of msgsToSave) {
-          await supabase.from('chat_messages').insert({
+          await saveChatMessage({
             user_id: user.id,
             character_id: characterId,
             role: msg.role,
@@ -4228,7 +4330,7 @@ const ChatPage: React.FC = () => {
             audio_url: msg.audioBase64 || null
           });
         }
-        await supabase.from('chat_messages').insert({
+        await saveChatMessage({
           user_id: user.id,
           character_id: characterId,
           role: 'assistant',
@@ -4265,6 +4367,16 @@ const ChatPage: React.FC = () => {
       
       // 上传到storage
       try {
+        if (localMode) {
+          const localVideoUrl = await fileToDataUrl(file);
+          setCallVideoUrl(localVideoUrl);
+          setSavedCallVideoUrl(localVideoUrl);
+          await saveCharacterChanges({ call_video_url: localVideoUrl });
+          toast.success('视频已保存到本机');
+          URL.revokeObjectURL(tempUrl);
+          return;
+        }
+
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.id}/call-videos/${Date.now()}.${fileExt}`;
         
@@ -4286,7 +4398,7 @@ const ChatPage: React.FC = () => {
         setCallVideoUrl(publicUrl);
         setSavedCallVideoUrl(publicUrl);
         // 保存到characters表
-        await supabase.from('characters').update({ call_video_url: publicUrl }).eq('id', characterId);
+        await saveCharacterChanges({ call_video_url: publicUrl });
         toast.success('视频上传成功，已保存');
       } catch (err) {
         console.error('Upload video error:', err);
@@ -4606,7 +4718,7 @@ const ChatPage: React.FC = () => {
                   className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${replyMode === 'novel' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
                   onClick={async () => {
                     setReplyMode('novel');
-                    await supabase.from('characters').update({ reply_mode: 'novel' }).eq('id', characterId);
+                    await saveCharacterChanges({ reply_mode: 'novel' });
                     toast.success('已切换为小说模式');
                   }}
                 >
@@ -4617,7 +4729,7 @@ const ChatPage: React.FC = () => {
                   className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors ${replyMode === 'online' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
                   onClick={async () => {
                     setReplyMode('online');
-                    await supabase.from('characters').update({ reply_mode: 'online' }).eq('id', characterId);
+                    await saveCharacterChanges({ reply_mode: 'online' });
                     toast.success('已切换为线上模式');
                     setShowReplyModeMenu(true);
                   }}
@@ -4638,7 +4750,7 @@ const ChatPage: React.FC = () => {
                         className={`px-2 py-1 text-xs rounded-md transition-colors ${onlineMessageCount === count ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                         onClick={async () => {
                           setOnlineMessageCount(count);
-                          await supabase.from('characters').update({ online_message_count: count }).eq('id', characterId);
+                          await saveCharacterChanges({ online_message_count: count });
                           toast.success(`已设置为${count}条`);
                         }}
                       >
@@ -4662,7 +4774,7 @@ const ChatPage: React.FC = () => {
                   checked={stickerEnabled}
                   onCheckedChange={async (checked) => {
                     setStickerEnabled(checked);
-                    await supabase.from('characters').update({ sticker_enabled: checked }).eq('id', characterId);
+                    await saveCharacterChanges({ sticker_enabled: checked });
                     toast.success(checked ? '已开启表情包' : '已关闭表情包');
                   }}
                 />
@@ -4961,7 +5073,7 @@ const ChatPage: React.FC = () => {
                     setVoiceMode(nextMode);
                     // 保存到数据库
                     if (characterId && user?.id) {
-                      supabase.from('characters').update({ voice_mode: nextMode }).eq('id', characterId).eq('user_id', user.id).then(() => {});
+                      saveCharacterChanges({ voice_mode: nextMode }).catch(console.error);
                     }
                     const labels = { off: '关闭', sometimes: '偶尔', always: '总是' };
                     toast.success(`角色语音：${labels[nextMode]}`);
@@ -5108,6 +5220,7 @@ const ChatPage: React.FC = () => {
         characterName={character?.name || ''}
         characterPersona={character?.persona || ''}
         characterReplyMode={replyMode}
+        localMode={localMode === true}
         isBlocked={isBlocked}
         onBlockStatusChange={(blocked) => {
           setBlocked(blocked);

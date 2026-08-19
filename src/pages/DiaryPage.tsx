@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
 
 interface DiaryEntry {
   id: string;
@@ -43,15 +44,38 @@ const DiaryPage: React.FC = () => {
   const [content, setContent] = useState('');
   const [mood, setMood] = useState('happy');
   const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchEntries();
       fetchCharacters();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   const fetchEntries = async () => {
+    if (localMode && user?.id) {
+      const [diaries, localCharacters] = await Promise.all([
+        getLocalTable(user.id, 'diaries'),
+        getLocalTable(user.id, 'characters'),
+      ]);
+      setEntries(diaries
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .map((diary: any) => {
+          const character = localCharacters.find((item) => item.id === diary.character_id);
+          return { ...diary, character_name: character?.name, character_avatar: character?.avatar_url };
+        }));
+      return;
+    }
+
     const { data } = await (supabase
       .from('diaries' as any)
       .select('*, characters(name, avatar_url)')
@@ -68,6 +92,10 @@ const DiaryPage: React.FC = () => {
   };
 
   const fetchCharacters = async () => {
+    if (localMode && user?.id) {
+      setCharacters(await getLocalTable(user.id, 'characters'));
+      return;
+    }
     const { data } = await supabase
       .from('characters')
       .select('id, name, avatar_url')
@@ -89,7 +117,15 @@ const DiaryPage: React.FC = () => {
       character_id: selectedCharacter
     };
 
-    if (editingEntry) {
+    if (localMode && user?.id) {
+      if (editingEntry) {
+        await updateLocalRows(user.id, 'diaries', (row) => row.id === editingEntry.id, diaryData);
+        toast.success('日记已更新');
+      } else {
+        await insertLocalRow(user.id, 'diaries', diaryData);
+        toast.success('日记已保存');
+      }
+    } else if (editingEntry) {
       await (supabase.from('diaries' as any) as any).update(diaryData).eq('id', editingEntry.id);
       toast.success('日记已更新');
     } else {
@@ -103,7 +139,11 @@ const DiaryPage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await (supabase.from('diaries' as any) as any).delete().eq('id', deleteId);
+    if (localMode && user?.id) {
+      await deleteLocalRows(user.id, 'diaries', (row) => row.id === deleteId);
+    } else {
+      await (supabase.from('diaries' as any) as any).delete().eq('id', deleteId);
+    }
     toast.success('日记已删除');
     setDeleteId(null);
     fetchEntries();

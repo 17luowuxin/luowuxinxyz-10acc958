@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows } from '@/lib/localDataStore';
 
 interface BottleMessage {
   id: string;
@@ -28,12 +29,35 @@ const BottlePage: React.FC = () => {
   const [bottles, setBottles] = useState<BottleMessage[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [currentReply, setCurrentReply] = useState<{ content: string; character: string } | null>(null);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (user) fetchBottles();
-  }, [user]);
+    if (!user?.id) {
+      setLocalMode(null);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && localMode !== null) fetchBottles();
+  }, [user, localMode]);
 
   const fetchBottles = async () => {
+    if (localMode && user?.id) {
+      const data = (await getLocalTable(user.id, 'bottles'))
+        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
+        .slice(0, 20);
+      setBottles(data.map((bottle: any) => ({
+        id: bottle.id,
+        content: bottle.content,
+        reply: bottle.reply,
+        character: bottle.character_name,
+        created_at: bottle.created_at,
+      })));
+      return;
+    }
+
     const { data } = await supabase
       .from('bottles')
       .select('*')
@@ -57,7 +81,12 @@ const BottlePage: React.FC = () => {
     setBottles(prev => prev.filter(b => b.id !== bottleId));
     
     try {
-      const { error } = await supabase.from('bottles').delete().eq('id', bottleId);
+      let error = null;
+      if (localMode && user?.id) {
+        await deleteLocalRows(user.id, 'bottles', (row) => row.id === bottleId);
+      } else {
+        error = (await supabase.from('bottles').delete().eq('id', bottleId)).error;
+      }
       if (error) {
         // 如果删除失败，重新获取数据
         fetchBottles();
@@ -88,14 +117,13 @@ const BottlePage: React.FC = () => {
     setSending(true);
     
     try {
-      const { data: bottleData, error: insertError } = await supabase
-        .from('bottles')
-        .insert({ 
+      const bottleRow = {
           user_id: user?.id, 
           content: input.trim()
-        })
-        .select()
-        .single();
+      };
+      const { data: bottleData, error: insertError } = localMode && user?.id
+        ? { data: await insertLocalRow(user.id, 'bottles', bottleRow), error: null }
+        : await supabase.from('bottles').insert(bottleRow).select().single();
 
       if (insertError) throw insertError;
 
@@ -129,15 +157,17 @@ const BottlePage: React.FC = () => {
 
       const { reply, character } = await response.json();
 
-      await supabase
-        .from('bottles')
-        .update({ 
+      const replyData = {
           is_picked: true,
           picked_by: user?.id,
           reply: reply,
           character_name: character,
-        } as any)
-        .eq('id', bottleData.id);
+      };
+      if (localMode && user?.id) {
+        await updateLocalRows(user.id, 'bottles', (row) => row.id === bottleData.id, replyData);
+      } else {
+        await supabase.from('bottles').update(replyData as any).eq('id', bottleData.id);
+      }
 
       setCurrentReply({ content: reply, character });
       fetchBottles();

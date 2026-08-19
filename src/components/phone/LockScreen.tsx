@@ -4,6 +4,13 @@ import { ChevronUp, ImagePlus, Film } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import {
+  getLocalAssetUrl,
+  getLocalTable,
+  isLocalModeEnabled,
+  saveLocalAsset,
+  upsertLocalRow,
+} from '@/lib/localDataStore';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -18,6 +25,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [videoError, setVideoError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadType, setUploadType] = useState<'image' | 'video'>('image');
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,10 +39,18 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (!user) {
+      setLocalMode(false);
+      return;
+    }
+    isLocalModeEnabled(user.id).then(setLocalMode);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && localMode !== null) {
       fetchCustomization();
     }
-  }, [user]);
+  }, [user, localMode]);
 
   // 优化视频播放
   useEffect(() => {
@@ -58,19 +74,25 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   }, [videoBgUrl]);
 
   const fetchCustomization = async () => {
-    const { data, error } = await supabase
-      .from('customization')
-      .select('lock_screen_bg_url, lock_screen_video_url')
-      .eq('user_id', user!.id)
-      .maybeSingle();
+    if (!user) return;
+    const result = localMode
+      ? { data: (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id), error: null }
+      : await supabase
+          .from('customization')
+          .select('lock_screen_bg_url, lock_screen_video_url')
+          .eq('user_id', user.id)
+          .maybeSingle();
+    const { data, error } = result;
 
     if (error) {
       console.error('Fetch lock screen customization error:', error);
       return;
     }
 
-    setBgUrl(data?.lock_screen_bg_url ?? null);
-    setVideoBgUrl(((data as any)?.lock_screen_video_url as string | null) ?? null);
+    const imageUrl = data?.lock_screen_bg_url ? String(data.lock_screen_bg_url) : null;
+    const videoUrl = data?.lock_screen_video_url ? String(data.lock_screen_video_url) : null;
+    setBgUrl(imageUrl && localMode ? await getLocalAssetUrl(user.id, imageUrl) : imageUrl);
+    setVideoBgUrl(videoUrl && localMode ? await getLocalAssetUrl(user.id, videoUrl) : videoUrl);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,6 +106,23 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
     setUploading(true);
     try {
+      if (localMode) {
+        const sourceUrl = `local-asset://lockscreen-${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, sourceUrl, file);
+        await upsertLocalRow(
+          user.id,
+          'customization',
+          (row) => row.user_id === user.id,
+          { user_id: user.id, lock_screen_bg_url: sourceUrl, lock_screen_video_url: null },
+        );
+        setBgUrl(await getLocalAssetUrl(user.id, sourceUrl));
+        setVideoBgUrl(null);
+        setVideoLoaded(false);
+        setVideoError(false);
+        toast.success('锁屏背景已更新');
+        return;
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/lockscreen-${Date.now()}.${fileExt}`;
 
@@ -149,6 +188,22 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     toast.loading('上传中...');
 
     try {
+      if (localMode) {
+        const sourceUrl = `local-asset://lockscreen-video-${crypto.randomUUID()}`;
+        await saveLocalAsset(user.id, sourceUrl, file);
+        await upsertLocalRow(
+          user.id,
+          'customization',
+          (row) => row.user_id === user.id,
+          { user_id: user.id, lock_screen_video_url: sourceUrl, lock_screen_bg_url: null },
+        );
+        setVideoBgUrl(await getLocalAssetUrl(user.id, sourceUrl));
+        setBgUrl(null);
+        toast.dismiss();
+        toast.success('锁屏动态壁纸已更新');
+        return;
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/lockscreen-video-${Date.now()}.${fileExt}`;
 
