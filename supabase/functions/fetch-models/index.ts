@@ -39,13 +39,28 @@ serve(async (req) => {
       modelsUrl = `${modelsUrl}/models`;
     }
 
-    const response = await fetch(modelsUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    let response: Response;
+    try {
+      response = await fetch(modelsUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return new Response(JSON.stringify({ success: false, error: '获取模型超时，请检查API地址或网络' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const responseText = await response.text();
 
@@ -61,13 +76,17 @@ serve(async (req) => {
         if (altUrl === modelsUrl) continue;
         
         try {
+          const altController = new AbortController();
+          const altTimeoutId = setTimeout(() => altController.abort(), 5000);
           const altResponse = await fetch(altUrl, {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
+            signal: altController.signal,
           });
+          clearTimeout(altTimeoutId);
 
           if (altResponse.ok) {
             const altText = await altResponse.text();

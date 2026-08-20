@@ -33,9 +33,14 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
       const cached = sessionStorage.getItem(cacheKey);
       
       if (cached) {
-        const data = JSON.parse(cached);
-        if (data.global_background_url) setGlobalBg(data.global_background_url);
-        if (data.video_background_url) setVideoBg(data.video_background_url);
+        try {
+          const data = JSON.parse(cached);
+          setGlobalBg(data.global_background_url || null);
+          setVideoBg(data.video_background_url || null);
+          return;
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
       }
       
       const loadLatest = async () => {

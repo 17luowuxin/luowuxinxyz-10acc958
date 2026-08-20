@@ -113,11 +113,26 @@ serve(async (req) => {
         });
     }
 
-    const response = await fetch(testUrl, {
-      method: 'POST',
-      headers: testHeaders,
-      body: testBody,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    let response: Response;
+    try {
+      response = await fetch(testUrl, {
+        method: 'POST',
+        headers: testHeaders,
+        body: testBody,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return new Response(JSON.stringify({ success: false, error: '连接超时，请检查API地址或网络' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const responseText = await response.text();
     console.log('Response status:', response.status);
