@@ -6,8 +6,50 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Heart, Sparkles, Mail, Lock, Ticket } from 'lucide-react';
-import { cloudSupabase, supabase } from '@/lib/supabase';
+import { cloudSupabase } from '@/lib/supabase';
+import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+
+const REGISTER_TIMEOUT_MS = 12000;
+
+const registerWithInvite = async (body: { code: string; email: string; password: string }) => {
+  const directUrl = import.meta.env.VITE_SUPABASE_URL;
+  const proxyUrl = getSupabaseUrl();
+  const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  const request = async (baseUrl: string) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REGISTER_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${baseUrl}/functions/v1/register-with-invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => null);
+      return { data, ok: response.ok, status: response.status };
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  };
+
+  try {
+    const result = await request(proxyUrl);
+    const proxyUnavailable = proxyUrl !== directUrl && (result.status === 404 || result.status >= 500);
+    return proxyUnavailable ? await request(directUrl) : result;
+  } catch (error) {
+    if (proxyUrl !== directUrl) {
+      return request(directUrl);
+    }
+    throw error;
+  }
+};
 
 const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -61,11 +103,13 @@ const AuthPage: React.FC = () => {
         }
         
         // 注册和消费邀请码必须由服务端一次完成，避免同一个邀请码被并发重复使用。
-        const { data, error } = await supabase.functions.invoke('register-with-invite', {
-          body: { code: inviteCode.trim().toUpperCase(), email: normalizedEmail, password }
+        const { data, ok } = await registerWithInvite({
+          code: inviteCode.trim().toUpperCase(),
+          email: normalizedEmail,
+          password,
         });
 
-        if (error || !data?.success) {
+        if (!ok || !data?.success) {
           toast.error(data?.message || '注册失败，请稍后重试（邀请码未消耗）');
           return;
         }
@@ -85,7 +129,8 @@ const AuthPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Auth error:', error);
-      toast.error('服务暂时不可用，请稍后再试');
+      const isTimeout = error?.name === 'AbortError';
+      toast.error(isTimeout ? '注册请求超时，请检查网络后重试' : '注册服务连接失败，请检查网络后重试');
     } finally {
       setLoading(false);
     }
