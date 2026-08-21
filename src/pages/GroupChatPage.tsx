@@ -450,7 +450,7 @@ const GroupChatPage: React.FC = () => {
       
       if (localMode && user?.id) {
         const idSet = new Set(idsToDelete);
-        await deleteLocalRows(user.id, 'group_messages', (row) => idSet.has(row.id as string));
+        await deleteLocalRows(user.id, 'group_messages', (row) => idSet.has(row.id));
       } else {
         await supabase.from('group_messages').delete().in('id', idsToDelete);
       }

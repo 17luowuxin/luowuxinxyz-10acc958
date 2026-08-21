@@ -119,7 +119,7 @@ export async function replaceLocalTable(
   }
 }
 
-export async function getLocalTable(userId: string, table: string): Promise<any[]> {
+export async function getLocalTable(userId: string, table: string): Promise<Record<string, unknown>[]> {
   const database = await openLocalDatabase();
   try {
     const transaction = database.transaction('records', 'readonly');
@@ -161,7 +161,7 @@ export async function insertLocalRow(
   userId: string,
   table: string,
   row: Record<string, unknown>,
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const now = new Date().toISOString();
   const nextRow = {
     id: crypto.randomUUID(),
@@ -220,7 +220,7 @@ export async function upsertLocalRow(
   table: string,
   matches: (row: Record<string, unknown>) => boolean,
   row: Record<string, unknown>,
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const rows = await getLocalTable(userId, table);
   const index = rows.findIndex(matches);
   if (index === -1) return insertLocalRow(userId, table, row);

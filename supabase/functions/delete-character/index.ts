@@ -154,7 +154,7 @@ serve(async (req) => {
     const deletedCounts: Record<string, number> = {};
 
     for (const table of RELATED_TABLES) {
-      deletedCounts[table.name] = await deleteByCharacterInBatches(dataClient as any, table.name, userId, characterId, table.scopedByUser);
+      deletedCounts[table.name] = await deleteByCharacterInBatches(dataClient, table.name, userId, characterId, table.scopedByUser);
     }
 
     const { error: deleteCharacterError } = await dataClient
