@@ -70,7 +70,7 @@ const latestSetting = (rows: any[], provider: string) => rows
   .filter((row) => row.provider === provider)
   .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
 
-type SettingsSectionId = 'ai' | 'image' | 'voice' | 'appearance' | 'data' | 'privacy';
+type SettingsSectionId = 'ai' | 'image' | 'voice' | 'appearance' | 'data' | 'privacy' | 'updates';
 
 const SettingsSectionButton = ({
   id,
@@ -1368,6 +1368,7 @@ const SettingsPage: React.FC = () => {
         <SettingsSectionButton orderClass="order-[40]" id="appearance" openSection={openSection} onToggle={toggleSection} icon={<Palette className="h-5 w-5" />} title="外观与壁纸" subtitle="主题、桌面、锁屏、聊天背景" />
         <SettingsSectionButton orderClass="order-[50]" id="data" openSection={openSection} onToggle={toggleSection} icon={<Database className="h-5 w-5" />} title="数据与备份" subtitle="一键导出、导入与本机数据" />
         <SettingsSectionButton orderClass="order-[60]" id="privacy" openSection={openSection} onToggle={toggleSection} icon={<Bell className="h-5 w-5" />} title="通知与隐私" subtitle="消息提醒与隐私设置" />
+        <SettingsSectionButton orderClass="order-[70]" id="updates" openSection={openSection} onToggle={toggleSection} icon={<RefreshCw className="h-5 w-5" />} title="版本与更新" subtitle={`当前版本 v${APP_VERSION}`} />
 
         {openSection === 'appearance' && (
           <div className="order-[41] rounded-2xl border border-purple-100/70 bg-white/75 p-4">
@@ -2939,55 +2940,58 @@ const SettingsPage: React.FC = () => {
           </button>
         </div>
 
+        {openSection === 'updates' && (
+          <div className="order-[71] rounded-2xl border border-purple-100/70 bg-white/75 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">梦境小手机 v{APP_VERSION}</p>
+                <p className="mt-0.5 text-xs text-gray-400">更新于 {BUILD_DATE}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  toast.success('已是最新版本', {
+                    description: `当前版本 v${APP_VERSION}，更新于 ${BUILD_DATE}`,
+                    icon: <Sparkles className="w-4 h-4 text-green-500" />,
+                  });
+                }}
+                className="flex shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-purple-100 to-pink-100 px-3 py-2 text-xs font-medium text-purple-600"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                检查更新
+              </button>
+            </div>
+
+            <details className="mt-3 rounded-xl bg-purple-50/60 p-3 text-xs">
+              <summary className="cursor-pointer text-gray-500 hover:text-purple-600">查看更新日志</summary>
+              <div className="mt-3 space-y-2">
+                {CHANGELOG.map((log) => (
+                  <div key={log.version} className="border-l-2 border-purple-200 pl-2">
+                    <p className="font-medium text-purple-600">v{log.version} ({log.date})</p>
+                    <ul className="mt-1 space-y-0.5 text-gray-500">
+                      {log.changes.map((change, i) => <li key={i}>• {change}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+
         {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 
         {/* Logout Button */}
         <Button 
           variant="outline" 
-          className="order-[70] w-full rounded-2xl py-5 bg-white/75 border-red-200 text-red-500 hover:bg-red-50"
+          className="order-[80] w-full rounded-2xl py-5 bg-white/75 border-red-200 text-red-500 hover:bg-red-50"
           onClick={handleLogout}
         >
           <LogOut className="w-4 h-4 mr-2" />
           退出登录
         </Button>
 
-        {/* Version and Legal Info */}
-        <div className="order-[71] text-center pt-6 pb-4 space-y-3">
-          <div className="flex items-center justify-center gap-2">
-            <p className="text-xs text-gray-400">版本 v{APP_VERSION}</p>
-            <button
-              onClick={() => {
-                toast.success('已是最新版本', {
-                  description: `当前版本 v${APP_VERSION}，更新于 ${BUILD_DATE}`,
-                  icon: <Sparkles className="w-4 h-4 text-green-500" />,
-                });
-              }}
-              className="text-xs text-purple-500 hover:text-purple-700 flex items-center gap-1"
-            >
-              <RefreshCw className="w-3 h-3" />
-              检查更新
-            </button>
-          </div>
-          
-          {/* Changelog Preview */}
-          <details className="text-left bg-white/40 rounded-xl p-3 text-xs">
-            <summary className="text-gray-500 cursor-pointer hover:text-purple-600">
-              查看更新日志
-            </summary>
-            <div className="mt-2 space-y-2">
-              {CHANGELOG.map((log) => (
-                <div key={log.version} className="border-l-2 border-purple-200 pl-2">
-                  <p className="font-medium text-purple-600">v{log.version} ({log.date})</p>
-                  <ul className="text-gray-500 mt-1 space-y-0.5">
-                    {log.changes.map((change, i) => (
-                      <li key={i}>• {change}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </details>
-          
+        {/* Legal Info */}
+        <div className="order-[81] text-center pt-3 pb-4 space-y-3">
           <div className="flex items-center justify-center gap-3 text-xs">
             <button 
               onClick={() => navigate('/privacy')}
@@ -3007,7 +3011,7 @@ const SettingsPage: React.FC = () => {
             本应用最终解释权归开发者所有
           </p>
           <p className="text-xs text-gray-300">
-            © 2024 All Rights Reserved
+            © 2026 All Rights Reserved
           </p>
           <button
             type="button"
