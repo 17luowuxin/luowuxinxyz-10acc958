@@ -22,8 +22,6 @@ interface Theme {
   chat_background_url: string | null;
   global_background_url: string | null;
   lock_screen_bg_url: string | null;
-  lock_screen_video_url: string | null;
-  video_background_url: string | null;
   app_icons: Record<string, string> | null;
   desktop_widgets: string[] | null;
 }
@@ -96,12 +94,6 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
       if (theme.lock_screen_bg_url) {
         updateData.lock_screen_bg_url = theme.lock_screen_bg_url;
       }
-      if (theme.lock_screen_video_url) {
-        updateData.lock_screen_video_url = theme.lock_screen_video_url;
-      }
-      if (theme.video_background_url) {
-        updateData.video_background_url = theme.video_background_url;
-      }
       
       // 先获取现有的 app_icons
       const existingData = localMode
@@ -145,8 +137,6 @@ const ThemeGallery: React.FC<ThemeGalleryProps> = ({ onThemeApplied }) => {
           theme.chat_background_url,
           theme.global_background_url,
           theme.lock_screen_bg_url,
-          theme.lock_screen_video_url,
-          theme.video_background_url,
           ...Object.values(theme.app_icons || {}),
           ...(theme.desktop_widgets || []),
         ].filter((url): url is string => Boolean(url));

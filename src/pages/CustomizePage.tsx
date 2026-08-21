@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, Sparkles, Globe, Film, Palette, Check, X, Type, User, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Upload, Sparkles, Globe, Palette, Check, X, Type, User, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { applyGlobalTextColor, applyGlobalTextSize } from '@/hooks/useGlobalSettings';
 import { toast } from 'sonner';
-import ThemeGallery from '@/components/customize/ThemeGallery';
+import { applyFontChoice, BUILT_IN_FONTS, FontChoice, loadCustomFonts } from '@/lib/customFonts';
 import {
   getLocalAssetUrl,
   getLocalTable,
+  insertLocalRow,
   isLocalModeEnabled,
   saveLocalAsset,
   upsertLocalRow,
@@ -21,6 +21,8 @@ import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 import cuteBoyHead from '@/assets/bubble-frames/cute-boy-head.png';
+
+const ThemeGallery = React.lazy(() => import('@/components/customize/ThemeGallery'));
 
 const avatarFramePresets = [
   { id: 'none', name: '无', url: '' },
@@ -72,37 +74,44 @@ const themeOptions = [
   { id: 'dark', name: '暗夜黑', colors: ['#444444', '#666666'] },
 ];
 
-// Font options
-const fontOptions = [
-  { id: 'default', name: '默认', family: 'Nunito, sans-serif', preview: 'Aa 你好' },
-  { id: 'kuaile', name: '快乐体', family: '"ZCOOL KuaiLe", cursive', preview: 'Aa 你好' },
-  { id: 'mashan', name: '马善政楷', family: '"Ma Shan Zheng", cursive', preview: 'Aa 你好' },
-  { id: 'xiaowei', name: '小薇体', family: '"ZCOOL XiaoWei", serif', preview: 'Aa 你好' },
-  { id: 'liujian', name: '刘建毛草', family: '"Liu Jian Mao Cao", cursive', preview: 'Aa 你好' },
-  { id: 'longcang', name: '龙藏体', family: '"Long Cang", cursive', preview: 'Aa 你好' },
-];
+type AppearanceSectionId = 'theme' | 'wallpaper' | 'chat' | 'novel';
 
-// 字体颜色选项
-const fontColors = [
-  '#333333', // 深灰
-  '#FFFFFF', // 白色
-  '#FFB5C5', // 粉色
-  '#B5D8FF', // 蓝色
-  '#000000', // 黑色
-  '#FF6B6B', // 红色
-  '#4ECDC4', // 青色
-  '#FFE66D', // 黄色
-];
-
-// 全局文字大小选项
-const textSizeOptions = [
-  { id: 12, label: '小' },
-  { id: 14, label: '较小' },
-  { id: 16, label: '标准' },
-  { id: 18, label: '较大' },
-  { id: 20, label: '大' },
-  { id: 24, label: '超大' },
-];
+const AppearanceSectionButton = ({
+  id,
+  openSection,
+  onToggle,
+  icon,
+  title,
+  subtitle,
+  orderClass,
+}: {
+  id: AppearanceSectionId;
+  openSection: AppearanceSectionId | null;
+  onToggle: (id: AppearanceSectionId) => void;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  orderClass: string;
+}) => {
+  const isOpen = openSection === id;
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      aria-expanded={isOpen}
+      className={`${orderClass} w-full rounded-2xl border px-4 py-3.5 text-left transition-all ${isOpen ? 'border-primary/25 bg-card shadow-sm' : 'border-white/70 bg-card/65 hover:bg-card'}`}
+    >
+      <span className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-primary">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-foreground">{title}</span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{subtitle}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </span>
+    </button>
+  );
+};
 
 const CustomizePage: React.FC = () => {
   const navigate = useNavigate();
@@ -114,28 +123,25 @@ const CustomizePage: React.FC = () => {
   const [bubbleSize, setBubbleSize] = useState([16]);
   const [chatBackgroundUrl, setChatBackgroundUrl] = useState('');
   const [globalBackgroundUrl, setGlobalBackgroundUrl] = useState('');
-  const [videoBackgroundUrl, setVideoBackgroundUrl] = useState('');
   const [storedChatBackgroundUrl, setStoredChatBackgroundUrl] = useState('');
   const [storedGlobalBackgroundUrl, setStoredGlobalBackgroundUrl] = useState('');
-  const [storedVideoBackgroundUrl, setStoredVideoBackgroundUrl] = useState('');
   const [currentTheme, setCurrentTheme] = useState('pink');
   const [currentFont, setCurrentFont] = useState('default');
+  const [customFonts, setCustomFonts] = useState<FontChoice[]>([]);
+  const [openSection, setOpenSection] = useState<AppearanceSectionId | null>(null);
   const [fontColor, setFontColor] = useState('#333333');
   const [friendFontColor, setFriendFontColor] = useState('#333333');
   const [uploading, setUploading] = useState(false);
   const [globalUploading, setGlobalUploading] = useState(false);
-  const [videoUploading, setVideoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const globalFileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
   const [avatarFrame, setAvatarFrame] = useState('');
   const [friendAvatarFrame, setFriendAvatarFrame] = useState('');
   const [bubbleFrame, setBubbleFrame] = useState('');
   const [friendBubbleFrame, setFriendBubbleFrame] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [characterPreview, setCharacterPreview] = useState<any>(null);
-  const [globalTextColor, setGlobalTextColor] = useState('#333333');
-  const [globalTextSize, setGlobalTextSize] = useState(16);
   // 小说模式颜色
   const [novelDialogueColor, setNovelDialogueColor] = useState('#e91e63');
   const [novelNarrationColor, setNovelNarrationColor] = useState('#666666');
@@ -157,10 +163,20 @@ const CustomizePage: React.FC = () => {
   useEffect(() => {
     if (user && localMode !== null) {
       void fetchSettingsRef.current();
+    }
+  }, [user, localMode]);
+
+  useEffect(() => {
+    if (openSection === 'chat' && user && localMode !== null) {
       void fetchUserProfileRef.current();
       void fetchFirstCharacterRef.current();
     }
-  }, [user, localMode]);
+  }, [openSection, user, localMode]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadCustomFonts(user.id).then(setCustomFonts);
+  }, [user]);
 
   const fetchUserProfile = async () => {
     if (!user) return;
@@ -200,22 +216,9 @@ const CustomizePage: React.FC = () => {
 
   // Apply font to document
   useEffect(() => {
-    const font = fontOptions.find(f => f.id === currentFont);
-    if (font) {
-      document.documentElement.style.fontFamily = font.family;
-      document.body.style.fontFamily = font.family;
-      // Also apply to all elements, except font preview areas
-      const style = document.createElement('style');
-      style.id = 'global-font-style';
-      style.textContent = `*:not([data-font-preview]) { font-family: ${font.family} !important; }`;
-      
-      // Remove old style if exists
-      const oldStyle = document.getElementById('global-font-style');
-      if (oldStyle) oldStyle.remove();
-      
-      document.head.appendChild(style);
-    }
-  }, [currentFont]);
+    const font = [...BUILT_IN_FONTS, ...customFonts].find((item) => item.id === currentFont);
+    if (font) applyFontChoice(font);
+  }, [currentFont, customFonts]);
 
   const fetchSettings = async () => {
     if (!user) return;
@@ -230,13 +233,10 @@ const CustomizePage: React.FC = () => {
       setBubbleSize([(data as any).bubble_size || 16]);
       const chatUrl = String(data.chat_background_url || '');
       const globalUrl = String(data.global_background_url || '');
-      const videoUrl = String(data.video_background_url || '');
       setStoredChatBackgroundUrl(chatUrl);
       setStoredGlobalBackgroundUrl(globalUrl);
-      setStoredVideoBackgroundUrl(videoUrl);
       setChatBackgroundUrl(chatUrl && localMode ? await getLocalAssetUrl(user.id, chatUrl) : chatUrl);
       setGlobalBackgroundUrl(globalUrl && localMode ? await getLocalAssetUrl(user.id, globalUrl) : globalUrl);
-      setVideoBackgroundUrl(videoUrl && localMode ? await getLocalAssetUrl(user.id, videoUrl) : videoUrl);
       if (data.theme) setCurrentTheme(data.theme);
       if ((data as any).font_family) setCurrentFont((data as any).font_family);
       if ((data as any).font_color) setFontColor((data as any).font_color);
@@ -245,8 +245,6 @@ const CustomizePage: React.FC = () => {
       if ((data as any).friend_avatar_frame_url) setFriendAvatarFrame((data as any).friend_avatar_frame_url);
       if ((data as any).bubble_frame_url) setBubbleFrame((data as any).bubble_frame_url);
       if ((data as any).friend_bubble_frame_url) setFriendBubbleFrame((data as any).friend_bubble_frame_url);
-      if ((data as any).global_text_color) setGlobalTextColor((data as any).global_text_color);
-      if ((data as any).global_text_size) setGlobalTextSize((data as any).global_text_size);
       // 小说模式颜色
       if ((data as any).novel_dialogue_color) setNovelDialogueColor((data as any).novel_dialogue_color);
       if ((data as any).novel_narration_color) setNovelNarrationColor((data as any).novel_narration_color);
@@ -368,55 +366,31 @@ const CustomizePage: React.FC = () => {
     setGlobalUploading(false);
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file || !user) return;
-
-    if (!file.type.startsWith('video/')) {
-      toast.error('请选择视频文件 (MP4/WebM)');
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!extension || !['ttf', 'otf', 'woff', 'woff2'].includes(extension)) {
+      toast.error('请选择 TTF、OTF、WOFF 或 WOFF2 字体文件');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      toast.error('字体文件请小于 12MB');
+      event.target.value = '';
       return;
     }
 
-    // 限制8MB以提升上传速度
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error('视频文件需小于8MB以保证流畅播放');
-      return;
-    }
-
-    setVideoUploading(true);
-    toast.loading('正在上传视频...');
-    if (localMode) {
-      const sourceUrl = `local-asset://video-bg-${crypto.randomUUID()}`;
-      await saveLocalAsset(user.id, sourceUrl, file);
-      setStoredVideoBackgroundUrl(sourceUrl);
-      setVideoBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
-      setVideoUploading(false);
-      toast.dismiss();
-      toast.success('动态背景已保存到本机');
-      return;
-    }
-    
-    const fileName = `${user.id}/video-bg-${Date.now()}.${file.name.split('.').pop()}`;
-    
-    const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: true
-    });
-    
-    if (uploadError) {
-      toast.dismiss();
-      toast.error('上传失败: ' + uploadError.message);
-      setVideoUploading(false);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-    const nextUrl = publicUrl + '?t=' + Date.now();
-    setStoredVideoBackgroundUrl(nextUrl);
-    setVideoBackgroundUrl(nextUrl);
-    setVideoUploading(false);
-    toast.dismiss();
-    toast.success('动态背景上传成功');
+    const id = crypto.randomUUID();
+    const sourceUrl = `local-asset://font-${id}`;
+    const name = file.name.replace(/\.[^.]+$/, '') || '自定义字体';
+    await saveLocalAsset(user.id, sourceUrl, file);
+    await insertLocalRow(user.id, 'custom_fonts', { id, user_id: user.id, name, source_url: sourceUrl });
+    const fonts = await loadCustomFonts(user.id);
+    setCustomFonts(fonts);
+    setCurrentFont(id);
+    toast.success('字体已导入并保存在本机');
+    event.target.value = '';
   };
 
   const handleThemeChange = (themeId: string) => {
@@ -444,7 +418,6 @@ const CustomizePage: React.FC = () => {
       bubble_size: bubbleSize[0],
       chat_background_url: storedChatBackgroundUrl || null,
       global_background_url: storedGlobalBackgroundUrl || null,
-      video_background_url: storedVideoBackgroundUrl || null,
       theme: currentTheme,
       font_family: currentFont,
       font_color: fontColor,
@@ -453,8 +426,8 @@ const CustomizePage: React.FC = () => {
       friend_avatar_frame_url: friendAvatarFrame || null,
       bubble_frame_url: bubbleFrame || null,
       friend_bubble_frame_url: friendBubbleFrame || null,
-      global_text_color: globalTextColor,
-      global_text_size: globalTextSize,
+      global_text_color: '#000000',
+      global_text_size: 12,
       novel_dialogue_color: novelDialogueColor,
       novel_narration_color: novelNarrationColor,
       novel_action_color: novelActionColor,
@@ -470,8 +443,6 @@ const CustomizePage: React.FC = () => {
         (row) => row.user_id === user.id,
         fullPayload,
       );
-      applyGlobalTextColor(globalTextColor);
-      applyGlobalTextSize(globalTextSize);
       toast.success('美化设置已保存到本机');
       return;
     }
@@ -495,20 +466,19 @@ const CustomizePage: React.FC = () => {
         theme: currentTheme,
         font_color: fontColor,
         friend_font_color: friendFontColor,
-        global_text_color: globalTextColor,
+        global_text_color: '#000000',
       };
 
       // Try adding optional fields one concept at a time
       const optionalFields: Record<string, any> = {
         bubble_size: bubbleSize[0],
         global_background_url: storedGlobalBackgroundUrl || null,
-        video_background_url: storedVideoBackgroundUrl || null,
         font_family: currentFont,
         avatar_frame_url: avatarFrame || null,
         friend_avatar_frame_url: friendAvatarFrame || null,
         bubble_frame_url: bubbleFrame || null,
         friend_bubble_frame_url: friendBubbleFrame || null,
-        global_text_size: globalTextSize,
+        global_text_size: 12,
         novel_dialogue_color: novelDialogueColor,
         novel_narration_color: novelNarrationColor,
         novel_action_color: novelActionColor,
@@ -553,9 +523,6 @@ const CustomizePage: React.FC = () => {
       toast.success('美化设置已保存！返回桌面查看效果');
     }
     
-    // 立即同步到全局样式
-    applyGlobalTextColor(globalTextColor);
-    applyGlobalTextSize(globalTextSize);
   };
 
   const getBubblePreviewClass = (style: string, isUser: boolean) => {
@@ -575,7 +542,7 @@ const CustomizePage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/home')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ChevronLeft className="w-6 h-6" />
           </Button>
           <h1 className="text-xl font-bold ml-2 text-primary">美化</h1>
@@ -585,64 +552,17 @@ const CustomizePage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="p-4 space-y-6 pb-24">
-        {/* Theme Gallery */}
-        <ThemeGallery onThemeApplied={fetchSettings} />
+      <div className="flex flex-col gap-3 p-4 pb-24">
+        <AppearanceSectionButton orderClass="order-[10]" id="theme" openSection={openSection} onToggle={(id) => setOpenSection((current) => current === id ? null : id)} icon={<Palette className="h-5 w-5" />} title="主题与字体" subtitle="主题商店、配色与全局字体" />
+        <AppearanceSectionButton orderClass="order-[20]" id="wallpaper" openSection={openSection} onToggle={(id) => setOpenSection((current) => current === id ? null : id)} icon={<Globe className="h-5 w-5" />} title="壁纸与背景" subtitle="全局背景和聊天背景" />
+        <AppearanceSectionButton orderClass="order-[30]" id="chat" openSection={openSection} onToggle={(id) => setOpenSection((current) => current === id ? null : id)} icon={<MessageCircle className="h-5 w-5" />} title="聊天外观" subtitle="头像框、气泡样式与预览" />
+        <AppearanceSectionButton orderClass="order-[40]" id="novel" openSection={openSection} onToggle={(id) => setOpenSection((current) => current === id ? null : id)} icon={<Sparkles className="h-5 w-5" />} title="小说模式" subtitle="对话、旁白、动作和心理颜色" />
 
-        {/* Video Background */}
-        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Film className="w-5 h-5 text-primary" />
-              <h3 className="font-bold text-lg">动态视频背景</h3>
-            </div>
-            {videoBackgroundUrl && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => { setVideoBackgroundUrl(''); setStoredVideoBackgroundUrl(''); toast.success('已清空动态背景'); }}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
-              >
-                <X className="w-4 h-4 mr-1" />
-                清空
-              </Button>
-            )}
-          </div>
-          
-          <div 
-            onClick={() => videoInputRef.current?.click()}
-            className="border-2 border-dashed border-primary/30 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors bg-primary/5"
-          >
-            {videoBackgroundUrl ? (
-              <div className="relative w-full h-32">
-                <video 
-                  src={videoBackgroundUrl} 
-                  className="w-full h-full object-cover rounded-xl"
-                  muted
-                  loop
-                  autoPlay
-                  playsInline
-                />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl opacity-0 hover:opacity-100 transition-opacity">
-                  <span className="text-white text-sm">点击更换</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <Film className="w-8 h-8 text-primary mb-2" />
-                <span className="text-primary font-medium">{videoUploading ? '上传中...' : '点击上传动态背景'}</span>
-                <span className="text-muted-foreground text-xs mt-1">支持 MP4/WebM，10MB以内</span>
-              </>
-            )}
-          </div>
-          <input 
-            ref={videoInputRef} 
-            type="file" 
-            accept="video/mp4,video/webm" 
-            className="hidden" 
-            onChange={handleVideoUpload} 
-          />
-        </div>
+        {openSection === 'theme' && (
+          <div className="order-[11] space-y-3">
+            <React.Suspense fallback={<div className="rounded-2xl bg-card/70 p-4 text-center text-xs text-muted-foreground">正在加载主题...</div>}>
+              <ThemeGallery onThemeApplied={fetchSettings} />
+            </React.Suspense>
 
         {/* Theme Colors */}
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
@@ -691,7 +611,7 @@ const CustomizePage: React.FC = () => {
           <p className="text-muted-foreground text-sm mb-4">选择可爱的字体应用到全局</p>
           
           <div className="grid grid-cols-2 gap-3">
-            {fontOptions.map((font) => (
+            {[...BUILT_IN_FONTS, ...customFonts].map((font) => (
               <button
                 key={font.id}
                 onClick={() => setCurrentFont(font.id)}
@@ -709,78 +629,17 @@ const CustomizePage: React.FC = () => {
               </button>
             ))}
           </div>
+          <Button variant="outline" className="mt-3 w-full rounded-xl" onClick={() => fontInputRef.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />导入本机字体
+          </Button>
+          <input ref={fontInputRef} type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" className="hidden" onChange={handleFontUpload} />
         </div>
-
-        {/* Global Text Color & Size */}
-        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
-          <div className="flex items-center gap-2 mb-2">
-            <Palette className="w-5 h-5 text-primary" />
-            <h3 className="font-bold text-lg">桌面文字设置</h3>
           </div>
-          <p className="text-muted-foreground text-sm mb-4">设置全局文字颜色和大小，应用到整个应用</p>
-          
-          <div className="space-y-4">
-            {/* Text Color - Color Picker */}
-            <div>
-              <p className="text-sm font-medium mb-3">文字颜色</p>
-              <div className="flex items-center gap-4">
-                <input
-                  type="color"
-                  value={globalTextColor}
-                  onChange={(e) => setGlobalTextColor(e.target.value)}
-                  className="w-16 h-16 rounded-xl cursor-pointer border-2 border-muted overflow-hidden"
-                  style={{ padding: 0 }}
-                />
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-2">当前颜色: {globalTextColor}</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {['#333333', '#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFB5C5'].map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => setGlobalTextColor(color)}
-                        className={`w-8 h-8 rounded-lg border-2 transition-all ${
-                          globalTextColor === color ? 'border-primary scale-110' : 'border-muted'
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Text Size */}
-            <div>
-              <p className="text-sm font-medium mb-3">文字大小</p>
-              <div className="flex gap-2 flex-wrap">
-                {textSizeOptions.map((size) => (
-                  <button
-                    key={size.id}
-                    onClick={() => setGlobalTextSize(size.id)}
-                    className={`px-4 py-2 rounded-xl border-2 transition-all ${
-                      globalTextSize === size.id 
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-muted bg-muted/50 hover:border-primary/50'
-                    }`}
-                  >
-                    <span style={{ fontSize: `${size.id}px` }}>{size.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Preview */}
-            <div className="mt-4 p-4 rounded-2xl bg-muted/30 border border-primary/10">
-              <p className="text-sm text-muted-foreground mb-2">预览效果：</p>
-              <p style={{ color: globalTextColor, fontSize: `${globalTextSize}px` }}>
-                这是预览文字 Hello World 你好世界
-              </p>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Novel Mode Colors */}
-        <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
+        {openSection === 'novel' && (
+        <div className="order-[41] bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-2">
             <MessageCircle className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg">小说模式颜色</h3>
@@ -873,7 +732,10 @@ const CustomizePage: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
 
+        {openSection === 'wallpaper' && (
+        <div className="order-[21] space-y-3">
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -892,7 +754,7 @@ const CustomizePage: React.FC = () => {
               </Button>
             )}
           </div>
-          <p className="text-muted-foreground text-sm mb-4">上传图片作为背景（与动态视频二选一）</p>
+          <p className="text-muted-foreground text-sm mb-4">上传图片作为整个小手机的背景</p>
           
           <div 
             onClick={() => globalFileInputRef.current?.click()}
@@ -945,8 +807,12 @@ const CustomizePage: React.FC = () => {
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleBackgroundUpload} />
           </div>
         </div>
+        </div>
+        )}
 
         {/* Avatar Frame Selection */}
+        {openSection === 'chat' && (
+        <div className="order-[31] space-y-3">
         <div className="bg-card rounded-3xl p-5 shadow-card border border-primary/10">
           <div className="flex items-center gap-2 mb-4">
             <User className="w-5 h-5 text-primary" />
@@ -1347,6 +1213,8 @@ const CustomizePage: React.FC = () => {
             </div>
           </div>
         </div>
+        </div>
+        )}
       </div>
     </div>
   );

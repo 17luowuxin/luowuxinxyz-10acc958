@@ -27,8 +27,6 @@ interface Theme {
   chat_background_url: string | null;
   global_background_url: string | null;
   lock_screen_bg_url: string | null;
-  lock_screen_video_url: string | null;
-  video_background_url: string | null;
   app_icons: Record<string, string> | null;
   desktop_widgets: string[] | null;
   is_active: boolean;
@@ -43,8 +41,6 @@ interface ThemeForm {
   chat_background_url: string;
   global_background_url: string;
   lock_screen_bg_url: string;
-  lock_screen_video_url: string;
-  video_background_url: string;
   app_icons: Record<string, string>;
   desktop_widgets: string[];
 }
@@ -80,8 +76,6 @@ const emptyForm: ThemeForm = {
   chat_background_url: '',
   global_background_url: '',
   lock_screen_bg_url: '',
-  lock_screen_video_url: '',
-  video_background_url: '',
   app_icons: {},
   desktop_widgets: ['', '', ''],
 };
@@ -607,8 +601,6 @@ const AdminPage: React.FC = () => {
         chat_background_url: themeItem.chat_background_url as string | null,
         global_background_url: themeItem.global_background_url as string | null,
         lock_screen_bg_url: themeItem.lock_screen_bg_url as string | null,
-        lock_screen_video_url: themeItem.lock_screen_video_url as string | null,
-        video_background_url: themeItem.video_background_url as string | null,
         app_icons: themeItem.app_icons as Record<string, string> | null,
         desktop_widgets: (themeItem.desktop_widgets as string[]) || null,
         is_active: themeItem.is_active as boolean,
@@ -698,8 +690,6 @@ const AdminPage: React.FC = () => {
       chat_background_url: themeForm.chat_background_url,
       global_background_url: themeForm.global_background_url,
       lock_screen_bg_url: themeForm.lock_screen_bg_url,
-      lock_screen_video_url: themeForm.lock_screen_video_url,
-      video_background_url: themeForm.video_background_url,
       app_icons: themeForm.app_icons,
       desktop_widgets: themeForm.desktop_widgets.filter(w => w),
       is_active: true,
@@ -752,8 +742,6 @@ const AdminPage: React.FC = () => {
       chat_background_url: theme.chat_background_url || '',
       global_background_url: theme.global_background_url || '',
       lock_screen_bg_url: theme.lock_screen_bg_url || '',
-      lock_screen_video_url: theme.lock_screen_video_url || '',
-      video_background_url: theme.video_background_url || '',
       app_icons: theme.app_icons || {},
       desktop_widgets: theme.desktop_widgets || ['', '', ''],
     });
@@ -894,8 +882,6 @@ const AdminPage: React.FC = () => {
     { key: 'chat_background_url', label: '聊天背景', accept: 'image/*' },
     { key: 'global_background_url', label: '桌面壁纸', accept: 'image/*' },
     { key: 'lock_screen_bg_url', label: '锁屏壁纸', accept: 'image/*' },
-    { key: 'lock_screen_video_url', label: '锁屏视频', accept: 'video/*' },
-    { key: 'video_background_url', label: '动态壁纸', accept: 'video/*' },
   ];
 
   const uploadedIconsCount = Object.keys(themeForm.app_icons).length;

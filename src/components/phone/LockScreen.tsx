@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
-import { ChevronUp, ImagePlus, Film } from 'lucide-react';
+import { ChevronUp, ImagePlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -20,15 +20,9 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const { user } = useAuth();
   const [time, setTime] = useState(new Date());
   const [bgUrl, setBgUrl] = useState<string | null>(null);
-  const [videoBgUrl, setVideoBgUrl] = useState<string | null>(null);
-  const [videoLoaded, setVideoLoaded] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadType, setUploadType] = useState<'image' | 'video'>('image');
   const [localMode, setLocalMode] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const y = useMotionValue(0);
   const opacity = useTransform(y, [-150, 0], [0, 1]);
   const scale = useTransform(y, [-150, 0], [0.9, 1]);
@@ -46,34 +40,13 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     isLocalModeEnabled(user.id).then(setLocalMode);
   }, [user]);
 
-  // 优化视频播放
-  useEffect(() => {
-    if (videoBgUrl && videoRef.current) {
-      setVideoError(false);
-      setVideoLoaded(false);
-      
-      const video = videoRef.current;
-      video.load();
-      
-      const playVideo = async () => {
-        try {
-          await video.play();
-        } catch (err) {
-          console.log('Lock screen video autoplay failed');
-        }
-      };
-      
-      playVideo();
-    }
-  }, [videoBgUrl]);
-
   const fetchCustomization = useCallback(async () => {
     if (!user) return;
     const result = localMode
       ? { data: (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id), error: null }
       : await supabase
           .from('customization')
-          .select('lock_screen_bg_url, lock_screen_video_url')
+          .select('lock_screen_bg_url')
           .eq('user_id', user.id)
           .maybeSingle();
     const { data, error } = result;
@@ -84,9 +57,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     }
 
     const imageUrl = data?.lock_screen_bg_url ? String(data.lock_screen_bg_url) : null;
-    const videoUrl = data?.lock_screen_video_url ? String(data.lock_screen_video_url) : null;
     setBgUrl(imageUrl && localMode ? await getLocalAssetUrl(user.id, imageUrl) : imageUrl);
-    setVideoBgUrl(videoUrl && localMode ? await getLocalAssetUrl(user.id, videoUrl) : videoUrl);
   }, [localMode, user]);
 
   useEffect(() => {
@@ -113,12 +84,9 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           user.id,
           'customization',
           (row) => row.user_id === user.id,
-          { user_id: user.id, lock_screen_bg_url: sourceUrl, lock_screen_video_url: null },
+          { user_id: user.id, lock_screen_bg_url: sourceUrl },
         );
         setBgUrl(await getLocalAssetUrl(user.id, sourceUrl));
-        setVideoBgUrl(null);
-        setVideoLoaded(false);
-        setVideoError(false);
         toast.success('锁屏背景已更新');
         return;
       }
@@ -142,22 +110,17 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
       const nextUrl = publicUrl + '?t=' + Date.now();
 
-      // 上传图片时：自动清空历史视频（否则会一直优先显示视频）
       await supabase
         .from('customization')
         .upsert(
           {
             user_id: user.id,
             lock_screen_bg_url: nextUrl,
-            lock_screen_video_url: null,
           },
           { onConflict: 'user_id' }
         );
 
       setBgUrl(nextUrl);
-      setVideoBgUrl(null);
-      setVideoLoaded(false);
-      setVideoError(false);
 
       toast.success('锁屏背景已更新');
     } catch (error) {
@@ -166,87 +129,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    if (!file.type.startsWith('video/')) {
-      toast.error('请选择视频文件 (MP4/MOV/WebM)');
-      return;
-    }
-
-    // 限制文件大小 8MB
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error('视频文件需小于8MB以保证流畅播放');
-      return;
-    }
-
-    setUploading(true);
-    toast.loading('上传中...');
-
-    try {
-      if (localMode) {
-        const sourceUrl = `local-asset://lockscreen-video-${crypto.randomUUID()}`;
-        await saveLocalAsset(user.id, sourceUrl, file);
-        await upsertLocalRow(
-          user.id,
-          'customization',
-          (row) => row.user_id === user.id,
-          { user_id: user.id, lock_screen_video_url: sourceUrl, lock_screen_bg_url: null },
-        );
-        setVideoBgUrl(await getLocalAssetUrl(user.id, sourceUrl));
-        setBgUrl(null);
-        toast.dismiss();
-        toast.success('锁屏动态壁纸已更新');
-        return;
-      }
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/lockscreen-video-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, {
-          cacheControl: '0',
-          upsert: true,
-          contentType: file.type,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      const nextUrl = publicUrl + '?t=' + Date.now();
-
-      // 上传视频时：自动清空历史图片
-      await supabase
-        .from('customization')
-        .upsert(
-          {
-            user_id: user.id,
-            lock_screen_video_url: nextUrl,
-            lock_screen_bg_url: null,
-          } as any,
-          { onConflict: 'user_id' }
-        );
-
-      setVideoBgUrl(nextUrl);
-      setBgUrl(null);
-
-      toast.dismiss();
-      toast.success('锁屏动态壁纸已更新');
-    } catch (error) {
-      console.error('Lock screen video upload error:', error);
-      toast.dismiss();
-      toast.error('上传失败，请重试');
-    } finally {
-      setUploading(false);
-      if (videoInputRef.current) videoInputRef.current.value = '';
     }
   };
 
@@ -277,16 +159,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     });
   };
 
-  const handleVideoError = () => {
-    setVideoError(true);
-    setVideoLoaded(false);
-  };
-
-  const handleVideoLoaded = () => {
-    setVideoLoaded(true);
-    setVideoError(false);
-  };
-
   return (
     <motion.div
       style={{ y, opacity, scale }}
@@ -296,32 +168,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       onDragEnd={handleDragEnd}
       className="fixed inset-0 z-50 flex flex-col items-center justify-between cursor-grab active:cursor-grabbing"
     >
-      {/* Video Background - 优先显示动态壁纸 */}
-      {videoBgUrl && !videoError && (
-        <video
-          key={videoBgUrl}
-          ref={videoRef}
-          src={videoBgUrl}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          onLoadedData={handleVideoLoaded}
-          onCanPlay={handleVideoLoaded}
-          onError={handleVideoError}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${videoLoaded ? 'opacity-100' : 'opacity-0'}`}
-          style={{
-            transform: 'translateZ(0)',
-            willChange: 'transform',
-            backfaceVisibility: 'hidden'
-          }}
-        />
-      )}
-
-      {/* Image Background - 视频不存在或加载失败时显示 */}
-      {(!videoBgUrl || !videoLoaded || videoError) && (
-        bgUrl ? (
+      {bgUrl ? (
           <div 
             className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `url(${bgUrl})` }}
@@ -330,13 +177,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           </div>
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-candy-purple via-candy-pink to-candy-orange" />
-        )
-      )}
-
-      {/* 遮罩层 - 让文字更清晰 */}
-      {(videoBgUrl && videoLoaded) && (
-        <div className="absolute inset-0 bg-black/20" />
-      )}
+        )}
 
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -353,23 +194,8 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         className="hidden"
         onChange={handleImageUpload}
       />
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={handleVideoUpload}
-      />
       
-      <div className="absolute top-16 right-4 z-50 flex gap-2">
-        <button
-          onClick={() => videoInputRef.current?.click()}
-          disabled={uploading}
-          className="p-3 rounded-full bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
-          title="上传动态壁纸"
-        >
-          <Film className="w-5 h-5" />
-        </button>
+      <div className="absolute top-16 right-4 z-50">
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
