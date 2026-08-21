@@ -587,6 +587,22 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
+    // 保存后立即重新读取并核对，避免界面提示成功但实际没有记住。
+    const verifyResult = localMode
+      ? { data: await getLocalTable(user.id, 'api_keys'), error: null }
+      : await supabase
+          .from('api_keys')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('provider', customRows.map((row) => row.provider));
+    const verified = !verifyResult.error && customRows.every((row) => (
+      latestSetting(verifyResult.data || [], row.provider)?.api_key === row.api_key
+    ));
+    if (!verified) {
+      toast.error('保存校验失败，请重试一次');
+      return;
+    }
+
     setUsingDefaultApi(false);
     setIsConfigured(true);
     console.log('[Settings] Custom API config saved successfully');
@@ -1428,7 +1444,8 @@ const SettingsPage: React.FC = () => {
         )}
 
         {/* Main API Card */}
-        <div className={`${openSection === 'api' && openApiSection === 'chat' ? '' : 'hidden'} order-[12] bg-white/75 rounded-2xl p-4 shadow-sm border border-purple-100/70`}>
+        {openSection === 'api' && openApiSection === 'chat' && (
+        <div className="order-[12] bg-white/75 rounded-2xl p-4 shadow-sm border border-purple-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -1662,9 +1679,11 @@ const SettingsPage: React.FC = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* NovelAI Configuration Card */}
-        <div className={`${openSection === 'api' && openApiSection === 'image' ? '' : 'hidden'} order-[14] bg-white/75 rounded-2xl p-4 shadow-sm border border-pink-100/70`}>
+        {openSection === 'api' && openApiSection === 'image' && (
+        <div className="order-[14] bg-white/75 rounded-2xl p-4 shadow-sm border border-pink-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -1836,6 +1855,7 @@ const SettingsPage: React.FC = () => {
             )}
           </div>
         </div>
+        )}
 
         {/* NovelAI 清除数据确认弹窗 */}
         <Dialog open={clearNovelaiConfirmOpen} onOpenChange={setClearNovelaiConfirmOpen}>
@@ -2249,7 +2269,8 @@ const SettingsPage: React.FC = () => {
         </Dialog>
 
         {/* TTS Configuration Card */}
-        <div className={`${openSection === 'api' && openApiSection === 'voice' ? '' : 'hidden'} order-[19] bg-white/75 rounded-2xl p-4 shadow-sm border border-blue-100/70`}>
+        {openSection === 'api' && openApiSection === 'voice' && (
+        <div className="order-[19] bg-white/75 rounded-2xl p-4 shadow-sm border border-blue-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2391,9 +2412,11 @@ const SettingsPage: React.FC = () => {
             </Button>
           </div>
         </div>
+        )}
 
         {/* 图片生成API配置 (统一用于聊天和空间) */}
-        <div className={`${openSection === 'api' && openApiSection === 'image' ? '' : 'hidden'} order-[15] bg-white/75 rounded-2xl p-4 shadow-sm border border-emerald-100/70`}>
+        {openSection === 'api' && openApiSection === 'image' && (
+        <div className="order-[15] bg-white/75 rounded-2xl p-4 shadow-sm border border-emerald-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2650,9 +2673,11 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
 
         {/* Unsplash 免费配图配置 */}
-        <div className={`${openSection === 'api' && openApiSection === 'image' ? '' : 'hidden'} order-[16] bg-white/75 rounded-2xl p-4 shadow-sm border border-sky-100/70`}>
+        {openSection === 'api' && openApiSection === 'image' && (
+        <div className="order-[16] bg-white/75 rounded-2xl p-4 shadow-sm border border-sky-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2781,9 +2806,11 @@ const SettingsPage: React.FC = () => {
             </Button>
           </div>
         </div>
+        )}
 
         {/* VN (视觉小说) 专用 API 配置 */}
-        <div className={`${openSection === 'api' && openApiSection === 'vn' ? '' : 'hidden'} order-[21] bg-white/75 rounded-2xl p-4 shadow-sm border border-indigo-100/70`}>
+        {openSection === 'api' && openApiSection === 'vn' && (
+        <div className="order-[21] bg-white/75 rounded-2xl p-4 shadow-sm border border-indigo-100/70">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -2879,6 +2906,7 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
 
         {/* Reset All Settings Button */}
         <div className={`${openSection === 'data' ? '' : 'hidden'} order-[41] bg-white/75 rounded-2xl p-4 shadow-sm border border-orange-100/70`}>

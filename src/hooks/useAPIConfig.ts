@@ -31,6 +31,10 @@ export interface ImageConfig {
   stylePrompt?: string;
 }
 
+const latestSetting = (rows: Record<string, any>[], provider: string) => rows
+  .filter((row) => row.provider === provider)
+  .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
+
 export const useAPIConfig = () => {
   const { user } = useAuth();
   const [apiConfig, setApiConfig] = useState<APIConfig>({});
@@ -60,16 +64,16 @@ export const useAPIConfig = () => {
       }
 
       if (data && data.length > 0) {
-        const customKey = data.find(k => k.provider === 'custom');
-        const deepseekKey = data.find(k => k.provider === 'deepseek');
-        const openaiKey = data.find(k => k.provider === 'openai');
-        const baseUrl = data.find(k => k.provider === 'custom_base_url');
-        const model = data.find(k => k.provider === 'custom_model');
+        const customKey = latestSetting(data, 'custom');
+        const deepseekKey = latestSetting(data, 'deepseek');
+        const openaiKey = latestSetting(data, 'openai');
+        const baseUrl = latestSetting(data, 'custom_base_url');
+        const model = latestSetting(data, 'custom_model');
 
         // TTS 配置
-        const ttsKey = data.find(k => k.provider === 'tts_api_key');
-        const ttsBaseUrl = data.find(k => k.provider === 'tts_base_url');
-        const ttsModel = data.find(k => k.provider === 'tts_model');
+        const ttsKey = latestSetting(data, 'tts_api_key');
+        const ttsBaseUrl = latestSetting(data, 'tts_base_url');
+        const ttsModel = latestSetting(data, 'tts_model');
 
         if (ttsKey || ttsBaseUrl) {
           setTTSConfig({
@@ -82,9 +86,9 @@ export const useAPIConfig = () => {
         }
 
         // VN (视觉小说) 专用配置
-        const vnKey = data.find(k => k.provider === 'vn_api_key');
-        const vnBaseUrl = data.find(k => k.provider === 'vn_base_url');
-        const vnModel = data.find(k => k.provider === 'vn_model');
+        const vnKey = latestSetting(data, 'vn_api_key');
+        const vnBaseUrl = latestSetting(data, 'vn_base_url');
+        const vnModel = latestSetting(data, 'vn_model');
 
         if (vnKey) {
           setVNConfig({
@@ -97,12 +101,12 @@ export const useAPIConfig = () => {
         }
 
         // 图片生成配置 (统一用于聊天和空间)
-        const imageEnabled = data.find(k => k.provider === 'space_image_enabled');
-        const imageKey = data.find(k => k.provider === 'space_image_api_key');
-        const imageUrl = data.find(k => k.provider === 'space_image_api_url');
-        const imageModel = data.find(k => k.provider === 'space_image_model');
-        const imageSize = data.find(k => k.provider === 'space_image_size');
-        const imageStyle = data.find(k => k.provider === 'space_image_style_prompt');
+        const imageEnabled = latestSetting(data, 'space_image_enabled');
+        const imageKey = latestSetting(data, 'space_image_api_key');
+        const imageUrl = latestSetting(data, 'space_image_api_url');
+        const imageModel = latestSetting(data, 'space_image_model');
+        const imageSize = latestSetting(data, 'space_image_size');
+        const imageStyle = latestSetting(data, 'space_image_style_prompt');
 
         if (imageKey || imageUrl) {
           setImageConfig({
