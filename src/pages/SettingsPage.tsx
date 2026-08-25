@@ -15,6 +15,7 @@ import {
   deleteLocalRows,
   getLocalTable,
   insertLocalRow,
+  insertLocalRows,
   isLocalModeEnabled,
   upsertLocalRow,
 } from '@/lib/localDataStore';
@@ -319,7 +320,7 @@ const SettingsPage: React.FC = () => {
 
   const addApiKeyRows = async (rows: Array<{ user_id: string; provider: string; api_key: string }>) => {
     if (localMode) {
-      const data = await Promise.all(rows.map((row) => insertLocalRow(row.user_id, 'api_keys', row)));
+      const data = await insertLocalRows(rows[0]?.user_id || '', 'api_keys', rows);
       return { data, error: null as any };
     }
     return supabase.from('api_keys').insert(rows).select();

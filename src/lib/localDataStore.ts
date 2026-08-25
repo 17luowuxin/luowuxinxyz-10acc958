@@ -222,6 +222,41 @@ export async function insertLocalRow(
   return nextRow;
 }
 
+export async function insertLocalRows(
+  userId: string,
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (rows.length === 0) return [];
+
+  const now = new Date().toISOString();
+  const nextRows = rows.map((row) => ({
+    id: crypto.randomUUID(),
+    created_at: now,
+    ...row,
+  }));
+  const database = await openLocalDatabase();
+  try {
+    const transaction = database.transaction('records', 'readwrite');
+    const store = transaction.objectStore('records');
+    nextRows.forEach((row, index) => {
+      const recordId = getRecordId(row, index);
+      store.put({
+        key: `${userId}:${table}:${recordId}`,
+        userId,
+        table,
+        recordId,
+        data: row,
+      } satisfies StoredRecord);
+    });
+    await transactionDone(transaction);
+  } finally {
+    releaseLocalDatabase(database);
+  }
+
+  return nextRows;
+}
+
 export async function updateLocalRows(
   userId: string,
   table: string,

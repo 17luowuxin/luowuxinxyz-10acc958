@@ -636,13 +636,13 @@ const ChatPage: React.FC = () => {
     };
   }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, fetchCharNaiPrompts, getCachedMessages, getCachedCustomization, getCachedProfile, setCurrentChat]);
 
-  // 消息变化时自动同步缓存（解决发送新消息后退出重进缓存不同步的问题）
+  // 只缓存最近消息，并避开输入/发送当下的主线程，防止长聊天同步写入造成卡顿。
   useEffect(() => {
-    // 只有当消息列表不为空且有实际数据时才更新缓存
-    // 避免初始化时空数组覆盖缓存
-    if (messages.length > 0 && user?.id && characterId) {
-      cacheMessages(messages);
-    }
+    if (messages.length === 0 || !user?.id || !characterId) return;
+    const timeoutId = window.setTimeout(() => {
+      cacheMessages(messages.slice(-20));
+    }, 150);
+    return () => window.clearTimeout(timeoutId);
   }, [messages, user?.id, characterId, cacheMessages]);
 
   // 自动滚动现在由 VirtualMessageList 组件内部处理
@@ -754,10 +754,6 @@ const ChatPage: React.FC = () => {
     // 按时间排序
     allItems.sort((a, b) => a.timestamp - b.timestamp);
     setMessages(allItems);
-    // 缓存消息列表到 LocalStorage
-    cacheMessages(allItems);
-    console.log('[Cache] 消息列表已更新并缓存');
-    
     // 仅在“仍在当前聊天且页面可见”时标记已读
     await markCurrentChatRead();
     
@@ -1277,7 +1273,7 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const getBubbleStyle = (isUser: boolean) => {
+  const getBubbleStyle = useCallback((isUser: boolean) => {
     const style = customization.bubble_style || 'rounded';
     // 仅控制外形；内边距由 bubble_size 动态计算，保证“气泡大小”同步
     // 防竖排：在 items-start/end 的列布局里，子元素会 shrink-to-fit，中文可能被挤成单字换行；用 inline-block + minWidth（在 render 里）兜底
@@ -1293,14 +1289,14 @@ const ChatPage: React.FC = () => {
       default:
         return `${baseClasses} rounded-xl ${isUser ? 'rounded-br-sm' : 'rounded-bl-sm'}`;
     }
-  };
+  }, [customization.bubble_style]);
 
-  const getBubblePadding = (fontSizePx: number) => {
+  const getBubblePadding = useCallback((fontSizePx: number) => {
     const scale = Math.max(0.85, Math.min(1.35, fontSizePx / 16));
     const px = Math.round(12 * scale);
     const py = Math.round(8 * scale);
     return `${py}px ${px}px`;
-  };
+  }, []);
 
   const addEmoji = (emoji: string) => {
     setInput(prev => prev + emoji);
@@ -1466,7 +1462,7 @@ const ChatPage: React.FC = () => {
     return data;
   };
   
-  const handleReceiveTransfer = async (transferId: string) => {
+  const handleReceiveTransfer = useCallback(async (transferId: string) => {
     let error = null;
     if (localMode && user?.id) {
       await updateLocalRows(user.id, 'dream_transactions', (row) => row.id === transferId, { is_received: true });
@@ -1480,9 +1476,9 @@ const ChatPage: React.FC = () => {
       ));
       toast.success('收款成功！');
     }
-  };
+  }, [localMode, user?.id]);
   
-  const handleDeleteTransfer = async (transferId: string) => {
+  const handleDeleteTransfer = useCallback(async (transferId: string) => {
     let error = null;
     if (localMode && user?.id) {
       await deleteLocalRows(user.id, 'dream_transactions', (row) => row.id === transferId);
@@ -1497,7 +1493,11 @@ const ChatPage: React.FC = () => {
     } else {
       toast.error('删除失败');
     }
-  };
+  }, [localMode, user?.id]);
+
+  const clearLongPressedMessage = useCallback(() => {
+    setLongPressedMsg(null);
+  }, []);
 
   // 用户向角色转账
   const handleUserTransfer = async () => {
@@ -4887,7 +4887,7 @@ const ChatPage: React.FC = () => {
         onCopyMessage={copyMessage}
         onDeleteFromMessage={deleteFromMessage}
         onDeleteSingleMessage={deleteSingleMessage}
-        onClearLongPress={() => setLongPressedMsg(null)}
+        onClearLongPress={clearLongPressedMessage}
         parseTransferCommand={parseTransferCommand}
         removeTransferCommand={removeTransferCommand}
         getBubbleStyle={getBubbleStyle}
