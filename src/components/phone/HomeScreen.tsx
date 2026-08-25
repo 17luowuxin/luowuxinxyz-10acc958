@@ -115,10 +115,15 @@ const HomeScreen: React.FC = () => {
         const rawRegularIcons: Record<string, string> = {};
         const rawImages: Record<string, string> = {};
         
-        for (const [key, value] of Object.entries(icons)) {
-          const resolvedValue = localMode && typeof value === 'string'
+        const resolvedIcons = await Promise.all(Object.entries(icons).map(async ([key, value]) => ({
+          key,
+          value,
+          resolvedValue: localMode && typeof value === 'string'
             ? await getLocalAssetUrl(user.id, value)
-            : value;
+            : value,
+        })));
+
+        for (const { key, value, resolvedValue } of resolvedIcons) {
           if (key.startsWith('page_image_')) {
             images[key] = resolvedValue as string;
             rawImages[key] = value as string;

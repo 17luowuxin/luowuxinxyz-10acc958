@@ -103,6 +103,8 @@ const releaseLocalDatabase = (database: IDBDatabase): void => {
   }, 30_000);
 };
 
+const localTableReadPromises = new Map<string, Promise<Record<string, unknown>[]>>();
+
 const getRecordId = (row: Record<string, unknown>, index: number): string => {
   if (typeof row.id === 'string' || typeof row.id === 'number') return String(row.id);
   const stableParts = ['character_id', 'group_id', 'provider', 'created_at']
@@ -156,15 +158,34 @@ export async function replaceLocalTable(
 }
 
 export async function getLocalTable(userId: string, table: string): Promise<Record<string, unknown>[]> {
-  const database = await openLocalDatabase();
+  const cacheKey = `${userId}:${table}`;
+  const pendingRead = localTableReadPromises.get(cacheKey);
+  if (pendingRead) {
+    const rows = await pendingRead;
+    return rows.map((row) => ({ ...row }));
+  }
+
+  const readPromise = (async () => {
+    const database = await openLocalDatabase();
+    try {
+      const transaction = database.transaction('records', 'readonly');
+      const index = transaction.objectStore('records').index('by-user-table');
+      const records = await requestResult(index.getAll(IDBKeyRange.only([userId, table])) as IDBRequest<StoredRecord[]>);
+      await transactionDone(transaction);
+      return records.map((record) => record.data);
+    } finally {
+      releaseLocalDatabase(database);
+    }
+  })();
+
+  localTableReadPromises.set(cacheKey, readPromise);
   try {
-    const transaction = database.transaction('records', 'readonly');
-    const index = transaction.objectStore('records').index('by-user-table');
-    const records = await requestResult(index.getAll(IDBKeyRange.only([userId, table])) as IDBRequest<StoredRecord[]>);
-    await transactionDone(transaction);
-    return records.map((record) => record.data);
+    const rows = await readPromise;
+    return rows.map((row) => ({ ...row }));
   } finally {
-    releaseLocalDatabase(database);
+    if (localTableReadPromises.get(cacheKey) === readPromise) {
+      localTableReadPromises.delete(cacheKey);
+    }
   }
 }
 

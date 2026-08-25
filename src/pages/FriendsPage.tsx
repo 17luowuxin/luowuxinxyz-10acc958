@@ -171,9 +171,7 @@ const FriendsPage: React.FC = () => {
         getLocalTable(user.id, 'chat_read_status'),
       ]);
       charData = localCharacters;
-      lastMessages = localMessages
-        .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
-        .slice(0, 500);
+      lastMessages = localMessages;
       readStatus = localReadStatus;
     } else {
       const [charactersRes, lastMessagesRes, readStatusRes] = await Promise.all([
@@ -206,7 +204,7 @@ const FriendsPage: React.FC = () => {
     if (lastMessages) {
       for (const msg of lastMessages) {
         // 记录最后一条消息
-        if (!lastChatMap[msg.character_id]) {
+        if (!lastChatMap[msg.character_id] || new Date(msg.created_at) > new Date(lastChatMap[msg.character_id].time)) {
           lastChatMap[msg.character_id] = {
             time: msg.created_at,
             content: msg.content,
