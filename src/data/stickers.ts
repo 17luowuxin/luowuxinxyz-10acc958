@@ -9,7 +9,7 @@ import kunleImg from '@/assets/stickers/kunle.jpg';
 import moyuImg from '@/assets/stickers/moyu.jpg';
 import ganfanImg from '@/assets/stickers/ganfan.jpg';
 import qinqinImg from '@/assets/stickers/qinqin.jpg';
-import cuteBoyImg from '@/assets/stickers/cute-boy.png';
+import cuteBoyImg from '@/assets/bubble-frames/cute-boy-head.png';
 
 export interface Sticker {
   id: string;
