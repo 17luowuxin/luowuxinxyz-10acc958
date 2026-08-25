@@ -43,8 +43,18 @@ const transactionDone = (transaction: IDBTransaction): Promise<void> =>
     transaction.onabort = () => reject(transaction.error ?? new Error('本地数据库事务已中止'));
   });
 
-const openLocalDatabase = (): Promise<IDBDatabase> =>
-  new Promise((resolve, reject) => {
+let localDatabasePromise: Promise<IDBDatabase> | null = null;
+let localDatabaseCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+const openLocalDatabase = (): Promise<IDBDatabase> => {
+  if (localDatabaseCloseTimer) {
+    clearTimeout(localDatabaseCloseTimer);
+    localDatabaseCloseTimer = null;
+  }
+
+  if (localDatabasePromise) return localDatabasePromise;
+
+  localDatabasePromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(LOCAL_DB_NAME, LOCAL_DB_VERSION);
 
     request.onupgradeneeded = () => {
@@ -63,9 +73,35 @@ const openLocalDatabase = (): Promise<IDBDatabase> =>
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('无法打开本地数据库'));
+    request.onsuccess = () => {
+      const database = request.result;
+      database.onversionchange = () => {
+        if (localDatabaseCloseTimer) {
+          clearTimeout(localDatabaseCloseTimer);
+          localDatabaseCloseTimer = null;
+        }
+        database.close();
+        localDatabasePromise = null;
+      };
+      resolve(database);
+    };
+    request.onerror = () => {
+      localDatabasePromise = null;
+      reject(request.error ?? new Error('无法打开本地数据库'));
+    };
   });
+
+  return localDatabasePromise;
+};
+
+const releaseLocalDatabase = (database: IDBDatabase): void => {
+  if (localDatabaseCloseTimer) clearTimeout(localDatabaseCloseTimer);
+  localDatabaseCloseTimer = setTimeout(() => {
+    database.close();
+    localDatabasePromise = null;
+    localDatabaseCloseTimer = null;
+  }, 30_000);
+};
 
 const getRecordId = (row: Record<string, unknown>, index: number): string => {
   if (typeof row.id === 'string' || typeof row.id === 'number') return String(row.id);
@@ -115,7 +151,7 @@ export async function replaceLocalTable(
 
     await transactionDone(transaction);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -128,7 +164,7 @@ export async function getLocalTable(userId: string, table: string): Promise<Reco
     await transactionDone(transaction);
     return records.map((record) => record.data);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -141,7 +177,7 @@ export async function countLocalTable(userId: string, table: string): Promise<nu
     await transactionDone(transaction);
     return count;
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -153,7 +189,7 @@ export async function countLocalRecords(userId: string): Promise<number> {
     await transactionDone(transaction);
     return count;
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -181,7 +217,7 @@ export async function insertLocalRow(
     } satisfies StoredRecord);
     await transactionDone(transaction);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
   return nextRow;
 }
@@ -239,7 +275,7 @@ export async function setLocalMeta(key: string, value: unknown): Promise<void> {
     transaction.objectStore('meta').put({ key, value } satisfies StoredMeta);
     await transactionDone(transaction);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -288,7 +324,7 @@ export async function saveLocalAsset(userId: string, sourceUrl: string, blob: Bl
     } satisfies StoredAsset);
     await transactionDone(transaction);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -302,7 +338,7 @@ export async function getLocalAsset(userId: string, sourceUrl: string): Promise<
     await transactionDone(transaction);
     return stored?.blob ?? null;
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -327,7 +363,7 @@ export async function countLocalAssets(userId: string): Promise<number> {
     await transactionDone(transaction);
     return count;
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -347,7 +383,7 @@ export async function getLocalMeta<T>(key: string): Promise<T | null> {
     await transactionDone(transaction);
     return (result?.value as T | undefined) ?? null;
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -382,7 +418,7 @@ export async function createLocalBackup(userId: string): Promise<LocalBackupPack
       assets,
     };
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 }
 
@@ -452,7 +488,7 @@ export async function importLocalBackup(
 
     await transactionDone(transaction);
   } finally {
-    database.close();
+    releaseLocalDatabase(database);
   }
 
   const records = replacementRecords.length;

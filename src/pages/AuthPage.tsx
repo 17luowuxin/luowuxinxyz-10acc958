@@ -177,23 +177,15 @@ const AuthPage: React.FC = () => {
         className="w-full max-w-sm z-10"
       >
         <div className="glass rounded-4xl p-8 shadow-2xl">
-          {/* Logo with Video */}
+          {/* Lightweight logo */}
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', delay: 0.2 }}
             className="flex justify-center mb-6"
           >
-            <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-glow relative">
-              <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              >
-                <source src="/videos/auth-bg.mp4" type="video/mp4" />
-              </video>
+            <div className="w-20 h-20 rounded-3xl shadow-glow bg-gradient-to-br from-candy-purple via-candy-pink to-candy-orange flex items-center justify-center">
+              <Heart className="w-10 h-10 text-white fill-white/70" />
             </div>
           </motion.div>
 

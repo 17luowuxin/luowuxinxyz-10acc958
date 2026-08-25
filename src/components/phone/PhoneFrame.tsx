@@ -1,5 +1,4 @@
 import React, { useEffect, useState, memo } from 'react';
-import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLocalAssetUrl, getLocalTable, isLocalModeEnabled } from '@/lib/localDataStore';
@@ -87,9 +86,7 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
       />
       
       {/* 内容区域 */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+      <div
         className="w-full min-h-screen overflow-hidden relative"
         style={{
           minHeight: 'calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
@@ -98,7 +95,7 @@ const PhoneFrame: React.FC<PhoneFrameProps> = memo(({ children }) => {
         <div className="h-full min-h-screen overflow-hidden">
           {children}
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 });

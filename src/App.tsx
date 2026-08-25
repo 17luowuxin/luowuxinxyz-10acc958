@@ -6,13 +6,13 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { MusicProvider } from "@/contexts/MusicContext";
 import PhoneFrame from "@/components/phone/PhoneFrame";
-import Index from "./pages/Index";
-import AuthPage from "./pages/AuthPage";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import React, { lazy, Suspense } from "react";
 
 const AlbumPage = lazy(() => import("./pages/AlbumPage"));
+const Index = lazy(() => import("./pages/Index"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const CustomizePage = lazy(() => import("./pages/CustomizePage"));

@@ -84,11 +84,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!user || localMode === null) return;
     if (localMode) {
       const localTracks = await getLocalTable(user.id, 'music');
-      const resolvedTracks = await Promise.all(localTracks.map(async (track) => ({
-        ...track,
-        audio_url: await getLocalAssetUrl(user.id, String(track.audio_url || '')),
-      })));
-      setTracks(resolvedTracks
+      setTracks(localTracks
         .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as MusicTrack[]);
       return;
     }
@@ -150,12 +146,6 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setCurrentTrackId(track.id);
       setPlaying(true);
       setCurrentTime(0);
-      setTimeout(() => {
-        audioRef.current?.play().catch((err) => {
-          console.error('Play failed:', err);
-          setIsLoading(false);
-        });
-      }, 100);
     }
   }, [tracks]);
 
@@ -277,43 +267,51 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
-    
-    // Preload audio for smoother playback
-    audio.preload = 'auto';
-    if (audio.getAttribute('src') !== currentTrack.audio_url) {
-      audio.src = currentTrack.audio_url;
-    }
-    
-    if (playing) {
-      audio.play().catch(console.error);
-    }
 
-    // Update Media Session metadata for lock screen controls
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title,
-        artist: '我的音乐',
-        album: '本地音乐',
-        artwork: currentTrack.cover_url ? [
-          { src: currentTrack.cover_url, sizes: '512x512', type: 'image/jpeg' }
-        ] : []
-      });
+    let cancelled = false;
+    const loadCurrentTrack = async () => {
+      const audioUrl = localMode && user?.id
+        ? await getLocalAssetUrl(user.id, currentTrack.audio_url)
+        : currentTrack.audio_url;
+      if (cancelled) return;
 
-      navigator.mediaSession.setActionHandler('play', () => {
-        audioRef.current?.play();
-      });
-      navigator.mediaSession.setActionHandler('pause', () => {
-        audioRef.current?.pause();
-      });
-      navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
-      navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== undefined && audioRef.current) {
-          audioRef.current.currentTime = details.seekTime;
-        }
-      });
-    }
-  }, [currentTrack, nextTrack, playing, prevTrack]);
+      audio.preload = 'auto';
+      if (audio.getAttribute('src') !== audioUrl) audio.src = audioUrl;
+
+      if (playing) {
+        audio.play().catch((error) => {
+          console.error('Play failed:', error);
+          setIsLoading(false);
+        });
+      }
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentTrack.title,
+          artist: '我的音乐',
+          album: '本地音乐',
+          artwork: currentTrack.cover_url ? [
+            { src: currentTrack.cover_url, sizes: '512x512', type: 'image/jpeg' }
+          ] : []
+        });
+
+        navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play());
+        navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
+        navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+        navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined && audioRef.current) {
+            audioRef.current.currentTime = details.seekTime;
+          }
+        });
+      }
+    };
+
+    void loadCurrentTrack();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, localMode, nextTrack, playing, prevTrack, user?.id]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
