@@ -1057,53 +1057,8 @@ const ChatPage: React.FC = () => {
             : null,
         );
 
-        // NovelAI config
-        const novelaiKey = pickLatest('novelai');
-        const novelaiModel = pickLatest('novelai_model');
-        const novelaiAutoGenerate = pickLatest('novelai_auto_generate');
-        const novelaiStyle = pickLatest('novelai_style');
-        const novelaiCustomStylePrompt = pickLatest('novelai_custom_style_prompt');
-        const novelaiTriggerKeywords = pickLatest('novelai_trigger_keywords');
-        
-        if (novelaiKey) {
-          const enabledSetting = pickLatest('novelai_enabled');
-          const genderSetting = pickLatest('novelai_gender');
-          const customGenderSetting = pickLatest('novelai_custom_gender');
-          const actionSetting = pickLatest('novelai_action');
-          const customActionSetting = pickLatest('novelai_custom_action');
-          const expressionSetting = pickLatest('novelai_expression');
-          const customExpressionSetting = pickLatest('novelai_custom_expression');
-          const nsfwSetting = pickLatest('novelai_nsfw');
-          const characterPromptSetting = pickLatest('novelai_character_prompt');
-          const refImageSetting = pickLatest('novelai_reference_image');
-          const refStrengthSetting = pickLatest('novelai_reference_strength');
-          const vibeTransferSetting = pickLatest('novelai_vibe_transfer');
-          const vibeImageSetting = pickLatest('novelai_vibe_image');
-          const vibeStrengthSetting = pickLatest('novelai_vibe_strength');
-          
-          setNovelaiConfig({
-            enabled: enabledSetting?.api_key !== 'false',
-            apiKey: novelaiKey.api_key,
-            model: novelaiModel?.api_key || 'nai-diffusion-3',
-            autoGenerate: novelaiAutoGenerate?.api_key === 'true',
-            style: novelaiStyle?.api_key || 'selfie',
-            customStylePrompt: novelaiCustomStylePrompt?.api_key || '',
-            triggerKeywords: novelaiTriggerKeywords?.api_key || '画图,画一张,画一幅,画个,生成图,来一张图,发张图,发图,发个图,照片,自拍,看看你,你的样子',
-            gender: genderSetting?.api_key || 'auto',
-            customGender: customGenderSetting?.api_key || '',
-            action: actionSetting?.api_key || 'none',
-            customAction: customActionSetting?.api_key || '',
-            expression: expressionSetting?.api_key || 'none',
-            customExpression: customExpressionSetting?.api_key || '',
-            nsfwMode: nsfwSetting?.api_key === 'true',
-            characterPrompt: characterPromptSetting?.api_key || '',
-            referenceImage: refImageSetting?.api_key || '',
-            referenceStrength: refStrengthSetting ? parseFloat(refStrengthSetting.api_key) : 0.6,
-            vibeTransfer: vibeTransferSetting?.api_key === 'true',
-            vibeImage: vibeImageSetting?.api_key || '',
-            vibeStrength: vibeStrengthSetting ? parseFloat(vibeStrengthSetting.api_key) : 0.6,
-          });
-        }
+        // NovelAI 已移除：忽略设备或云端遗留的旧配置。
+        setNovelaiConfig(null);
         
         if (customKey) {
           setApiConfig({ 
