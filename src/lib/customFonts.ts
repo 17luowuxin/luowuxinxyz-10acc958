@@ -9,13 +9,21 @@ export interface FontChoice {
 }
 
 export const BUILT_IN_FONTS: FontChoice[] = [
-  { id: 'default', name: '默认', family: 'Nunito, sans-serif', preview: 'Aa 你好' },
+  { id: 'default', name: '默认', family: 'system-ui, -apple-system, "Segoe UI", sans-serif', preview: 'Aa 你好' },
   { id: 'kuaile', name: '快乐体', family: '"ZCOOL KuaiLe", cursive', preview: 'Aa 你好' },
   { id: 'mashan', name: '马善政楷', family: '"Ma Shan Zheng", cursive', preview: 'Aa 你好' },
   { id: 'xiaowei', name: '小薇体', family: '"ZCOOL XiaoWei", serif', preview: 'Aa 你好' },
   { id: 'liujian', name: '刘建毛草', family: '"Liu Jian Mao Cao", cursive', preview: 'Aa 你好' },
   { id: 'longcang', name: '龙藏体', family: '"Long Cang", cursive', preview: 'Aa 你好' },
 ];
+
+const GOOGLE_FONT_STYLESHEETS: Record<string, string> = {
+  kuaile: 'https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap',
+  mashan: 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap',
+  xiaowei: 'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap',
+  liujian: 'https://fonts.googleapis.com/css2?family=Liu+Jian+Mao+Cao&display=swap',
+  longcang: 'https://fonts.googleapis.com/css2?family=Long+Cang&display=swap',
+};
 
 const customFontFamily = (id: string) => `dream-font-${id.replace(/[^a-zA-Z0-9-]/g, '')}`;
 
@@ -37,6 +45,17 @@ export async function loadCustomFonts(userId: string): Promise<FontChoice[]> {
 export function applyFontChoice(font: FontChoice): void {
   const oldFontFace = document.getElementById('custom-font-face-style');
   oldFontFace?.remove();
+  const oldBuiltInFont = document.getElementById('built-in-font-stylesheet');
+  oldBuiltInFont?.remove();
+
+  const stylesheetUrl = GOOGLE_FONT_STYLESHEETS[font.id];
+  if (stylesheetUrl) {
+    const link = document.createElement('link');
+    link.id = 'built-in-font-stylesheet';
+    link.rel = 'stylesheet';
+    link.href = stylesheetUrl;
+    document.head.appendChild(link);
+  }
 
   if (font.sourceUrl) {
     const fontFace = document.createElement('style');

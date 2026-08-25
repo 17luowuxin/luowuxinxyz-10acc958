@@ -30,17 +30,18 @@ export const applyGlobalTextSize = (size: number) => {
 
 export const useGlobalSettings = () => {
   const { user } = useAuth();
+  const userId = user?.id;
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setLocalMode(false);
       return;
     }
-    isLocalModeEnabled(user.id).then(setLocalMode);
-  }, [user]);
+    isLocalModeEnabled(userId).then(setLocalMode);
+  }, [userId]);
 
   // Apply saved settings from localStorage on mount (before user loads)
   useEffect(() => {
@@ -51,7 +52,7 @@ export const useGlobalSettings = () => {
   }, []);
 
   const loadSettings = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -59,11 +60,11 @@ export const useGlobalSettings = () => {
     
     try {
       const data = localMode
-        ? (await getLocalTable(user.id, 'customization')).find((row) => row.user_id === user.id)
+        ? (await getLocalTable(userId, 'customization')).find((row) => row.user_id === userId)
         : (await supabase
             .from('customization')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .maybeSingle()).data;
 
       if (data) {
@@ -71,7 +72,7 @@ export const useGlobalSettings = () => {
         
         // Apply font globally
         const fontId = localStorage.getItem('selectedFont') || (data as any).font_family || 'default';
-        await applyStoredFont(fontId, user.id);
+        await applyStoredFont(fontId, userId);
 
         // 桌面文字固定使用小号黑色，避免旧设置继续覆盖。
         applyGlobalTextColor('#000000');
@@ -83,7 +84,7 @@ export const useGlobalSettings = () => {
           document.documentElement.classList.add(`theme-${data.theme}`);
         }
       } else {
-        await applyStoredFont(localStorage.getItem('selectedFont') || 'default', user.id);
+        await applyStoredFont(localStorage.getItem('selectedFont') || 'default', userId);
         applyGlobalTextColor('#000000');
         applyGlobalTextSize(12);
       }
@@ -92,7 +93,7 @@ export const useGlobalSettings = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, localMode]);
+  }, [userId, localMode]);
 
   useEffect(() => {
     loadSettings();

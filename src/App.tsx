@@ -1,7 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { MusicProvider } from "@/contexts/MusicContext";
@@ -41,8 +40,6 @@ const VisualNovelSpritesPage = lazy(() => import("./pages/VisualNovelSpritesPage
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-const queryClient = new QueryClient();
-
 // Component to load global settings
 const GlobalSettingsLoader = ({ children }: { children: React.ReactNode }) => {
   useGlobalSettings();
@@ -65,8 +62,7 @@ const RouteLoading = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
+  <AuthProvider>
       <GlobalSettingsLoader>
         <MusicProvider>
           <TooltipProvider>
@@ -141,8 +137,7 @@ const App = () => (
           </TooltipProvider>
         </MusicProvider>
       </GlobalSettingsLoader>
-    </AuthProvider>
-  </QueryClientProvider>
+  </AuthProvider>
 );
 
 export default App;

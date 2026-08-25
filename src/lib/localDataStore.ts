@@ -335,11 +335,31 @@ export async function setLocalMeta(key: string, value: unknown): Promise<void> {
   }
 }
 
-export const isLocalModeEnabled = async (userId: string): Promise<boolean> =>
-  (await getLocalMeta<boolean>(`local-mode:${userId}`)) === true;
+const localModeCache = new Map<string, boolean>();
+const localModeReadPromises = new Map<string, Promise<boolean>>();
 
-export const setLocalModeEnabled = async (userId: string, enabled: boolean): Promise<void> =>
-  setLocalMeta(`local-mode:${userId}`, enabled);
+export const isLocalModeEnabled = async (userId: string): Promise<boolean> => {
+  if (localModeCache.has(userId)) return localModeCache.get(userId)!;
+
+  const pending = localModeReadPromises.get(userId);
+  if (pending) return pending;
+
+  const readPromise = getLocalMeta<boolean>(`local-mode:${userId}`)
+    .then((value) => {
+      const enabled = value === true;
+      localModeCache.set(userId, enabled);
+      return enabled;
+    })
+    .finally(() => localModeReadPromises.delete(userId));
+
+  localModeReadPromises.set(userId, readPromise);
+  return readPromise;
+};
+
+export const setLocalModeEnabled = async (userId: string, enabled: boolean): Promise<void> => {
+  await setLocalMeta(`local-mode:${userId}`, enabled);
+  localModeCache.set(userId, enabled);
+};
 
 export async function requestPersistentLocalStorage(): Promise<boolean> {
   if (!navigator.storage?.persist) return false;

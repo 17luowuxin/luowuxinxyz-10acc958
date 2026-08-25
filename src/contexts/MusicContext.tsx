@@ -56,6 +56,7 @@ export const useMusicPlayer = () => {
 
 export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const userId = user?.id;
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -68,12 +69,12 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [localMode, setLocalMode] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!userId) {
       setLocalMode(null);
       return;
     }
-    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
-  }, [user?.id]);
+    isLocalModeEnabled(userId).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [userId]);
 
   // 根据 currentTrackId 找到当前歌曲，这样即使 tracks 更新后也能获取最新的封面
   const currentTrack = currentTrackId ? tracks.find(t => t.id === currentTrackId) || null : null;
@@ -81,63 +82,50 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Fetch tracks
   const fetchTracks = useCallback(async () => {
-    if (!user || localMode === null) return;
+    if (!userId || localMode === null) return;
     if (localMode) {
-      const localTracks = await getLocalTable(user.id, 'music');
+      const [localTracks, customizationRows] = await Promise.all([
+        getLocalTable(userId, 'music'),
+        getLocalTable(userId, 'customization'),
+      ]);
       setTracks(localTracks
         .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()) as unknown as MusicTrack[]);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('music')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    if (data) {
-      setTracks(data);
-    }
-    if (error) console.error(error);
-  }, [user, localMode]);
-
-  // 加载默认封面
-  const loadDefaultCover = useCallback(async () => {
-    if (!user || localMode === null) return;
-    if (localMode) {
-      const customization = (await getLocalTable(user.id, 'customization'))[0];
+      const customization = customizationRows[0];
       setDefaultCoverUrl(customization?.music_cover_url ? String(customization.music_cover_url) : null);
       return;
     }
-    const { data } = await supabase
-      .from('customization')
-      .select('music_cover_url')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (data && (data as Customization).music_cover_url) {
-      setDefaultCoverUrl((data as Customization).music_cover_url);
-    }
-  }, [user, localMode]);
+    const [musicResult, customizationResult] = await Promise.all([
+      supabase
+        .from('music')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('customization')
+        .select('music_cover_url')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
+    if (musicResult.data) setTracks(musicResult.data);
+    if (musicResult.error) console.error(musicResult.error);
+    const customization = customizationResult.data as Customization | null;
+    setDefaultCoverUrl(customization?.music_cover_url || null);
+  }, [userId, localMode]);
 
   // 保存默认封面到数据库
   const saveDefaultCover = useCallback(async (url: string) => {
-    if (!user) return;
+    if (!userId) return;
     if (localMode) {
-      await upsertLocalRow(user.id, 'customization', () => true, { user_id: user.id, music_cover_url: url });
+      await upsertLocalRow(userId, 'customization', () => true, { user_id: userId, music_cover_url: url });
       setDefaultCoverUrl(url);
       return;
     }
     await supabase
       .from('customization')
       .update({ music_cover_url: url } as any)
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
     setDefaultCoverUrl(url);
-  }, [user, localMode]);
-
-  useEffect(() => {
-    if (user && localMode !== null) {
-      fetchTracks();
-      loadDefaultCover();
-    }
-  }, [user, localMode, fetchTracks, loadDefaultCover]);
+  }, [userId, localMode]);
 
   const playTrack = useCallback((index: number) => {
     const track = tracks[index];
@@ -270,8 +258,8 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let cancelled = false;
     const loadCurrentTrack = async () => {
-      const audioUrl = localMode && user?.id
-        ? await getLocalAssetUrl(user.id, currentTrack.audio_url)
+      const audioUrl = localMode && userId
+        ? await getLocalAssetUrl(userId, currentTrack.audio_url)
         : currentTrack.audio_url;
       if (cancelled) return;
 
@@ -311,7 +299,7 @@ export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, localMode, nextTrack, playing, prevTrack, user?.id]);
+  }, [currentTrack, localMode, nextTrack, playing, prevTrack, userId]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;

@@ -62,6 +62,10 @@ const MusicPage: React.FC = () => {
     isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
   }, [user?.id]);
 
+  useEffect(() => {
+    void fetchTracks();
+  }, [fetchTracks]);
+
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
