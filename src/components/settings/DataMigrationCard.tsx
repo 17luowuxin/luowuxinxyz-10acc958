@@ -25,7 +25,6 @@ const DataMigrationCard: React.FC = () => {
   const { user } = useAuth();
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
-  const [storageStatus, setStorageStatus] = useState<Awaited<ReturnType<typeof getLocalStorageStatus>>>(null);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState('');
   const [localReady, setLocalReady] = useState(false);
@@ -39,13 +38,12 @@ const DataMigrationCard: React.FC = () => {
     }
 
     isLocalModeEnabled(user.id)
-      .then(async (enabled) => {
+      .then((enabled) => {
         setLocalMode(enabled);
         // Cloud users must export again in this visit before local mode can be enabled.
         setLocalReady(false);
         setWarnings([]);
         setSkippedTables([]);
-        if (enabled) setStorageStatus(await getLocalStorageStatus());
       })
       .catch(() => setLocalMode(false));
   }, [user?.id]);
@@ -113,7 +111,6 @@ const DataMigrationCard: React.FC = () => {
       const parsed = JSON.parse(await file.text()) as LocalBackupPackage;
       const result = await importLocalBackup(user.id, parsed);
       toast.success(`已导入 ${result.records} 条数据和 ${result.assets} 个文件`);
-      setStorageStatus(await getLocalStorageStatus());
       setTimeout(() => window.location.reload(), 500);
     } catch (error) {
       toast.error(`导入失败：${error instanceof Error ? error.message : '备份文件无效'}`);
@@ -178,12 +175,6 @@ const DataMigrationCard: React.FC = () => {
           <p className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-2 py-1.5">
             卸载浏览器或清除网站数据前，请先导出备份；备份内含 API 密钥，请妥善保管。
           </p>
-          {storageStatus && storageStatus.quota > 0 && (
-            <p className="text-[11px] text-muted-foreground text-center">
-              本站本机空间：已用 {formatBytes(storageStatus.usage)} / 上限约 {formatBytes(storageStatus.quota)}
-              {storageStatus.persisted ? '（已持久保存）' : '（请定期备份）'}
-            </p>
-          )}
         </>
       )}
 
