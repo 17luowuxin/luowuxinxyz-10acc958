@@ -10,7 +10,9 @@ import {
   importLocalBackup,
   isLocalModeEnabled,
   LocalBackupPackage,
+  setLocalModeEnabled,
 } from '@/lib/localDataStore';
+import { syncLocalDataToCloud } from '@/utils/localToCloudMigration';
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024 * 1024) return `${Math.max(0, bytes / 1024).toFixed(1)} KB`;
@@ -23,6 +25,8 @@ const DataMigrationCard: React.FC = () => {
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
 
   useEffect(() => {
     if (!user?.id) {
@@ -79,6 +83,25 @@ const DataMigrationCard: React.FC = () => {
     }
   };
 
+  const handleReturnToCloud = async () => {
+    if (!user || syncing || exporting) return;
+    if (!window.confirm('确认把这台设备的本机数据同步到云端，并改回云端保存吗？同步失败时仍会保持本机模式。')) return;
+    setSyncing(true);
+    try {
+      const result = await syncLocalDataToCloud(user.id, (label, current, total) => {
+        setSyncProgress(`${label}（${current}/${total}）`);
+      });
+      await setLocalModeEnabled(user.id, false);
+      toast.success(`已切回云端，共同步 ${result.records} 条数据和 ${result.files} 个文件`);
+      setTimeout(() => window.location.reload(), 600);
+    } catch (error) {
+      toast.error(`暂未切换：${error instanceof Error ? error.message : '同步失败'}`, { duration: 8000 });
+    } finally {
+      setSyncing(false);
+      setSyncProgress('');
+    }
+  };
+
   if (localMode !== true) return null;
 
   return (
@@ -93,14 +116,19 @@ const DataMigrationCard: React.FC = () => {
         </div>
       </div>
       <p className="text-xs text-amber-700 bg-amber-50/80 rounded-lg px-2 py-1.5">
-        建议定期导出备份，作为备用保存，防止本机数据丢失。
+        请先导出一份备用文件，再把本机数据同步回云端。
       </p>
+      <Button className="w-full rounded-xl" onClick={handleReturnToCloud} disabled={syncing || exporting}>
+        {syncing && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+        {syncing ? '正在同步到云端' : '同步到云端并切换'}
+      </Button>
+      {syncProgress && <p className="text-xs text-center text-emerald-700">{syncProgress}</p>}
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={handleExport} disabled={exporting}>
+        <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={handleExport} disabled={exporting || syncing}>
           {exporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
           {exporting ? '导出中' : '一键导出'}
         </Button>
-        <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => backupInputRef.current?.click()}>
+        <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => backupInputRef.current?.click()} disabled={syncing}>
           <Upload className="w-4 h-4 mr-1" />
           一键导入
         </Button>
