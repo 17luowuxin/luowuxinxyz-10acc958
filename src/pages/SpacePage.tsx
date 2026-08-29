@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Heart, MessageCircle, RefreshCw, User, Send, Sparkles, Plus, Trash2, Image, Camera, BookOpen, MessageSquare, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Heart, MessageCircle, RefreshCw, User, Send, Sparkles, Plus, Trash2, Image, Camera, BookOpen, MessageSquare, ChevronDown, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,10 +30,17 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
+interface MomentImagePrompt {
+  id: string;
+  prompt: string;
+  imageUrl?: string;
+}
+
 interface Moment {
   id: string;
   content: string;
   image_url?: string;
+  imagePrompts?: MomentImagePrompt[];
   likes: number;
   created_at: string;
   character_id: string;
@@ -46,6 +53,62 @@ interface Moment {
   };
   comments?: Comment[];
 }
+
+const normalizeMomentImagePrompts = (value: unknown): MomentImagePrompt[] => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 3).flatMap((item, index) => {
+    if (typeof item === 'string' && item.trim()) {
+      return [{ id: `prompt-${index}-${item.slice(0, 12)}`, prompt: item.trim() }];
+    }
+    if (item && typeof item === 'object') {
+      const record = item as { id?: unknown; prompt?: unknown; imageUrl?: unknown };
+      if (typeof record.prompt !== 'string' || !record.prompt.trim()) return [];
+      return [{
+        id: typeof record.id === 'string' ? record.id : `prompt-${index}-${record.prompt.slice(0, 12)}`,
+        prompt: record.prompt.trim(),
+        imageUrl: typeof record.imageUrl === 'string' && record.imageUrl ? record.imageUrl : undefined,
+      }];
+    }
+    return [];
+  });
+};
+
+const MOMENT_MEDIA_FALLBACK_PREFIX = '__dream_phone_moment_media__:';
+
+const parseMomentMedia = (imageUrl: unknown, imagePrompts: unknown) => {
+  if (typeof imageUrl === 'string' && imageUrl.startsWith(MOMENT_MEDIA_FALLBACK_PREFIX)) {
+    try {
+      const stored = JSON.parse(imageUrl.slice(MOMENT_MEDIA_FALLBACK_PREFIX.length)) as {
+        images?: unknown;
+        imagePrompts?: unknown;
+      };
+      return {
+        images: Array.isArray(stored.images) ? stored.images.filter((item): item is string => typeof item === 'string') : [],
+        imagePrompts: normalizeMomentImagePrompts(stored.imagePrompts),
+      };
+    } catch {
+      return { images: [], imagePrompts: [] };
+    }
+  }
+  return {
+    images: typeof imageUrl === 'string' ? imageUrl.split(',').filter(Boolean) : [],
+    imagePrompts: normalizeMomentImagePrompts(imagePrompts),
+  };
+};
+
+const serializeMomentMediaFallback = (moment: Moment, imagePrompts: MomentImagePrompt[]) =>
+  `${MOMENT_MEDIA_FALLBACK_PREFIX}${JSON.stringify({
+    images: moment.image_url?.split(',').filter(Boolean) ?? [],
+    imagePrompts,
+  })}`;
+
+const isMissingImagePromptsColumn = (error: unknown) => {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { code?: unknown; message?: unknown };
+  const code = typeof value.code === 'string' ? value.code : '';
+  const message = typeof value.message === 'string' ? value.message.toLowerCase() : '';
+  return (code === 'PGRST204' || code === '42703') && message.includes('image_prompts');
+};
 
 interface Comment {
   id: string;
@@ -85,6 +148,7 @@ const SpacePage: React.FC = () => {
   const [spaceBackground, setSpaceBackground] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingPromptIds, setGeneratingPromptIds] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
   const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
   const [commentReplyTargets, setCommentReplyTargets] = useState<{ [key: string]: string }>({});
@@ -151,6 +215,15 @@ const SpacePage: React.FC = () => {
   const saveMoment = async (row: Record<string, unknown>) => {
     if (localMode && user?.id) return { data: await insertLocalRow(user.id, 'moments', row), error: null };
     return supabase.from('moments').insert(row as any).select().single();
+  };
+
+  const updateMoment = async (momentId: string, changes: Record<string, unknown>) => {
+    if (localMode && user?.id) {
+      await updateLocalRows(user.id, 'moments', (row) => row.id === momentId, changes);
+      return;
+    }
+    const { error } = await supabase.from('moments').update(changes as any).eq('id', momentId);
+    if (error) throw error;
   };
 
   const saveComment = async (row: Record<string, unknown>) => {
@@ -225,8 +298,11 @@ const SpacePage: React.FC = () => {
         .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
         .map((moment: any) => {
           const character = localCharacters.find((item) => item.id === moment.character_id);
+          const media = parseMomentMedia(moment.image_url, moment.image_prompts);
           return {
             ...moment,
+            image_url: media.images.join(',') || undefined,
+            imagePrompts: media.imagePrompts,
             character,
             comments: localComments
               .filter((comment) => comment.moment_id === moment.id)
@@ -260,6 +336,7 @@ const SpacePage: React.FC = () => {
     if (data) {
       const momentsWithComments = await Promise.all(
         data.map(async (moment: any) => {
+          const media = parseMomentMedia(moment.image_url, moment.image_prompts);
           const { data: comments } = await supabase
             .from('comments')
             .select('*')
@@ -277,6 +354,8 @@ const SpacePage: React.FC = () => {
           
           return {
             ...moment,
+            image_url: media.images.join(',') || undefined,
+            imagePrompts: media.imagePrompts,
             character,
             comments: comments || [],
             is_user_post: moment.is_user_post === true
@@ -578,6 +657,13 @@ const SpacePage: React.FC = () => {
     }
     
     try {
+      let prepareImagePrompts: boolean | undefined;
+      if (localMode && user?.id) {
+        const localApiRows = await getLocalTable(user.id, 'api_keys');
+        prepareImagePrompts = localApiRows.some(
+          (row) => row.provider === 'space_image_enabled' && row.api_key === 'true',
+        );
+      }
       for (const char of selectedChars) {
         const { data, error } = await supabase.functions.invoke('generate-moment', {
           body: { 
@@ -588,21 +674,40 @@ const SpacePage: React.FC = () => {
             baseUrl: apiConfig.baseUrl,
             model: apiConfig.model,
             userId: user?.id,
-            authSource
+            authSource,
+            prepareImagePrompts,
           }
         });
 
         if (error) throw error;
 
-        // 如果生成了配图，一并保存
-        await saveMoment({
+        const imagePrompts = normalizeMomentImagePrompts(
+          (data.imagePrompts ?? []).slice(0, 3).map((prompt: string) => ({
+            id: crypto.randomUUID(),
+            prompt,
+          })),
+        );
+
+        // 只保存配图提示词，不在发布动态时自动调用图片 API
+        const momentRow = {
           user_id: user?.id,
           character_id: char.id,
           content: data.content,
-          image_url: data.imageUrl || null
-        });
+          image_url: null,
+          image_prompts: imagePrompts,
+        };
+        let saveResult = await saveMoment(momentRow);
+        if (saveResult.error && isMissingImagePromptsColumn(saveResult.error)) {
+          saveResult = await saveMoment({
+            user_id: momentRow.user_id,
+            character_id: momentRow.character_id,
+            content: momentRow.content,
+            image_url: `${MOMENT_MEDIA_FALLBACK_PREFIX}${JSON.stringify({ images: [], imagePrompts })}`,
+          });
+        }
+        if (saveResult.error) throw saveResult.error;
 
-        toast.success(`${char.name} 发布了新动态!${data.imageUrl ? ' (含配图)' : ''}`);
+        toast.success(`${char.name} 发布了新动态!${imagePrompts.length ? ' (配图待生成)' : ''}`);
       }
       fetchMoments();
     } catch (err) {
@@ -823,7 +928,10 @@ const SpacePage: React.FC = () => {
     const raw = commentInputs[moment.id]?.trim();
     if (!raw) return;
 
-    const images = moment.image_url?.split(',').filter(Boolean) || [];
+    const images = [
+      ...(moment.image_url?.split(',').filter(Boolean) || []),
+      ...(moment.imagePrompts ?? []).flatMap((item) => item.imageUrl ? [item.imageUrl] : []),
+    ];
 
     // 允许用户“点选某条角色评论 -> 回复该角色”，或手动输入 @角色名
     const atMatch = raw.match(/^@([^\s]+)\s+/);
@@ -908,6 +1016,103 @@ const SpacePage: React.FC = () => {
     setDeleteId(null);
   };
 
+  const getSpaceImageRequestConfig = async () => {
+    if (!user?.id) throw new Error('登录状态已失效');
+    const providers = [
+      'space_image_enabled',
+      'space_image_api_key',
+      'space_image_api_url',
+      'space_image_model',
+      'space_image_size',
+      'space_image_style_prompt',
+    ];
+    const rows = localMode
+      ? await getLocalTable(user.id, 'api_keys')
+      : ((await supabase
+          .from('api_keys')
+          .select('provider, api_key')
+          .eq('user_id', user.id)
+          .in('provider', providers)).data ?? []);
+    const settings = new Map(
+      rows.map((row) => [String(row.provider ?? ''), String(row.api_key ?? '')]),
+    );
+    if (settings.get('space_image_enabled') !== 'true') throw new Error('空间图片生成功能未开启');
+    const apiKey = settings.get('space_image_api_key') ?? '';
+    const apiUrl = settings.get('space_image_api_url') ?? '';
+    if (!apiKey || !apiUrl) throw new Error('请先在设置中配置图片 API');
+    return {
+      apiKey,
+      apiUrl,
+      model: settings.get('space_image_model') ?? '',
+      size: settings.get('space_image_size') ?? '1024x1024',
+      stylePrompt: settings.get('space_image_style_prompt') ?? '',
+    };
+  };
+
+  const updateMomentImagePrompts = async (moment: Moment, nextPrompts: MomentImagePrompt[]) => {
+    try {
+      await updateMoment(moment.id, { image_prompts: nextPrompts });
+    } catch (error) {
+      if (!isMissingImagePromptsColumn(error)) throw error;
+      await updateMoment(moment.id, {
+        image_url: serializeMomentMediaFallback(moment, nextPrompts),
+      });
+    }
+  };
+
+  const handleGeneratePromptImage = async (moment: Moment, promptItem: MomentImagePrompt) => {
+    if (!user?.id || promptItem.imageUrl) return;
+    const requestKey = `${moment.id}:${promptItem.id}`;
+    if (generatingPromptIds.has(requestKey)) return;
+    setGeneratingPromptIds((prev) => new Set(prev).add(requestKey));
+    try {
+      const config = await getSpaceImageRequestConfig();
+      const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: {
+          prompt: promptItem.prompt,
+          userId: user.id,
+          testMode: true,
+          apiKey: config.apiKey,
+          apiUrl: config.apiUrl,
+          model: config.model,
+          size: config.size,
+          stylePrompt: config.stylePrompt,
+        },
+      });
+      if (error) throw error;
+      if (!data?.success || !data?.imageUrl) throw new Error(data?.error || '图片生成失败');
+
+      const nextPrompts = (moment.imagePrompts ?? []).map((item) =>
+        item.id === promptItem.id ? { ...item, imageUrl: data.imageUrl as string } : item,
+      );
+      await updateMomentImagePrompts(moment, nextPrompts);
+      setMoments((prev) => prev.map((item) =>
+        item.id === moment.id ? { ...item, imagePrompts: nextPrompts } : item,
+      ));
+      toast.success('配图生成成功');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '图片生成失败');
+    } finally {
+      setGeneratingPromptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(requestKey);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteImagePrompt = async (moment: Moment, promptId: string) => {
+    const nextPrompts = (moment.imagePrompts ?? []).filter((item) => item.id !== promptId);
+    try {
+      await updateMomentImagePrompts(moment, nextPrompts);
+      setMoments((prev) => prev.map((item) =>
+        item.id === moment.id ? { ...item, imagePrompts: nextPrompts } : item,
+      ));
+    } catch {
+      toast.error('删除配图失败');
+    }
+  };
+
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -925,6 +1130,8 @@ const SpacePage: React.FC = () => {
 
   const renderMoment = (moment: Moment, i: number) => {
     const images = moment.image_url?.split(',').filter(Boolean) || [];
+    const imagePrompts = (moment.imagePrompts ?? []).slice(0, 3);
+    const mediaCount = Math.min(9, images.length + imagePrompts.length);
     
     return (
       <motion.div
@@ -969,22 +1176,62 @@ const SpacePage: React.FC = () => {
         <p className="text-foreground mb-3 leading-relaxed whitespace-pre-wrap">{moment.content}</p>
 
         {/* Images Grid */}
-        {images.length > 0 && (
+        {mediaCount > 0 && (
           <div className={`grid gap-1 mb-3 ${
-            images.length === 1 ? 'grid-cols-1' : 
-            images.length === 2 ? 'grid-cols-2' : 
-            images.length === 4 ? 'grid-cols-2' : 'grid-cols-3'
+            mediaCount === 1 ? 'grid-cols-1' :
+            mediaCount === 2 ? 'grid-cols-2' :
+            mediaCount === 4 ? 'grid-cols-2' : 'grid-cols-3'
           }`}>
             {images.slice(0, 9).map((img, idx) => (
               <div 
-                key={idx} 
+                key={`image-${idx}-${img.slice(0, 24)}`}
                 className={`aspect-square overflow-hidden rounded-lg ${
-                  images.length === 1 ? 'max-w-xs' : ''
+                  mediaCount === 1 ? 'max-w-xs' : ''
                 }`}
               >
                 <img src={img} className="w-full h-full object-cover" alt="" />
               </div>
             ))}
+            {imagePrompts.slice(0, Math.max(0, 9 - images.length)).map((item) => {
+              const requestKey = `${moment.id}:${item.id}`;
+              const isGenerating = generatingPromptIds.has(requestKey);
+              const momentIsGenerating = [...generatingPromptIds].some((key) => key.startsWith(`${moment.id}:`));
+              if (item.imageUrl) {
+                return (
+                  <div key={item.id} className={`aspect-square overflow-hidden rounded-lg ${mediaCount === 1 ? 'max-w-xs' : ''}`}>
+                    <img src={item.imageUrl} className="w-full h-full object-cover" alt="" />
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={item.id}
+                  className={`relative flex aspect-square flex-col overflow-hidden rounded-lg border-2 border-dashed border-primary/35 bg-primary/5 p-2 ${mediaCount === 1 ? 'max-w-xs' : ''}`}
+                >
+                  <button
+                    type="button"
+                    disabled={momentIsGenerating}
+                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-background/85 text-muted-foreground shadow-sm hover:text-destructive disabled:opacity-50"
+                    onClick={() => handleDeleteImagePrompt(moment, item.id)}
+                    aria-label="删除这张待生成配图"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <p className="mt-6 line-clamp-4 break-words text-[11px] leading-relaxed text-muted-foreground">
+                    {item.prompt}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={momentIsGenerating}
+                    className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-lg bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground shadow-sm disabled:opacity-70"
+                    onClick={() => handleGeneratePromptImage(moment, item)}
+                  >
+                    {isGenerating && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {isGenerating ? '生成中' : '生成'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 

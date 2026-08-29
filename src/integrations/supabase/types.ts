@@ -968,6 +968,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          image_prompts: Json
           image_url: string | null
           is_user_post: boolean | null
           likes: number | null
@@ -978,6 +979,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          image_prompts?: Json
           image_url?: string | null
           is_user_post?: boolean | null
           likes?: number | null
@@ -988,6 +990,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          image_prompts?: Json
           image_url?: string | null
           is_user_post?: boolean | null
           likes?: number | null

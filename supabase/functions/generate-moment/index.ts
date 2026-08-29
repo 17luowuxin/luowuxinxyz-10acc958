@@ -26,12 +26,6 @@ interface SpaceImageConfig {
   size: string;
 }
 
-interface UnsplashConfig {
-  enabled: boolean;
-  accessKey: string;
-  category: string;
-}
-
 // 从 Cloud 和 External 两个数据库获取 api_keys，合并结果（外部优先）
 async function fetchApiSettings(userId: string) {
   if (!userId) return null;
@@ -102,155 +96,6 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   
   if (!enabled || !apiKey || !apiUrl) return null;
   return { enabled, apiKey, apiUrl, model, stylePrompt, size };
-}
-
-async function getUnsplashConfig(userId: string): Promise<UnsplashConfig | null> {
-  if (!userId) return null;
-  const settings = await fetchApiSettings(userId);
-  if (!settings) return null;
-  
-  const enabled = settings.get('unsplash_enabled') === 'true';
-  const accessKey = settings.get('unsplash_access_key') || '';
-  const category = settings.get('unsplash_category') || 'auto';
-  
-  if (!enabled || !accessKey) return null;
-  return { enabled, accessKey, category };
-}
-
-function getCategoryModifier(category: string): string {
-  const categoryMap: Record<string, string> = {
-    nature: 'nature landscape scenery',
-    city: 'city urban architecture street',
-    people: 'people portrait lifestyle',
-    food: 'food cuisine delicious',
-    animals: 'animals pets wildlife',
-    art: 'art design illustration abstract',
-    travel: 'travel destination vacation',
-    minimal: 'minimal simple clean aesthetic',
-  };
-  return categoryMap[category] || '';
-}
-
-async function searchUnsplashImage(keywords: string[], config: UnsplashConfig): Promise<string | null> {
-  try {
-    const categoryModifier = getCategoryModifier(config.category);
-    
-    for (const keyword of keywords) {
-      const searchQuery = config.category !== 'auto' && categoryModifier 
-        ? `${keyword} ${categoryModifier}` 
-        : keyword;
-      
-      console.log('Searching Unsplash with query:', searchQuery, 'category:', config.category);
-      
-      const response = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&per_page=10&orientation=squarish`,
-        {
-          headers: {
-            'Authorization': `Client-ID ${config.accessKey}`,
-          },
-        }
-      );
-      
-      if (!response.ok) {
-        console.error('Unsplash API error:', response.status);
-        continue;
-      }
-      
-      const data = await response.json();
-      
-      if (data.results && data.results.length > 0) {
-        const randomIndex = Math.floor(Math.random() * Math.min(data.results.length, 5));
-        const photo = data.results[randomIndex];
-        console.log('Found Unsplash image for keyword:', keyword, 'category:', config.category);
-        return photo.urls?.regular || photo.urls?.small || null;
-      }
-    }
-    
-    console.log('No Unsplash images found for any keywords');
-    return null;
-  } catch (error) {
-    console.error('Unsplash search error:', error);
-    return null;
-  }
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function buildImagesEndpoint(baseUrl: string): string {
-  let url = baseUrl.replace(/\/+$/, '');
-  url = url.replace(/\/images\/(generations|edits)\b/, '/images/generations');
-  if (url.includes('/images/generations')) return url;
-  return `${url}/images/generations`;
-}
-
-async function parseImageUrlFromResponse(response: Response): Promise<string | null> {
-  const data = await response.json();
-
-  if (data.data?.[0]?.url) return data.data[0].url;
-  if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
-  if (data.url) return data.url;
-  if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
-  if (data.images?.[0]?.url) return data.images[0].url;
-  if (data.images?.[0]?.b64_json) return `data:image/png;base64,${data.images[0].b64_json}`;
-  if (data.output?.url) return data.output.url;
-
-  console.log('No image URL found in response');
-  return null;
-}
-
-// 纯文生图（仅使用用户配置的即梦等外部接口）
-async function generateImage(
-  prompt: string,
-  config: SpaceImageConfig,
-  userId: string,
-): Promise<string | null> {
-  try {
-    let finalPrompt = prompt;
-    if (config.stylePrompt) finalPrompt = `${config.stylePrompt}, ${finalPrompt}`;
-
-    console.log('Text2img request size:', config.size || '1024x1024');
-
-    const apiUrl = buildImagesEndpoint(config.apiUrl);
-
-    const response = await fetchWithTimeout(
-      apiUrl,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: config.model || 'dall-e-3',
-          size: config.size || '1024x1024',
-          prompt: finalPrompt,
-          n: 1,
-        }),
-      },
-      50_000,
-    );
-
-    if (response.ok) {
-      const out = await parseImageUrlFromResponse(response);
-      if (out) return out;
-    } else {
-      const errText = await response.text().catch(() => '');
-      console.error('Text2img error:', response.status, errText.slice(0, 300));
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Image generation error:', error);
-    return null;
-  }
 }
 
 async function getAICompletion(
@@ -542,7 +387,7 @@ serve(async (req) => {
   }
 
   try {
-    const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId } = await req.json();
+    const { character, type, momentId, userPost, userImages, userApiKey, provider, baseUrl, model: customModel, userProfile, userId, prepareImagePrompts } = await req.json();
     const auth = await requireUser(req, userId);
     if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
@@ -671,12 +516,12 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
       config
     );
 
-    let imageUrl: string | undefined;
+    let imagePrompts: string[] = [];
     if (type === "moment") {
       const spaceImageConfig = await getSpaceImageConfig(userId);
-      if (spaceImageConfig) {
-        console.log("Space image generation enabled, generating image...");
-        
+      if (prepareImagePrompts === true || spaceImageConfig) {
+        console.log("Space image generation enabled, preparing prompt only...");
+
         const persona = character?.persona || '';
         const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
         const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
@@ -704,58 +549,11 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
         const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
-        
-        const generatedImageUrl = await generateImage(imagePrompt, spaceImageConfig, userId);
-        
-        if (generatedImageUrl) {
-          console.log("Image generated successfully");
-          imageUrl = generatedImageUrl;
-        } else {
-          console.log("Image generation failed or returned null");
-        }
-      }
-      
-      if (!imageUrl) {
-        const unsplashConfig = await getUnsplashConfig(userId);
-        if (unsplashConfig) {
-          console.log("Unsplash enabled, extracting keywords from content...");
-          
-          const keywordPrompt = `请从以下动态内容中提取2-4个适合搜索图片的英文关键词，用逗号分隔。
-要求：
-- 关键词要具体、可视化，适合搜索摄影图片
-- 优先提取场景、物体、情感相关的词
-- 只输出关键词，不要其他内容
-
-动态内容：${content}`;
-          
-          try {
-            const keywordsResponse = await getAICompletion(
-              [{ role: "user", content: keywordPrompt }],
-              config
-            );
-            
-            const keywords = keywordsResponse
-              .split(/[,，、\s]+/)
-              .map(k => k.trim())
-              .filter(k => k.length > 0 && k.length < 30);
-            
-            console.log("Extracted keywords:", keywords);
-            
-            if (keywords.length > 0) {
-              const unsplashImageUrl = await searchUnsplashImage(keywords, unsplashConfig);
-              if (unsplashImageUrl) {
-                console.log("Unsplash image found successfully");
-                imageUrl = unsplashImageUrl;
-              }
-            }
-          } catch (keywordError) {
-            console.error("Keyword extraction error:", keywordError);
-          }
-        }
+        imagePrompts = [imagePrompt].filter(Boolean).slice(0, 3);
       }
     }
 
-    return new Response(JSON.stringify({ content, imageUrl }), {
+    return new Response(JSON.stringify({ content, imagePrompts }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {

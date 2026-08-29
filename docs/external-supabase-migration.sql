@@ -199,6 +199,7 @@ CREATE TABLE public.moments (
   character_id UUID NOT NULL REFERENCES public.characters(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   image_url TEXT,
+  image_prompts JSONB NOT NULL DEFAULT '[]'::jsonb,
   is_user_post BOOLEAN DEFAULT false,
   likes INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
