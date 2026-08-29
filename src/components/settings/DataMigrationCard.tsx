@@ -158,9 +158,6 @@ const DataMigrationCard: React.FC = () => {
 
       {localMode === true && (
         <>
-          <p className="text-xs text-amber-700 bg-amber-50/80 rounded-lg px-2 py-1.5">
-            请先导出备份，再联系客服确认如何安全迁回云端。
-          </p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={handleExport} disabled={exporting}>
               {exporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
