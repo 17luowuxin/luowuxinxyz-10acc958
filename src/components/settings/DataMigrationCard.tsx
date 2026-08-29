@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Cloud, Download, HardDrive, ShieldCheck, Upload } from 'lucide-react';
+import { Cloud, Download, HardDrive, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { copyCloudDataToLocal } from '@/utils/cloudToLocalMigration';
 import {
   createLocalBackup,
   downloadLocalBackup,
@@ -10,6 +11,8 @@ import {
   importLocalBackup,
   isLocalModeEnabled,
   LocalBackupPackage,
+  requestPersistentLocalStorage,
+  setLocalModeEnabled,
 } from '@/lib/localDataStore';
 
 const formatBytes = (bytes: number) => {
@@ -23,6 +26,11 @@ const DataMigrationCard: React.FC = () => {
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [localMode, setLocalMode] = useState<boolean | null>(null);
   const [storageStatus, setStorageStatus] = useState<Awaited<ReturnType<typeof getLocalStorageStatus>>>(null);
+  const [exporting, setExporting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [localReady, setLocalReady] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [skippedTables, setSkippedTables] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -33,25 +41,64 @@ const DataMigrationCard: React.FC = () => {
     isLocalModeEnabled(user.id)
       .then(async (enabled) => {
         setLocalMode(enabled);
+        // Cloud users must export again in this visit before local mode can be enabled.
+        setLocalReady(false);
+        setWarnings([]);
+        setSkippedTables([]);
         if (enabled) setStorageStatus(await getLocalStorageStatus());
       })
       .catch(() => setLocalMode(false));
   }, [user?.id]);
 
+  const exportPreparedBackup = async (incomplete = false) => {
+    if (!user) return;
+    const backup = await createLocalBackup(user.id);
+    const recordCount = Object.values(backup.tables).reduce((sum, rows) => sum + rows.length, 0);
+    if (recordCount === 0) throw new Error('没有可导出的数据');
+    downloadLocalBackup(backup, incomplete);
+    return { recordCount, assetCount: backup.assets.length };
+  };
+
   const handleExport = async () => {
-    if (!user || !localMode) return;
+    if (!user || localMode === null || exporting) return;
+    setExporting(true);
+    setWarnings([]);
+    setSkippedTables([]);
+    let exportWarnings: string[] = [];
     try {
-      const backup = await createLocalBackup(user.id);
-      const recordCount = Object.values(backup.tables).reduce((sum, rows) => sum + rows.length, 0);
-      if (recordCount === 0) {
-        toast.error('本机还没有可导出的数据');
-        return;
+      if (!localMode) {
+        const result = await copyCloudDataToLocal(user.id, (label, current, total) => {
+          setProgress(`正在整理${label}（${current}/${total}）`);
+        });
+        setLocalReady(result.completed);
+        setWarnings(result.warnings);
+        setSkippedTables(result.skippedTables);
+        exportWarnings = result.warnings;
       }
-      downloadLocalBackup(backup);
-      toast.success(`备份已导出，共 ${recordCount} 条记录和 ${backup.assets.length} 个文件`);
+      setProgress('正在生成备份文件...');
+      const exported = await exportPreparedBackup(exportWarnings.length > 0);
+      if (exportWarnings.length > 0) {
+        toast.warning('备份已导出，但有内容未能复制，请查看下方详情', { duration: 8000 });
+      } else {
+        toast.success(`备份已保存到下载文件夹，共 ${exported.recordCount} 条记录和 ${exported.assetCount} 个文件`);
+      }
     } catch (error) {
       toast.error(`导出失败：${error instanceof Error ? error.message : '未知错误'}`);
+      setLocalReady(false);
+    } finally {
+      setProgress('');
+      setExporting(false);
     }
+  };
+
+  const handleEnableLocalMode = async () => {
+    if (!user || localMode || !localReady || exporting) return;
+    if (!window.confirm('确认开始使用本机数据？云端原数据会保留，不会删除。')) return;
+    await setLocalModeEnabled(user.id, true);
+    const persisted = await requestPersistentLocalStorage();
+    setLocalMode(true);
+    toast.success(persisted ? '已开始使用本机数据' : '已开始使用本机数据，请定期导出备份');
+    setTimeout(() => window.location.reload(), 500);
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,7 +137,7 @@ const DataMigrationCard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-1">
             {localMode
               ? '这台设备以前已启用本机保存。为避免丢失本机新增记录，系统不会强制切回云端。'
-              : '当前继续使用原来的云端保存，不会切换到本机。'}
+              : '默认继续使用云端，只有完成导出并点击第二步才会切换。'}
           </p>
         </div>
         {localMode !== null && <ShieldCheck className="w-5 h-5 text-emerald-500" aria-label="数据模式已确认" />}
@@ -99,9 +146,19 @@ const DataMigrationCard: React.FC = () => {
       {localMode === null && <p className="text-xs text-muted-foreground text-center">正在检查数据保存方式...</p>}
 
       {localMode === false && (
-        <p className="text-xs text-emerald-700 bg-emerald-50/80 rounded-lg px-2 py-1.5">
-          已恢复保守方案：继续读取和保存云端数据。
-        </p>
+        <>
+          <p className="text-xs text-emerald-700 bg-emerald-50/80 rounded-lg px-2 py-1.5">
+            先把云端数据下载成备份文件，确认安全后再选择是否使用本机数据。
+          </p>
+          <Button variant="outline" size="sm" className="w-full rounded-xl border-emerald-200 text-emerald-700" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
+            {exporting ? '正在导出...' : '1. 一键导出云端数据'}
+          </Button>
+          {progress && <p className="text-xs text-emerald-700 text-center">{progress}</p>}
+          <Button size="sm" className="w-full rounded-xl" onClick={handleEnableLocalMode} disabled={!localReady || exporting}>
+            2. 开始使用本机数据
+          </Button>
+        </>
       )}
 
       {localMode === true && (
@@ -110,9 +167,9 @@ const DataMigrationCard: React.FC = () => {
             请先导出备份，再联系客服确认如何安全迁回云端。
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-1" />
-              一键导出
+            <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={handleExport} disabled={exporting}>
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
+              {exporting ? '导出中' : '一键导出'}
             </Button>
             <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => backupInputRef.current?.click()}>
               <Upload className="w-4 h-4 mr-1" />
@@ -130,6 +187,27 @@ const DataMigrationCard: React.FC = () => {
             </p>
           )}
         </>
+      )}
+
+      {skippedTables.length > 0 && (
+        <p className="text-[11px] text-muted-foreground bg-gray-50/80 rounded-lg px-2 py-1.5">
+          已自动跳过未启用的空功能：{skippedTables.join('、')}
+        </p>
+      )}
+
+      {warnings.length > 0 && (
+        <details className="rounded-lg bg-red-50/80 px-2 py-1.5 text-[11px] text-red-700">
+          <summary className="cursor-pointer font-medium">有 {warnings.length} 项未导出，点击查看</summary>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+          </ul>
+        </details>
+      )}
+
+      {localMode === false && (
+        <p className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-2 py-1.5">
+          备份包含聊天、图片和 API 密钥，请妥善保管，不要发送给他人。
+        </p>
       )}
     </div>
   );

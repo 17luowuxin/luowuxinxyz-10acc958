@@ -579,14 +579,14 @@ export async function importLocalBackup(
   return { tables: entries.length, records, assets: backup.assets?.length ?? 0 };
 }
 
-export function downloadLocalBackup(backup: LocalBackupPackage): void {
+export function downloadLocalBackup(backup: LocalBackupPackage, incomplete = false): void {
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `dream-phone-local-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = `dream-phone-backup${incomplete ? '-incomplete' : ''}-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
