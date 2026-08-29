@@ -93,7 +93,10 @@ const DataMigrationCard: React.FC = () => {
 
   const handleEnableLocalMode = async () => {
     if (!user || localMode || !localReady || exporting) return;
-    if (!window.confirm('确认开始使用本机数据？云端原数据会保留，不会删除。')) return;
+    const warningText = warnings.length > 0
+      ? `还有 ${warnings.length} 项内容未复制，切换后这些内容可能暂时看不到。云端原数据仍会完整保留。\n\n确认继续使用本机数据吗？`
+      : '确认开始使用本机数据？云端原数据会保留，不会删除。';
+    if (!window.confirm(warningText)) return;
     await setLocalModeEnabled(user.id, true);
     const persisted = await requestPersistentLocalStorage();
     setLocalMode(true);
