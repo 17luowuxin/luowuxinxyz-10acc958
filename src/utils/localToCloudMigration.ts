@@ -42,9 +42,11 @@ const TABLE_LABELS: Record<string, string> = {
 };
 
 type DynamicResponse = PromiseLike<{ error: unknown }>;
+type DynamicSelectResponse = PromiseLike<{ data: Array<{ id?: unknown }> | null; error: unknown }>;
 const dynamicSupabase = supabase as unknown as {
   from: (table: string) => {
     upsert: (rows: Record<string, unknown>[], options?: { ignoreDuplicates?: boolean }) => DynamicResponse;
+    select: (columns: string) => { in: (column: string, values: string[]) => DynamicSelectResponse };
   };
 };
 
@@ -140,10 +142,18 @@ export async function syncLocalDataToCloud(
     onProgress?.(TABLE_LABELS[table] ?? table, completed, total);
     const rows = backup.tables[table].map((row) => replaceEmbeddedFiles(row, replacements) as Record<string, unknown>);
     for (let offset = 0; offset < rows.length; offset += 200) {
+      const chunk = rows.slice(offset, offset + 200);
       const { error } = await dynamicSupabase
         .from(table)
-        .upsert(rows.slice(offset, offset + 200), table === 'bottles' ? { ignoreDuplicates: true } : undefined);
+        .upsert(chunk, table === 'bottles' ? { ignoreDuplicates: true } : undefined);
       if (error) throw new Error(`${TABLE_LABELS[table] ?? table}同步失败：${errorMessage(error)}`);
+
+      const ids = chunk.map((row) => row.id).filter((id): id is string => typeof id === 'string');
+      if (ids.length !== chunk.length) throw new Error(`${TABLE_LABELS[table] ?? table}存在无法核对的数据`);
+      const verification = await dynamicSupabase.from(table).select('id').in('id', ids);
+      if (verification.error) throw new Error(`${TABLE_LABELS[table] ?? table}核对失败：${errorMessage(verification.error)}`);
+      const savedIds = new Set((verification.data ?? []).map((row) => row.id).filter((id): id is string => typeof id === 'string'));
+      if (ids.some((id) => !savedIds.has(id))) throw new Error(`${TABLE_LABELS[table] ?? table}尚未完整保存到云端`);
     }
     records += rows.length;
     completed += 1;

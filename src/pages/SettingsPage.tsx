@@ -10,7 +10,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
 import { PushNotificationCard } from '@/components/settings/PushNotificationCard';
-import DataMigrationCard from '@/components/settings/DataMigrationCard';
 import {
   deleteLocalRows,
   getLocalTable,
@@ -1940,11 +1939,6 @@ const SettingsPage: React.FC = () => {
             <RefreshCw className="w-4 h-4" />
             一键恢复默认设置
           </button>
-        </div>
-
-        {/* Data Migration */}
-        <div className={`${openSection === 'data' ? '' : 'hidden'} order-[42]`}>
-          <DataMigrationCard />
         </div>
 
         {/* 云推送需要服务器保存设备订阅，本机模式下不启用 */}

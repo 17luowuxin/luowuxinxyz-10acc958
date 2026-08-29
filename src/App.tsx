@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { MusicProvider } from "@/contexts/MusicContext";
 import PhoneFrame from "@/components/phone/PhoneFrame";
 import RequireAuth from "@/components/auth/RequireAuth";
+import ForcedCloudMigrationGate from "@/components/data/ForcedCloudMigrationGate";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import React, { lazy, Suspense } from "react";
 
@@ -63,6 +64,7 @@ const RouteLoading = () => (
 
 const App = () => (
   <AuthProvider>
+    <ForcedCloudMigrationGate>
       <GlobalSettingsLoader>
         <MusicProvider>
           <TooltipProvider>
@@ -137,6 +139,7 @@ const App = () => (
           </TooltipProvider>
         </MusicProvider>
       </GlobalSettingsLoader>
+    </ForcedCloudMigrationGate>
   </AuthProvider>
 );
 
