@@ -305,9 +305,8 @@ export async function copyCloudDataToLocal(
     assets,
   };
   const imported = await importLocalBackup(userId, backup);
-  // Required tables have already been verified above. Optional failures are shown
-  // to the user, but they must not permanently lock the local-mode button.
-  const completed = true;
+  // A migration is complete only when every available row and file was copied.
+  const completed = warnings.length === 0;
 
   await setLocalMeta(`cloud-copy:${userId}`, {
     completed,

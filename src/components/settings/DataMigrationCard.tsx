@@ -50,12 +50,12 @@ const DataMigrationCard: React.FC = () => {
       .catch(() => setLocalMode(false));
   }, [user?.id]);
 
-  const exportPreparedBackup = async (incomplete = false) => {
+  const exportPreparedBackup = async () => {
     if (!user) return;
     const backup = await createLocalBackup(user.id);
     const recordCount = Object.values(backup.tables).reduce((sum, rows) => sum + rows.length, 0);
     if (recordCount === 0) throw new Error('没有可导出的数据');
-    downloadLocalBackup(backup, incomplete);
+    downloadLocalBackup(backup);
     return { recordCount, assetCount: backup.assets.length };
   };
 
@@ -64,7 +64,6 @@ const DataMigrationCard: React.FC = () => {
     setExporting(true);
     setWarnings([]);
     setSkippedTables([]);
-    let exportWarnings: string[] = [];
     try {
       if (!localMode) {
         const result = await copyCloudDataToLocal(user.id, (label, current, total) => {
@@ -73,15 +72,14 @@ const DataMigrationCard: React.FC = () => {
         setLocalReady(result.completed);
         setWarnings(result.warnings);
         setSkippedTables(result.skippedTables);
-        exportWarnings = result.warnings;
+        if (!result.completed) {
+          toast.error('数据尚未完整复制，请查看失败详情后重新导出', { duration: 8000 });
+          return;
+        }
       }
       setProgress('正在生成备份文件...');
-      const exported = await exportPreparedBackup(exportWarnings.length > 0);
-      if (exportWarnings.length > 0) {
-        toast.warning('备份已导出，但有内容未能复制，请查看下方详情', { duration: 8000 });
-      } else {
-        toast.success(`备份已保存到下载文件夹，共 ${exported.recordCount} 条记录和 ${exported.assetCount} 个文件`);
-      }
+      const exported = await exportPreparedBackup();
+      toast.success(`完整备份已保存到下载文件夹，共 ${exported.recordCount} 条记录和 ${exported.assetCount} 个文件`);
     } catch (error) {
       toast.error(`导出失败：${error instanceof Error ? error.message : '未知错误'}`);
       setLocalReady(false);
@@ -93,10 +91,7 @@ const DataMigrationCard: React.FC = () => {
 
   const handleEnableLocalMode = async () => {
     if (!user || localMode || !localReady || exporting) return;
-    const warningText = warnings.length > 0
-      ? `还有 ${warnings.length} 项内容未复制，切换后这些内容可能暂时看不到。云端原数据仍会完整保留。\n\n确认继续使用本机数据吗？`
-      : '确认开始使用本机数据？云端原数据会保留，不会删除。';
-    if (!window.confirm(warningText)) return;
+    if (!window.confirm('确认开始使用本机数据？云端原数据会保留，不会删除。')) return;
     await setLocalModeEnabled(user.id, true);
     const persisted = await requestPersistentLocalStorage();
     setLocalMode(true);
@@ -159,7 +154,7 @@ const DataMigrationCard: React.FC = () => {
           </Button>
           {progress && <p className="text-xs text-emerald-700 text-center">{progress}</p>}
           <Button size="sm" className="w-full rounded-xl" onClick={handleEnableLocalMode} disabled={!localReady || exporting}>
-            2. 开始使用本机数据
+            {warnings.length > 0 ? '2. 数据未完整，暂不能切换' : '2. 开始使用本机数据'}
           </Button>
         </>
       )}
@@ -200,7 +195,7 @@ const DataMigrationCard: React.FC = () => {
 
       {warnings.length > 0 && (
         <details className="rounded-lg bg-red-50/80 px-2 py-1.5 text-[11px] text-red-700">
-          <summary className="cursor-pointer font-medium">有 {warnings.length} 项未导出，点击查看</summary>
+          <summary className="cursor-pointer font-medium">有 {warnings.length} 项未复制，必须处理后才能迁移</summary>
           <ul className="mt-1 list-disc space-y-1 pl-4">
             {warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
           </ul>
