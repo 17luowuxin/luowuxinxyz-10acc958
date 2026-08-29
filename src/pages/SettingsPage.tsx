@@ -966,7 +966,7 @@ const SettingsPage: React.FC = () => {
           </>
         )}
         <SettingsSectionButton orderClass="order-[30]" id="appearance" openSection={openSection} onToggle={toggleSection} icon={<Palette className="h-5 w-5" />} title="外观与壁纸" subtitle="主题、桌面、锁屏、聊天背景" />
-        <SettingsSectionButton orderClass="order-[40]" id="data" openSection={openSection} onToggle={toggleSection} icon={<Database className="h-5 w-5" />} title="数据与备份" subtitle="一键导出、导入与本机数据" />
+        <SettingsSectionButton orderClass="order-[40]" id="data" openSection={openSection} onToggle={toggleSection} icon={<Database className="h-5 w-5" />} title="数据与备份" subtitle="云端保存与数据保护" />
         <SettingsSectionButton orderClass="order-[50]" id="privacy" openSection={openSection} onToggle={toggleSection} icon={<Bell className="h-5 w-5" />} title="通知与隐私" subtitle="消息提醒与隐私设置" />
         <SettingsSectionButton orderClass="order-[60]" id="updates" openSection={openSection} onToggle={toggleSection} icon={<RefreshCw className="h-5 w-5" />} title="版本与更新" subtitle={`当前版本 v${APP_VERSION}`} />
 

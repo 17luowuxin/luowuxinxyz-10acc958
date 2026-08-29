@@ -195,12 +195,12 @@ const AuthPage: React.FC = () => {
           <p className="text-sm text-muted-foreground text-center mb-4">
             {getSubtitle()}
           </p>
-          {/* 本机数据说明 */}
+          {/* 数据保存说明 */}
           <div className="bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 mb-4">
             <p className="text-xs text-blue-700 dark:text-blue-300 text-center leading-relaxed">
-              📱 聊天记录、角色和个人资料保存在本机。
+              ☁️ 账号数据默认保存在云端。
               <br />
-              清除浏览器数据或换设备前，请先在设置中导出备份。
+              以前已启用本机保存的设备，请先在设置中导出备份。
             </p>
           </div>
 
