@@ -712,7 +712,19 @@ const SpacePage: React.FC = () => {
       fetchMoments();
     } catch (err) {
       console.error('Generate moment error:', err);
-      toast.error('生成动态失败');
+      let message = err instanceof Error ? err.message : '';
+      const response = err && typeof err === 'object' && 'context' in err
+        ? (err as { context?: Response }).context
+        : undefined;
+      if (response) {
+        try {
+          const payload = await response.clone().json() as { error?: string; message?: string };
+          message = payload.error || payload.message || message;
+        } catch {
+          // Keep the SDK error message when the response body is not JSON.
+        }
+      }
+      toast.error(message || '生成动态失败');
     }
     setGenerating(false);
   };
