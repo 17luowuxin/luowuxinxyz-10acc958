@@ -141,38 +141,85 @@ async function getAICompletion(
     throw new Error("请先在设置中配置API密钥");
   }
 
-  let response = await fetch(apiUrl, {
+  const requestCompletion = (requestedModel: string, minimal = false) => fetch(apiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      model,
+      model: requestedModel,
       messages,
-      max_tokens: 1500,
-      stream: false,
+      ...(minimal ? {} : { max_tokens: 1500, stream: false }),
     }),
   });
+
+  let response = await requestCompletion(model);
   
   if (response.status === 400) {
     console.log("First request failed with 400, retrying with minimal params...");
-    response = await fetch(apiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model,
-        messages,
-      }),
-    });
+    response = await requestCompletion(model, true);
   }
 
   if (!response.ok) {
-    const errorText = await response.text();
+    let errorText = await response.text();
     console.error("AI API error:", response.status, errorText);
-    if (response.status === 429) {
+
+    // Some OpenAI-compatible gateways temporarily remove or rename model
+    // channels. Refresh their model list and retry once instead of making
+    // every non-chat feature fail until the user manually updates settings.
+    const isModelRoutingError = config.provider === 'custom'
+      && Boolean(config.apiKey && config.baseUrl)
+      && /model_not_found|no available channel|无可用渠道|distributor/i.test(errorText);
+    if (isModelRoutingError) {
+      try {
+        const baseUrl = config.baseUrl!.replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+        const modelsUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/models`;
+        const modelsResponse = await fetch(modelsUrl, {
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (modelsResponse.ok) {
+          const modelsPayload = await modelsResponse.json();
+          const availableModels: string[] = Array.isArray(modelsPayload?.data)
+            ? modelsPayload.data.map((item: unknown) => {
+                if (typeof item === 'string') return item;
+                if (item && typeof item === 'object' && 'id' in item && typeof item.id === 'string') return item.id;
+                return '';
+              }).filter(Boolean)
+            : [];
+          const failedModel = model.toLowerCase();
+          const fallbackModel = availableModels.find((item) => {
+            const name = item.toLowerCase();
+            return name !== failedModel && /deepseek|qwen|glm|gpt|claude|gemini|chat/.test(name);
+          }) || availableModels.find((item) => item.toLowerCase() !== failedModel);
+
+          if (fallbackModel) {
+            console.warn(`Model ${model} unavailable, retrying generate-moment with ${fallbackModel}`);
+            response = await requestCompletion(fallbackModel);
+            if (response.ok) {
+              model = fallbackModel;
+            } else {
+              errorText = await response.text();
+              console.error("Fallback model API error:", response.status, errorText);
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Failed to refresh custom model list:', fallbackError);
+      }
+    }
+
+    if (response.ok) {
+      // Continue below and parse the successful retry.
+    } else if (/model_not_found|no available channel|无可用渠道|distributor/i.test(errorText)) {
+      throw new Error("当前选择的模型暂无可用通道，请到设置中刷新并更换模型");
+    } else if (response.status === 429) {
       throw new Error("请求太频繁，请稍后再试");
     } else if (response.status === 402) {
       throw new Error("AI额度不足，请充值");
+    } else {
+      throw new Error(`AI API error: ${response.status}`);
     }
-    throw new Error(`AI API error: ${response.status}`);
   }
 
   const data = await response.json();
