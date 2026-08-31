@@ -170,8 +170,10 @@ async function getAICompletion(
       && /model_not_found|no available channel|无可用渠道|distributor/i.test(errorText);
     if (isModelRoutingError) {
       try {
-        const baseUrl = config.baseUrl!.replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
-        const modelsUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/models`;
+        const configuredBaseUrl = config.baseUrl;
+        if (!configuredBaseUrl) throw new Error('缺少自定义 API 地址');
+        const baseUrl = configuredBaseUrl.replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+        const modelsUrl = `${baseUrl}/models`;
         const modelsResponse = await fetch(modelsUrl, {
           headers: {
             'Authorization': `Bearer ${config.apiKey}`,
