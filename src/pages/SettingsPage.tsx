@@ -1162,7 +1162,7 @@ const SettingsPage: React.FC = () => {
                 
                 {availableModels.length > 0 ? (
                   <select
-                    value={customModel}
+                    value={availableModels.includes(customModel) ? customModel : ''}
                     onChange={(e) => setCustomModel(e.target.value)}
                     className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-300"
                     style={{ 
