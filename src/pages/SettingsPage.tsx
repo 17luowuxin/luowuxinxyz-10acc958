@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Camera, Lock, Brush, Database, Bell, Palette } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Camera, Lock, Brush, Database, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,8 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { APP_VERSION, BUILD_DATE, CHANGELOG } from '@/config/version';
-import { PushNotificationCard } from '@/components/settings/PushNotificationCard';
 import {
   deleteLocalRows,
   getLocalTable,
@@ -42,7 +40,7 @@ const latestSetting = (rows: any[], provider: string) => rows
   .filter((row) => row.provider === provider)
   .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
 
-type SettingsSectionId = 'api' | 'appearance' | 'data' | 'privacy' | 'updates';
+type SettingsSectionId = 'api' | 'appearance' | 'data' | 'privacy';
 type ApiSectionId = 'chat' | 'image' | 'voice' | 'vn';
 
 const SettingsSectionButton = ({
@@ -1005,8 +1003,7 @@ const SettingsPage: React.FC = () => {
         )}
         <SettingsSectionButton orderClass="order-[30]" id="appearance" openSection={openSection} onToggle={toggleSection} icon={<Palette className="h-5 w-5" />} title="外观与壁纸" subtitle="主题、桌面、锁屏、聊天背景" />
         <SettingsSectionButton orderClass="order-[40]" id="data" openSection={openSection} onToggle={toggleSection} icon={<Database className="h-5 w-5" />} title="数据与备份" subtitle="云端保存与数据保护" />
-        <SettingsSectionButton orderClass="order-[50]" id="privacy" openSection={openSection} onToggle={toggleSection} icon={<Bell className="h-5 w-5" />} title="通知与隐私" subtitle="消息提醒与隐私设置" />
-        <SettingsSectionButton orderClass="order-[60]" id="updates" openSection={openSection} onToggle={toggleSection} icon={<RefreshCw className="h-5 w-5" />} title="版本与更新" subtitle={`当前版本 v${APP_VERSION}`} />
+        <SettingsSectionButton orderClass="order-[50]" id="privacy" openSection={openSection} onToggle={toggleSection} icon={<Lock className="h-5 w-5" />} title="隐私" subtitle="查看隐私政策" />
 
         {openSection === 'appearance' && (
           <div className="order-[31] rounded-2xl border border-purple-100/70 bg-white/75 p-4">
@@ -1984,58 +1981,11 @@ const SettingsPage: React.FC = () => {
           </button>
         </div>
 
-        {/* 云推送需要服务器保存设备订阅，本机模式下不启用 */}
         <div className={`${openSection === 'privacy' ? '' : 'hidden'} order-[51]`}>
-          {localMode ? (
-            <div className="rounded-2xl border border-gray-100/70 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
-              <h2 className="font-bold text-gray-700">消息推送通知</h2>
-              <p className="text-xs text-gray-500 mt-1">本机模式下不上传设备信息，因此关闭后台云推送；软件打开时仍会显示站内提醒。</p>
-            </div>
-          ) : (
-            <PushNotificationCard />
-          )}
-          <button type="button" onClick={() => navigate('/privacy')} className="mt-2 w-full rounded-xl border border-purple-100 bg-white/60 py-3 text-sm text-purple-600">
+          <button type="button" onClick={() => navigate('/privacy')} className="w-full rounded-xl border border-purple-100 bg-white/60 py-3 text-sm text-purple-600">
             查看隐私政策
           </button>
         </div>
-
-        {openSection === 'updates' && (
-          <div className="order-[61] rounded-2xl border border-purple-100/70 bg-white/75 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">梦境小手机 v{APP_VERSION}</p>
-                <p className="mt-0.5 text-xs text-gray-400">更新于 {BUILD_DATE}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  toast.success('已是最新版本', {
-                    description: `当前版本 v${APP_VERSION}，更新于 ${BUILD_DATE}`,
-                    icon: <Sparkles className="w-4 h-4 text-green-500" />,
-                  });
-                }}
-                className="flex shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-purple-100 to-pink-100 px-3 py-2 text-xs font-medium text-purple-600"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                检查更新
-              </button>
-            </div>
-
-            <details className="mt-3 rounded-xl bg-purple-50/60 p-3 text-xs">
-              <summary className="cursor-pointer text-gray-500 hover:text-purple-600">查看更新日志</summary>
-              <div className="mt-3 space-y-2">
-                {CHANGELOG.map((log) => (
-                  <div key={log.version} className="border-l-2 border-purple-200 pl-2">
-                    <p className="font-medium text-purple-600">v{log.version} ({log.date})</p>
-                    <ul className="mt-1 space-y-0.5 text-gray-500">
-                      {log.changes.map((change, i) => <li key={i}>• {change}</li>)}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
-        )}
 
         {/* Admin Button - Removed from UI, accessible via direct URL /admin */}
 

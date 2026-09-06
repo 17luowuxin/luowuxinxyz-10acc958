@@ -20,7 +20,6 @@ import VoiceMessageBubble from '@/components/chat/VoiceMessageBubble';
 import VoiceWaveform from '@/components/chat/VoiceWaveform';
 import { useAudioPlaybackQueue } from '@/hooks/useAudioPlaybackQueue';
 import { BlockCharacterDialog } from '@/components/chat/BlockCharacterDialog';
-import { usePushTrigger } from '@/hooks/usePushTrigger';
 import { useCharacterBlock } from '@/hooks/useCharacterBlock';
 import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
@@ -434,14 +433,6 @@ const ChatPage: React.FC = () => {
     return supabase.from('user_stickers').insert(row as any).select().single();
   }, [localMode, user?.id]);
   
-  // 推送通知触发器
-  const { setCurrentChat, setNavigate, triggerPush, isPageVisible } = usePushTrigger();
-  
-  // 传递 navigate 函数给推送通知 hook
-  useEffect(() => {
-    setNavigate(navigate);
-  }, [setNavigate, navigate]);
-
   // 防止异步任务在离开聊天页面后仍把消息标记为“已读”
   const chatMountedRef = useRef(false);
   const activeChatIdRef = useRef<string | undefined>(undefined);
@@ -463,7 +454,7 @@ const ChatPage: React.FC = () => {
     // 如果路由已经切到别的聊天，跳过（避免上一个聊天的异步继续更新已读）
     if (activeChatIdRef.current !== characterId) return;
     // 页面不可见时不自动标记已读（避免后台刷新把未读清掉）
-    if (!isPageVisible.current) return;
+    if (document.hidden) return;
 
     const readStatus = {
           user_id: user.id,
@@ -475,7 +466,7 @@ const ChatPage: React.FC = () => {
     } else {
       await supabase.from('chat_read_status').upsert(readStatus, { onConflict: 'user_id,character_id' });
     }
-  }, [user, characterId, isPageVisible, localMode]);
+  }, [user, characterId, localMode]);
 
   // 自动发送通话消息的函数引用
   const autoSendCallMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
@@ -569,16 +560,8 @@ const ChatPage: React.FC = () => {
       fetchProfile();
       void fetchApiConfigRef.current();
       fetchUserStickers();
-      
-      // 设置当前聊天，用于推送通知判断
-      setCurrentChat(characterId);
     }
-    
-    // 离开页面时清除当前聊天
-    return () => {
-      setCurrentChat(null);
-    };
-  }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, getCachedMessages, getCachedCustomization, getCachedProfile, setCurrentChat]);
+  }, [user, characterId, localMode, fetchProfile, fetchCharacter, fetchUserStickers, getCachedMessages, getCachedCustomization, getCachedProfile]);
 
   // 只缓存最近消息，并避开输入/发送当下的主线程，防止长聊天同步写入造成卡顿。
   useEffect(() => {
@@ -925,11 +908,6 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: assistantContent 
         });
-        
-        // 触发推送通知（如果用户不在页面）
-        if (characterId && character?.name && !isPageVisible.current) {
-          triggerPush(characterId, character.name, assistantContent);
-        }
         
         console.log('AI response recovered successfully');
       }
@@ -2130,11 +2108,6 @@ const ChatPage: React.FC = () => {
           role: 'assistant', 
           content: assistantContent 
         });
-        
-        // 触发推送通知（如果用户不在页面）
-        if (characterId && character?.name && !isPageVisible.current) {
-          triggerPush(characterId, character.name, assistantContent);
-        }
       }
     } catch (err) {
       console.error('Send image error:', err);
@@ -2537,11 +2510,6 @@ const ChatPage: React.FC = () => {
                 content: msgContent,
                 audio_url: audioBase64 || null
               });
-              
-              // 触发推送通知（如果用户不在页面）
-              if (characterId && character?.name && !isPageVisible.current) {
-                triggerPush(characterId, character.name, msgContent);
-              }
             }
           }, msgDelay);
           
@@ -2697,11 +2665,6 @@ const ChatPage: React.FC = () => {
           content: cleanContent,
           audio_url: audioBase64 || null
         });
-        
-        // 触发推送通知（如果用户不在页面）
-        if (characterId && character?.name && !isPageVisible.current) {
-          triggerPush(characterId, character.name, cleanContent);
-        }
         
         // 角色语音输出：用户点名必发；偶尔模式概率发（最多1-2条）
         const userWantsVoice = isVoiceRequestedByUser(messageContent);
@@ -3121,10 +3084,6 @@ const ChatPage: React.FC = () => {
           role: 'assistant',
           content: msgContent
         });
-
-        if (characterId && character?.name && !isPageVisible.current) {
-          triggerPush(characterId, character.name, msgContent);
-        }
       }
 
       await markCurrentChatRead();
