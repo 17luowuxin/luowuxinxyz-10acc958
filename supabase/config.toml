@@ -36,12 +36,6 @@ verify_jwt = false
 [functions.generate-memory-summary]
 verify_jwt = false
 
-[functions.novelai-generate]
-verify_jwt = false
-
-[functions.novelai-models]
-verify_jwt = false
-
 [functions.tts]
 verify_jwt = false
 
@@ -58,9 +52,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.test-unsplash]
-verify_jwt = false
-
-[functions.novelai-generate]
 verify_jwt = false
 
 [functions.generate-image]

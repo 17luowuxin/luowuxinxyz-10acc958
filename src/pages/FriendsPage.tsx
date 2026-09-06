@@ -1,14 +1,13 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, Brush, CheckCheck } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Slider } from '@/components/ui/slider';
 import { fetchEdgeFunction, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -96,16 +95,6 @@ const FriendsPage: React.FC = () => {
   const [sensitiveResult, setSensitiveResult] = useState<DetectionResult | null>(null);
   const [pendingAction, setPendingAction] = useState<'create' | 'update' | null>(null);
   
-  // NovelAI 角色专属提示词
-  const [naiPromptOpen, setNaiPromptOpen] = useState(false);
-  const [naiPositivePrompt, setNaiPositivePrompt] = useState('');
-  const [naiNegativePrompt, setNaiNegativePrompt] = useState('');
-  // NovelAI 角色专属垫图设置
-  const [naiReferenceImage, setNaiReferenceImage] = useState('');
-  
-  const [uploadingRefImage, setUploadingRefImage] = useState(false);
-  const naiRefImageInputRef = useRef<HTMLInputElement>(null);
-
   // 本地缓存 Hook
   const { getCache: getCachedCharacters, setCache: cacheCharacters } = useCharactersCache(user?.id);
 
@@ -508,9 +497,6 @@ const FriendsPage: React.FC = () => {
       await supabase.from('characters').update(changes).eq('id', editingChar.id);
     }
     
-    // 同时保存角色专属NAI设置（垫图、提示词）
-    await saveNaiPrompts(true);
-    
     toast.success('角色已更新');
     resetForm();
     setEditingChar(null);
@@ -606,186 +592,33 @@ const FriendsPage: React.FC = () => {
     setRingtoneUrl(char.ringtone_url || '');
     setAutoReplyEnabled(char.auto_reply_enabled ?? false);
     setMemorySummary('');
-    setNaiPositivePrompt('');
-    setNaiNegativePrompt('');
-    setNaiReferenceImage('');
     setOpen(true);
     
-    // 并行加载记忆摘要和NAI提示词（包括垫图设置）
+    // 加载角色记忆摘要
     setMemoryLoading(true);
     try {
       if (localMode && user?.id) {
-        const [memories, apiKeys] = await Promise.all([
-          getLocalTable(user.id, 'character_memories'),
-          getLocalTable(user.id, 'api_keys'),
-        ]);
+        const memories = await getLocalTable(user.id, 'character_memories');
         const memory = memories
           .filter((row) => row.character_id === char.id)
           .sort((a, b) => new Date(String(b.updated_at || 0)).getTime() - new Date(String(a.updated_at || 0)).getTime())[0];
-        const positiveRow = apiKeys.find((row) => row.provider === `nai_positive_${char.id}`);
-        const negativeRow = apiKeys.find((row) => row.provider === `nai_negative_${char.id}`);
-        const refImageRow = apiKeys.find((row) => row.provider === `nai_ref_image_${char.id}`);
         if (memory?.summary) setMemorySummary(String(memory.summary));
-        if (positiveRow?.api_key) setNaiPositivePrompt(String(positiveRow.api_key));
-        if (negativeRow?.api_key) setNaiNegativePrompt(String(negativeRow.api_key));
-        if (refImageRow?.api_key) setNaiReferenceImage(String(refImageRow.api_key));
         return;
       }
 
-      const [memoryRes, naiRes] = await Promise.all([
-        supabase
-          .from('character_memories')
-          .select('summary')
-          .eq('character_id', char.id)
-          .eq('user_id', user?.id)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('api_keys')
-          .select('provider, api_key')
-          .eq('user_id', user?.id)
-          .in('provider', [
-            `nai_positive_${char.id}`, 
-            `nai_negative_${char.id}`,
-            `nai_ref_image_${char.id}`
-          ])
-      ]);
-      
-      if (memoryRes.data?.summary) {
-        setMemorySummary(memoryRes.data.summary);
-      }
-      
-      if (naiRes.data) {
-        const positiveRow = naiRes.data.find(r => r.provider === `nai_positive_${char.id}`);
-        const negativeRow = naiRes.data.find(r => r.provider === `nai_negative_${char.id}`);
-        const refImageRow = naiRes.data.find(r => r.provider === `nai_ref_image_${char.id}`);
-        if (positiveRow) setNaiPositivePrompt(positiveRow.api_key);
-        if (negativeRow) setNaiNegativePrompt(negativeRow.api_key);
-        if (refImageRow) setNaiReferenceImage(refImageRow.api_key);
-      }
+      const { data } = await supabase
+        .from('character_memories')
+        .select('summary')
+        .eq('character_id', char.id)
+        .eq('user_id', user?.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.summary) setMemorySummary(data.summary);
     } catch (err) {
       console.error('Failed to load character data:', err);
     } finally {
       setMemoryLoading(false);
-    }
-  };
-
-  // 上传垫图
-  const handleRefImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user || !editingChar) return;
-    
-    if (!file.type.startsWith('image/')) {
-      toast.error('请选择图片文件');
-      e.target.value = '';
-      return;
-    }
-    
-    setUploadingRefImage(true);
-    try {
-      if (localMode) {
-        setNaiReferenceImage(await fileToDataUrl(file));
-        toast.success('垫图已保存到本机');
-        return;
-      }
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/nai-ref/${editingChar.id}-${Date.now()}.${fileExt}`;
-      
-      const { error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true });
-      
-      if (error) {
-        console.error('Upload ref image error:', error);
-        toast.error('上传失败');
-        return;
-      }
-      
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-      
-      setNaiReferenceImage(publicUrl);
-      toast.success('垫图已上传');
-    } catch (err) {
-      console.error('Upload ref image error:', err);
-      toast.error('上传失败');
-    } finally {
-      setUploadingRefImage(false);
-      e.target.value = '';
-    }
-  };
-
-  // 保存角色专属NAI设置（提示词+垫图）
-  const saveNaiPrompts = async (silent = false) => {
-    if (!editingChar || !user) return;
-    
-    try {
-      const providers = [
-        `nai_positive_${editingChar.id}`, 
-        `nai_negative_${editingChar.id}`,
-        `nai_ref_image_${editingChar.id}`
-      ];
-      if (localMode) {
-        await deleteLocalRows(user.id, 'api_keys', (row) => providers.includes(String(row.provider)));
-      } else {
-        await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
-      }
-      
-      const rows = [];
-      if (naiPositivePrompt.trim()) {
-        rows.push({ user_id: user.id, provider: `nai_positive_${editingChar.id}`, api_key: naiPositivePrompt.trim() });
-      }
-      if (naiNegativePrompt.trim()) {
-        rows.push({ user_id: user.id, provider: `nai_negative_${editingChar.id}`, api_key: naiNegativePrompt.trim() });
-      }
-      if (naiReferenceImage.trim()) {
-        rows.push({ user_id: user.id, provider: `nai_ref_image_${editingChar.id}`, api_key: naiReferenceImage.trim() });
-      }
-      
-      if (rows.length > 0) {
-        if (localMode) {
-          for (const row of rows) await insertLocalRow(user.id, 'api_keys', row);
-        } else {
-          await supabase.from('api_keys').insert(rows);
-        }
-      }
-      
-      if (!silent) setNaiPromptOpen(false);
-      if (!silent) toast.success('角色NAI设置已保存');
-    } catch (err) {
-      console.error('Save NAI prompts error:', err);
-      toast.error('保存失败');
-    }
-  };
-
-  // 清空角色专属NAI设置
-  const clearNaiPrompts = async () => {
-    if (!editingChar || !user) return;
-    
-    try {
-      const providers = [
-        `nai_positive_${editingChar.id}`, 
-        `nai_negative_${editingChar.id}`,
-        `nai_ref_image_${editingChar.id}`
-      ];
-      if (localMode) {
-        await deleteLocalRows(user.id, 'api_keys', (row) => providers.includes(String(row.provider)));
-      } else {
-        await supabase.from('api_keys').delete().eq('user_id', user.id).in('provider', providers);
-      }
-      
-      setNaiPositivePrompt('');
-      setNaiNegativePrompt('');
-      setNaiReferenceImage('');
-      
-      setNaiPromptOpen(false);
-      toast.success('角色NAI设置已清空');
-    } catch (err) {
-      console.error('Clear NAI prompts error:', err);
-      toast.error('清空失败');
     }
   };
 
@@ -1281,92 +1114,6 @@ const FriendsPage: React.FC = () => {
                     )}
                   </div>
                   
-                  {/* 垫图设置 - 直接在角色编辑页显示 */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🖼️</span>
-                        <div>
-                          <p className="font-medium text-gray-700 text-sm">垫图 (Reference Image)</p>
-                          <p className="text-xs text-gray-400">AI绘图时以此图为基础重绘</p>
-                        </div>
-                      </div>
-                      {naiReferenceImage && (
-                        <button
-                          onClick={() => setNaiReferenceImage('')}
-                          className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
-                        >
-                          移除
-                        </button>
-                      )}
-                    </div>
-                    
-                    <input
-                      ref={naiRefImageInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleRefImageUpload}
-                    />
-                    
-                    {naiReferenceImage ? (
-                      <div className="relative">
-                        <img
-                          src={naiReferenceImage}
-                          alt="Reference"
-                          className="w-full max-h-32 object-contain rounded-xl border border-gray-200"
-                        />
-                        <button
-                          onClick={() => naiRefImageInputRef.current?.click()}
-                          disabled={uploadingRefImage}
-                          className="absolute bottom-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-lg text-xs font-medium text-gray-700 hover:bg-white shadow"
-                        >
-                          {uploadingRefImage ? '上传中...' : '更换'}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => naiRefImageInputRef.current?.click()}
-                        disabled={uploadingRefImage}
-                        className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors flex items-center justify-center gap-2"
-                      >
-                        {uploadingRefImage ? (
-                          <>上传中...</>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            点击上传垫图
-                          </>
-                        )}
-                      </button>
-                    )}
-                    
-                  </div>
-
-                  {/* NAI 角色专属提示词 */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🎨</span>
-                      <div>
-                        <p className="font-medium text-gray-700 text-sm">角色专属NAI提示词</p>
-                        <p className="text-xs text-gray-400">仅用于该角色的NovelAI出图</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-xl bg-pink-50 border-pink-200 text-pink-600 hover:bg-pink-100"
-                      onClick={() => setNaiPromptOpen(true)}
-                    >
-                      <Brush className="w-4 h-4 mr-2" />
-                      配置NAI提示词
-                    </Button>
-                    {(naiPositivePrompt || naiNegativePrompt) && (
-                      <p className="text-xs text-green-500">
-                        ✓ 已配置提示词
-                      </p>
-                    )}
-                  </div>
-                  
                   <Button 
                     className="w-full rounded-xl py-6 bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-lg" 
                     onClick={updateCharacter}
@@ -1375,114 +1122,6 @@ const FriendsPage: React.FC = () => {
                   </Button>
                 </TabsContent>
 
-        {/* NAI 角色专属提示词弹窗 */}
-        <Dialog open={naiPromptOpen} onOpenChange={setNaiPromptOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>角色专属NAI提示词配置</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-sm text-amber-700">
-                  💡 这里配置的提示词仅用于当前角色的NAI出图，不影响其他角色或系统设置
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">正面提示词 (Positive Prompt)</label>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        // 选择全部文本
-                        const textarea = document.getElementById('nai-positive-textarea') as HTMLTextAreaElement;
-                        if (textarea) {
-                          textarea.select();
-                          textarea.focus();
-                        }
-                      }}
-                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      title="全选文本"
-                    >
-                      全选
-                    </button>
-                    <button
-                      onClick={() => setNaiPositivePrompt('')}
-                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
-                      title="清空"
-                    >
-                      清空
-                    </button>
-                  </div>
-                </div>
-                <Textarea
-                  id="nai-positive-textarea"
-                  value={naiPositivePrompt}
-                  onChange={(e) => setNaiPositivePrompt(e.target.value)}
-                  className="rounded-xl min-h-[100px] font-mono text-sm"
-                  placeholder="1boy, blue hair, ..."
-                  style={{ wordBreak: 'break-all' }}
-                />
-                <p className="text-xs text-gray-400">描述你希望生成的图像风格，可填入画师串。点击文本框后可用 Ctrl+A 全选</p>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">负面提示词 (Negative Prompt)</label>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        const textarea = document.getElementById('nai-negative-textarea') as HTMLTextAreaElement;
-                        if (textarea) {
-                          textarea.select();
-                          textarea.focus();
-                        }
-                      }}
-                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      title="全选文本"
-                    >
-                      全选
-                    </button>
-                    <button
-                      onClick={() => setNaiNegativePrompt('')}
-                      className="text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-500"
-                      title="清空"
-                    >
-                      清空
-                    </button>
-                  </div>
-                </div>
-                <Textarea
-                  id="nai-negative-textarea"
-                  value={naiNegativePrompt}
-                  onChange={(e) => setNaiNegativePrompt(e.target.value)}
-                  className="rounded-xl min-h-[80px] font-mono text-sm"
-                  placeholder="lowres, bad anatomy, ..."
-                  style={{ wordBreak: 'break-all' }}
-                />
-                <p className="text-xs text-gray-400">描述你希望避免的元素</p>
-              </div>
-              
-              {/* 垫图已移至角色编辑页面的设置标签 */}
-              
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={clearNaiPrompts}
-                  className="flex-1 py-3 rounded-xl bg-white border border-red-200 text-red-600 font-medium hover:bg-red-50 transition-colors"
-                >
-                  清空全部
-                </button>
-                <button
-                  onClick={() => saveNaiPrompts()}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-medium hover:shadow-lg transition-all"
-                >
-                  保存
-                </button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-                
                 <TabsContent value="memory" className="space-y-4 mt-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-gray-500">
