@@ -376,9 +376,14 @@ const SettingsPage: React.FC = () => {
       }
 
       if (data.success && data.models) {
-        setAvailableModels(data.models);
+        const models: string[] = data.models;
+        setAvailableModels(models);
         setShowModelDropdown(true);
-        toast.success(`获取到 ${data.models.length} 个模型`);
+        // 已保存的模型不在列表中时，同步为列表第一个，避免下拉显示与实际值不一致
+        if (models.length > 0 && !models.includes(customModel.trim())) {
+          setCustomModel(models[0]);
+        }
+        toast.success(`获取到 ${models.length} 个模型`);
       } else {
         toast.error(data.error || '获取模型失败');
       }
@@ -1157,7 +1162,7 @@ const SettingsPage: React.FC = () => {
                 
                 {availableModels.length > 0 ? (
                   <select
-                    value={customModel}
+                    value={availableModels.includes(customModel) ? customModel : ''}
                     onChange={(e) => setCustomModel(e.target.value)}
                     className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-300"
                     style={{ 
@@ -1167,6 +1172,9 @@ const SettingsPage: React.FC = () => {
                       backgroundSize: '20px'
                     }}
                   >
+                    {!availableModels.includes(customModel) && (
+                      <option value="" disabled>请选择模型（原模型 {customModel || '未设置'} 不可用）</option>
+                    )}
                     {availableModels.map((model, index) => (
                       <option key={index} value={model}>
                         {model}
