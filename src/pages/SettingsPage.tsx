@@ -196,6 +196,19 @@ const SettingsPage: React.FC = () => {
   const [openSection, setOpenSection] = useState<SettingsSectionId | null>(null);
   const [openApiSection, setOpenApiSection] = useState<ApiSectionId | null>(null);
   const settingsLoadRequestRef = useRef(0);
+  const apiFormEditedRef = useRef(false);
+  const modelRequestRef = useRef(0);
+  const testRequestRef = useRef(0);
+
+  const markApiEdited = (resetModels = false) => {
+    apiFormEditedRef.current = true;
+    testRequestRef.current += 1;
+    if (resetModels) {
+      modelRequestRef.current += 1;
+      setAvailableModels([]);
+      setFetchingModels(false);
+    }
+  };
 
   const toggleSection = (section: SettingsSectionId) => {
     setOpenSection((current) => current === section ? null : section);
@@ -263,14 +276,10 @@ const SettingsPage: React.FC = () => {
       const useDefault = latestSetting(data, 'use_default_api');
       const defaultModelSetting = latestSetting(data, 'default_model');
       // 总是加载保存的自定义API配置
-      if (customKey) {
-        setApiKey(customKey.api_key);
-      }
-      if (baseUrl) {
-        setCustomBaseUrl(baseUrl.api_key);
-      }
-      if (model) {
-        setCustomModel(model.api_key);
+      if (!apiFormEditedRef.current) {
+        if (customKey) setApiKey(customKey.api_key);
+        if (baseUrl) setCustomBaseUrl(baseUrl.api_key);
+        if (model) setCustomModel(model.api_key);
       }
       if (defaultModelSetting) {
         setDefaultModel(defaultModelSetting.api_key);
@@ -336,10 +345,10 @@ const SettingsPage: React.FC = () => {
       if (timeSyncSetting) setTimeSyncEnabled(timeSyncSetting.api_key === 'true');
       
       // 判断当前使用哪种API
-      if (useDefault && useDefault.api_key === 'true') {
+      if (!apiFormEditedRef.current && useDefault && useDefault.api_key === 'true') {
         setUsingDefaultApi(true);
         setIsConfigured(true);
-      } else if (customKey) {
+      } else if (!apiFormEditedRef.current && customKey) {
         setUsingDefaultApi(false);
         setIsConfigured(true);
       }
@@ -347,11 +356,13 @@ const SettingsPage: React.FC = () => {
   }, [localMode, user?.id]);
 
   useEffect(() => {
-    if (user && localMode !== null) fetchApiKeys();
+    if (user?.id && localMode !== null) fetchApiKeys();
     return () => {
       settingsLoadRequestRef.current += 1;
+      modelRequestRef.current += 1;
+      testRequestRef.current += 1;
     };
-  }, [fetchApiKeys, localMode, user]);
+  }, [fetchApiKeys, localMode, user?.id]);
 
   const fetchModels = async () => {
     const currentApiKey = apiKey.trim();
@@ -361,6 +372,8 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
+    markApiEdited();
+    const requestId = ++modelRequestRef.current;
     setFetchingModels(true);
     try {
       const { data, error } = await withTimeout(supabase.functions.invoke('fetch-models', {
@@ -370,22 +383,32 @@ const SettingsPage: React.FC = () => {
         },
       }));
 
+      if (requestId !== modelRequestRef.current) return;
       if (error) {
         toast.error(`获取模型失败: ${error.message}`);
         return;
       }
 
-      if (data.success && data.models) {
-        setAvailableModels(data.models);
+      if (data.success && Array.isArray(data.models)) {
+        const models = [...new Set<string>((data.models as unknown[])
+          .filter((model): model is string => typeof model === 'string' && Boolean(model.trim()))
+          .map((model) => model.trim()))];
+        if (models.length === 0) {
+          toast.error('模型列表为空，请手动填写模型名称');
+          return;
+        }
+        setAvailableModels(models);
+        setCustomModel((current) => models.includes(current.trim()) ? current.trim() : '');
         setShowModelDropdown(true);
-        toast.success(`获取到 ${data.models.length} 个模型`);
+        toast.success(`获取到 ${models.length} 个模型`);
       } else {
         toast.error(data.error || '获取模型失败');
       }
     } catch (error) {
+      if (requestId !== modelRequestRef.current) return;
       toast.error(error instanceof Error && error.message === 'REQUEST_TIMEOUT' ? '获取模型超时，请检查地址或网络' : '获取模型列表失败');
     } finally {
-      setFetchingModels(false);
+      if (requestId === modelRequestRef.current) setFetchingModels(false);
     }
   };
 
@@ -424,6 +447,12 @@ const SettingsPage: React.FC = () => {
       toast.error('请输入API密钥');
       return;
     }
+
+    if (!customBaseUrl.trim() || !customModel.trim()) {
+      toast.error('请填写API地址并选择或输入模型');
+      return;
+    }
+    markApiEdited();
 
     console.log('[Settings] Saving custom API config');
 
@@ -474,14 +503,17 @@ const SettingsPage: React.FC = () => {
   };
 
   const testConnection = async () => {
+    if (testing) return;
     const currentApiKey = apiKey.trim();
     const currentBaseUrl = customBaseUrl.trim();
     const currentModel = customModel.trim();
-    if (!currentApiKey) {
-      toast.error('请先输入API密钥');
+    if (!currentApiKey || !currentBaseUrl || !currentModel) {
+      toast.error('请填写API地址、密钥并选择或输入模型');
       return;
     }
 
+    markApiEdited();
+    const requestId = ++testRequestRef.current;
     setTesting(true);
     try {
       const { data, error } = await withTimeout(supabase.functions.invoke('test-api-connection', {
@@ -493,17 +525,22 @@ const SettingsPage: React.FC = () => {
         },
       }));
 
+      if (requestId !== testRequestRef.current) return;
       if (error) {
-        toast.error(`连接失败: ${error.message}`);
+        toast.error(`${currentModel} 连接失败: ${error.message}`);
         return;
       }
 
       if (data.success) {
-        toast.success('API连接成功！');
+        toast.success(`${currentModel} 连接成功！`);
       } else {
-        toast.error(`连接失败: ${data.error}`);
+        const message = String(data.error || '未知错误');
+        toast.error(/no available channel/i.test(message)
+          ? `${currentModel}：服务商暂无该模型的可用通道，请换一个模型或联系API提供商`
+          : `${currentModel} 连接失败: ${message}`);
       }
     } catch (error) {
+      if (requestId !== testRequestRef.current) return;
       toast.error(error instanceof Error && error.message === 'REQUEST_TIMEOUT' ? '连接超时，请检查地址、模型或网络' : '连接测试失败');
     } finally {
       setTesting(false);
@@ -522,6 +559,7 @@ const SettingsPage: React.FC = () => {
 
   const useDefaultApiHandler = async () => {
     if (!user) return;
+    markApiEdited(true);
     
     const err = await upsertApiKey(user.id, 'use_default_api', 'true');
     if (err) {
@@ -553,6 +591,7 @@ const SettingsPage: React.FC = () => {
     toast.success(`已切换到 ${modelName}`);
   };
   const useCustomApiHandler = () => {
+    markApiEdited();
     setUsingDefaultApi(false);
   };
 
@@ -1101,7 +1140,7 @@ const SettingsPage: React.FC = () => {
                 <Input
                   placeholder="https://api.deepseek.com/v1"
                   value={customBaseUrl}
-                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  onChange={(e) => { markApiEdited(true); setCustomBaseUrl(e.target.value); }}
                   className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
                 />
                 <p className="text-xs text-gray-400 mt-1.5">
@@ -1119,7 +1158,7 @@ const SettingsPage: React.FC = () => {
                     type={showApiKey ? 'text' : 'password'}
                     placeholder="sk-..."
                     value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    onChange={(e) => { markApiEdited(true); setApiKey(e.target.value); }}
                     className="rounded-2xl bg-white border-gray-200 h-12 pr-12 text-gray-700 placeholder:text-gray-400"
                   />
                   <button
@@ -1158,7 +1197,7 @@ const SettingsPage: React.FC = () => {
                 {availableModels.length > 0 ? (
                   <select
                     value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
+                    onChange={(e) => { markApiEdited(); setCustomModel(e.target.value); }}
                     className="w-full h-12 px-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-300"
                     style={{ 
                       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
@@ -1167,6 +1206,10 @@ const SettingsPage: React.FC = () => {
                       backgroundSize: '20px'
                     }}
                   >
+                    <option value="" disabled>请选择模型</option>
+                    {customModel && !availableModels.includes(customModel) && (
+                      <option value={customModel}>{customModel}（未在返回列表中）</option>
+                    )}
                     {availableModels.map((model, index) => (
                       <option key={index} value={model}>
                         {model}
@@ -1177,14 +1220,14 @@ const SettingsPage: React.FC = () => {
                   <Input
                     placeholder="deepseek-chat"
                     value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
+                    onChange={(e) => { markApiEdited(); setCustomModel(e.target.value); }}
                     className="rounded-2xl bg-white border-gray-200 h-12 text-gray-700 placeholder:text-gray-400"
                   />
                 )}
                 
                 {availableModels.length > 0 && (
                   <p className="text-xs text-gray-400 mt-1.5">
-                    已获取 {availableModels.length} 个可用模型
+                    已获取 {availableModels.length} 个模型，能否调用以连接测试为准
                   </p>
                 )}
               </div>
@@ -1192,7 +1235,7 @@ const SettingsPage: React.FC = () => {
               {/* Test Button */}
               <button
                 onClick={testConnection}
-                disabled={testing || !apiKey}
+                disabled={testing || fetchingModels || !apiKey.trim() || !customBaseUrl.trim() || !customModel.trim()}
                 className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 {testing ? (
@@ -1206,7 +1249,7 @@ const SettingsPage: React.FC = () => {
               {/* Save Button */}
               <Button
                 onClick={saveSettings}
-                disabled={!apiKey}
+                disabled={fetchingModels || !apiKey.trim() || !customBaseUrl.trim() || !customModel.trim()}
                 className="w-full py-6 rounded-2xl bg-gradient-to-r from-purple-400 to-pink-400 text-white font-medium shadow-lg hover:shadow-xl transition-all"
               >
                 保存配置

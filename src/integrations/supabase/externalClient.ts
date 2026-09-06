@@ -4,8 +4,9 @@
  * 这个客户端连接到外部的 Supabase 项目，用于处理新用户的注册和登录
  * 现有用户继续使用 Lovable Cloud (src/integrations/supabase/client.ts)
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { authFetch } from './authFetch';
 
 // 外部 Supabase 项目配置
 const EXTERNAL_SUPABASE_URL = 'https://lxbusdoqghkcajlctbqg.supabase.co';
@@ -21,7 +22,19 @@ const EXTERNAL_URL = isCustomDomain
   ? `${window.location.origin}/external-supabase`
   : EXTERNAL_SUPABASE_URL;
 
+let useDirectConnection = false;
+
 const externalClientOptions = {
+  global: {
+    fetch: ((input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (useDirectConnection && isCustomDomain && url.startsWith(`${EXTERNAL_URL}/`)) {
+        const directUrl = `${EXTERNAL_SUPABASE_URL}${url.slice(EXTERNAL_URL.length)}`;
+        return authFetch(input instanceof Request ? new Request(directUrl, input) : directUrl, init);
+      }
+      return authFetch(input, init);
+    }) as typeof fetch,
+  },
   auth: {
     storage: localStorage,
     persistSession: true,
@@ -30,27 +43,14 @@ const externalClientOptions = {
   }
 };
 
-const proxiedExternalSupabase = createClient<Database>(EXTERNAL_URL, EXTERNAL_SUPABASE_ANON_KEY, externalClientOptions);
-const directExternalSupabase = createClient<Database>(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, externalClientOptions);
-
-let activeExternalClient: SupabaseClient<Database> = proxiedExternalSupabase;
-
 export const switchExternalSupabaseToDirect = () => {
-  activeExternalClient = directExternalSupabase;
+  useDirectConnection = true;
 };
 
-export const isExternalSupabaseProxyEnabled = () => isCustomDomain;
+export const isExternalSupabaseProxyEnabled = () => isCustomDomain && !useDirectConnection;
 
 // 创建外部 Supabase 客户端（支持在自定义域名代理失败时切换为直连）
-export const externalSupabase = new Proxy({} as SupabaseClient<Database>, {
-  get(_target, prop: string | symbol) {
-    const value = (activeExternalClient as any)[prop];
-    if (typeof value === 'function') {
-      return value.bind(activeExternalClient);
-    }
-    return value;
-  }
-});
+export const externalSupabase = createClient<Database>(EXTERNAL_URL, EXTERNAL_SUPABASE_ANON_KEY, externalClientOptions);
 
 // 导出配置信息供其他模块使用
 export const externalSupabaseConfig = {
