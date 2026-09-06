@@ -376,9 +376,14 @@ const SettingsPage: React.FC = () => {
       }
 
       if (data.success && data.models) {
-        setAvailableModels(data.models);
+        const models: string[] = data.models;
+        setAvailableModels(models);
         setShowModelDropdown(true);
-        toast.success(`获取到 ${data.models.length} 个模型`);
+        // 已保存的模型不在列表中时，同步为列表第一个，避免下拉显示与实际值不一致
+        if (models.length > 0 && !models.includes(customModel.trim())) {
+          setCustomModel(models[0]);
+        }
+        toast.success(`获取到 ${models.length} 个模型`);
       } else {
         toast.error(data.error || '获取模型失败');
       }
