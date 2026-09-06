@@ -191,8 +191,15 @@ const AdminPage: React.FC = () => {
       
       if (data) {
         setIsAdmin(true);
-        // 需要密码验证才能访问
-        setNeedsPasswordVerification(true);
+        // 管理员角色确认后直接进入，无需二次密码验证
+        setNeedsPasswordVerification(false);
+        setIsAuthenticated(true);
+        fetchThemes();
+        fetchStats();
+        fetchTrendData();
+        fetchActivityTrend();
+        fetchAdminUsers();
+        fetchAnnouncement();
       } else {
         setIsAdmin(false);
         setIsAuthenticated(false);

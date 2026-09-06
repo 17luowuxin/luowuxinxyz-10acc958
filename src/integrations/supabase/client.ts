@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { authFetch } from './authFetch';
+import { brokeredPreviewStorage } from './previewAuthStorage';
 
 // Detect if we're on the custom domain (luowuxin.xyz) for China proxy support
 const isCustomDomain = typeof window !== 'undefined' && 
@@ -21,7 +22,7 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   global: { fetch: authFetch },
   auth: {
-    storage: localStorage,
+    storage: brokeredPreviewStorage(),
     persistSession: true,
     autoRefreshToken: true,
   }
