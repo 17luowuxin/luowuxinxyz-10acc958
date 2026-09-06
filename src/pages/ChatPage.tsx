@@ -25,10 +25,12 @@ import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
 import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hooks/useLocalCache';
 import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
+import { parseStickerImport } from '@/utils/stickerImport';
 import {
   deleteLocalRows,
   getLocalTable,
   insertLocalRow,
+  insertLocalRows,
   isLocalModeEnabled,
   updateLocalRows,
   upsertLocalRow,
@@ -342,6 +344,7 @@ const ChatPage: React.FC = () => {
   const [showStickerPicker, setShowStickerPicker] = useState(false); // 快捷发送表情包面板
   const [batchStickerUrls, setBatchStickerUrls] = useState(''); // 批量导入URL
   const [importingBatch, setImportingBatch] = useState(false);
+  const stickerImportRunningRef = useRef(false);
   const [editingStickerKeywords, setEditingStickerKeywords] = useState<{ id: string; keywords: string } | null>(null);
   // 通话相关状态
   const [showCallDialog, setShowCallDialog] = useState<'voice' | 'video' | null>(null);
@@ -3307,86 +3310,61 @@ const ChatPage: React.FC = () => {
     toast.success('已删除');
   };
 
-  // 批量导入表情包URL（自动生成关键词）
+  // 只保存图片直链；每批最多50条，不逐张下载，也不覆盖已有表情包。
   const handleBatchImportStickers = async () => {
-    if (!user?.id) return;
-    
-    // 解析每行，支持两种格式：
-    // 1. 关键词:https://... （冒号前是关键词，支持用/分隔多个关键词）
-    // 2. 纯URL https://...
-    const lines = batchStickerUrls
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0);
-    
-    const parsedItems: { url: string; keywords: string[] }[] = [];
-    
-    for (const line of lines) {
-      // 尝试匹配 "关键词:https://..." 或 "关键词：https://..." 格式
-      const colonMatch = line.match(/^(.+?)[:：](https?:\/\/.+)$/);
-      if (colonMatch) {
-        const keywordPart = colonMatch[1].trim();
-        const url = colonMatch[2].trim();
-        // 支持用 / 分隔多个关键词，如 "咬你/啃你"
-        const keywords = keywordPart.split(/[\/、,，]/).map(k => k.trim()).filter(k => k.length > 0);
-        if (keywords.length > 0 && url) {
-          parsedItems.push({ url, keywords: [...keywords, '表情', '表情包'] });
-        }
-      } else if (line.startsWith('http')) {
-        // 纯URL格式，自动生成关键词
-        const urlParts = line.split('/');
-        const fileName = urlParts[urlParts.length - 1].split('?')[0];
-        const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-        const autoKeywords = nameWithoutExt && nameWithoutExt.length > 0 && nameWithoutExt.length < 20
-          ? [nameWithoutExt, '表情', '表情包']
-          : ['表情包', '自定义表情'];
-        parsedItems.push({ url: line, keywords: autoKeywords });
-      }
-    }
-    
-    if (parsedItems.length === 0) {
-      toast.error('请输入有效的格式（每行一个）');
+    if (!user?.id || stickerImportRunningRef.current) return;
+
+    const { items, invalidLines, lines } = parseStickerImport(batchStickerUrls);
+    if (items.length === 0) {
+      toast.error('未识别到有效链接，请使用“关键词：图片链接”或纯链接，每行一个');
       return;
     }
-    
-    if (parsedItems.length > 20) {
-      toast.error('一次最多导入20个表情包');
-      return;
-    }
-    
+
+    stickerImportRunningRef.current = true;
     setImportingBatch(true);
-    let successCount = 0;
-    
+    const savedLines = new Set<number>();
+    let saveError = '';
+
     try {
-      for (const item of parsedItems) {
+      for (let offset = 0; offset < items.length; offset += 50) {
+        const batch = items.slice(offset, offset + 50);
         try {
-          const { data, error } = await saveSticker({
-              user_id: user.id,
-              image_url: item.url,
-              keywords: item.keywords
-            });
-          
-          if (!error && data) {
-            setUserStickers(prev => [{
-              id: data.id,
-              imageUrl: item.url,
-              keywords: item.keywords,
-              text: item.keywords[0]
-            }, ...prev]);
-            successCount++;
-          }
+          const rows = batch.map(item => ({
+            user_id: user.id,
+            image_url: item.url,
+            keywords: item.keywords,
+          }));
+          const { data, error } = localMode
+            ? { data: await insertLocalRows(user.id, 'user_stickers', rows), error: null }
+            : await supabase.from('user_stickers').insert(rows).select('id, image_url, keywords');
+          if (error) throw error;
+          if (!data || data.length !== rows.length) throw new Error('未能确认保存结果，请刷新表情包列表后重试');
+
+          setUserStickers(prev => [...data.map(row => ({
+            id: String(row.id),
+            imageUrl: String(row.image_url),
+            keywords: row.keywords as string[],
+            text: (row.keywords as string[])[0] || '表情包',
+          })), ...prev]);
+          batch.forEach(item => savedLines.add(item.lineNumber));
         } catch (err) {
-          console.error('Failed to import:', item.url, err);
+          saveError = err && typeof err === 'object' && 'message' in err
+            ? String(err.message) : '网络异常，请稍后重试';
+          break;
         }
       }
-      
-      if (successCount > 0) {
-        toast.success(`成功导入 ${successCount} 个表情包`);
-        setBatchStickerUrls('');
+
+      // 只移除已确认保存的行，格式有误或未保存的链接留在输入框中。
+      setBatchStickerUrls(lines.filter((line, index) => line.trim() && !savedLines.has(index + 1)).join('\n'));
+      if (saveError) {
+        toast.error(`已导入 ${savedLines.size} 个，其余链接已保留。保存失败：${saveError}`);
+      } else if (invalidLines.length > 0) {
+        toast.warning(`已导入 ${savedLines.size} 个，另有 ${invalidLines.length} 行格式不正确，已保留在输入框中`);
       } else {
-        toast.error('导入失败');
+        toast.success(`成功导入 ${savedLines.size} 个表情包`);
       }
     } finally {
+      stickerImportRunningRef.current = false;
       setImportingBatch(false);
     }
   };
@@ -4762,12 +4740,13 @@ const ChatPage: React.FC = () => {
               <textarea
                 value={batchStickerUrls}
                 onChange={(e) => setBatchStickerUrls(e.target.value)}
-                placeholder="支持两种格式，每行一个：&#10;关键词:https://example.com/sticker.png&#10;咬你/啃你:https://example.com/sticker2.gif&#10;https://example.com/sticker3.png"
+                disabled={importingBatch}
+                placeholder="每行一个，支持中文冒号和空格：&#10;开心： https://example.com/sticker.gif&#10;咬你/啃你: https://example.com/sticker2.png&#10;https://example.com/sticker3.png"
                 className="w-full h-28 px-3 py-2 text-sm bg-background border rounded-lg resize-none"
               />
               <div className="flex items-center justify-between mt-2">
                 <p className="text-xs text-muted-foreground">
-                  格式：关键词:链接 或 纯链接（自动生成关键词）
+                  支持 PNG、GIF 等图片直链；整段粘贴后自动分批导入
                 </p>
                 <Button 
                   size="sm"
