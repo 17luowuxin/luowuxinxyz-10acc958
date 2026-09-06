@@ -1172,6 +1172,9 @@ const SettingsPage: React.FC = () => {
                       backgroundSize: '20px'
                     }}
                   >
+                    {!availableModels.includes(customModel) && (
+                      <option value="" disabled>请选择模型（原模型 {customModel || '未设置'} 不可用）</option>
+                    )}
                     {availableModels.map((model, index) => (
                       <option key={index} value={model}>
                         {model}
