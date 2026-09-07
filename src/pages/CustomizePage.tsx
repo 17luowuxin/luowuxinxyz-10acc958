@@ -18,6 +18,7 @@ import {
 
 // 预设头像框
 import dreamFrame from '@/assets/avatar-frames/dream-frame.png';
+import { AvatarFrameImage, resolveAvatarFrame } from '@/components/chat/AvatarFrameImage';
 // 头像装饰图片
 import animeHeadDecor from '@/assets/bubble-frames/anime-head-decor.png';
 import cuteBoyHead from '@/assets/bubble-frames/cute-boy-head.png';
@@ -241,8 +242,8 @@ const CustomizePage: React.FC = () => {
       if ((data as any).font_family) setCurrentFont((data as any).font_family);
       if ((data as any).font_color) setFontColor((data as any).font_color);
       if ((data as any).friend_font_color) setFriendFontColor((data as any).friend_font_color);
-      if ((data as any).avatar_frame_url) setAvatarFrame((data as any).avatar_frame_url);
-      if ((data as any).friend_avatar_frame_url) setFriendAvatarFrame((data as any).friend_avatar_frame_url);
+      if ((data as any).avatar_frame_url) setAvatarFrame(resolveAvatarFrame((data as any).avatar_frame_url));
+      if ((data as any).friend_avatar_frame_url) setFriendAvatarFrame(resolveAvatarFrame((data as any).friend_avatar_frame_url));
       if ((data as any).bubble_frame_url) setBubbleFrame((data as any).bubble_frame_url);
       if ((data as any).friend_bubble_frame_url) setFriendBubbleFrame((data as any).friend_bubble_frame_url);
       // 小说模式颜色
@@ -277,7 +278,7 @@ const CustomizePage: React.FC = () => {
         setChatBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
         setUploading(false);
         toast.dismiss();
-        toast.success('背景图已保存到本机');
+        toast.success('背景图已保存到本机', { duration: 1500 });
         return;
       }
       const compressedFile = blobToFile(compressedBlob, file.name);
@@ -301,7 +302,7 @@ const CustomizePage: React.FC = () => {
       setStoredChatBackgroundUrl(nextUrl);
       setChatBackgroundUrl(nextUrl);
       toast.dismiss();
-      toast.success('背景图上传成功');
+      toast.success('背景图上传成功', { duration: 1500 });
     } catch (error) {
       console.error('Background upload error:', error);
       toast.dismiss();
@@ -333,7 +334,7 @@ const CustomizePage: React.FC = () => {
         setGlobalBackgroundUrl(await getLocalAssetUrl(user.id, sourceUrl));
         setGlobalUploading(false);
         toast.dismiss();
-        toast.success('全局背景已保存到本机');
+        toast.success('全局背景已保存到本机', { duration: 1500 });
         return;
       }
       const compressedFile = blobToFile(compressedBlob, file.name);
@@ -357,7 +358,7 @@ const CustomizePage: React.FC = () => {
       setStoredGlobalBackgroundUrl(nextUrl);
       setGlobalBackgroundUrl(nextUrl);
       toast.dismiss();
-      toast.success('全局背景图上传成功');
+      toast.success('全局背景图上传成功', { duration: 1500 });
     } catch (error) {
       console.error('Global background upload error:', error);
       toast.dismiss();
@@ -443,7 +444,7 @@ const CustomizePage: React.FC = () => {
         (row) => row.user_id === user.id,
         fullPayload,
       );
-      toast.success('美化设置已保存到本机');
+      toast.success('美化设置已保存到本机', { duration: 1500 });
       return;
     }
 
@@ -516,11 +517,11 @@ const CustomizePage: React.FC = () => {
         }
       } else {
         console.log('[Save] Retry success:', d2);
-        toast.success('美化设置已保存！');
+        toast.success('美化设置已保存！', { duration: 1500 });
       }
     } else {
       console.log('[Save] Success, returned data:', data);
-      toast.success('美化设置已保存！返回桌面查看效果');
+      toast.success('美化设置已保存！返回桌面查看效果', { duration: 1500 });
     }
     
   };
@@ -1160,7 +1161,7 @@ const CustomizePage: React.FC = () => {
               })()}
               <div className="relative w-10 h-10 flex-shrink-0">
                 {avatarFrame && (
-                  <img src={avatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                  <AvatarFrameImage source={avatarFrame} className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
                 <div className="absolute inset-[15%] rounded-full overflow-hidden flex items-center justify-center">
                   {userProfile?.avatar_url ? (
@@ -1178,7 +1179,7 @@ const CustomizePage: React.FC = () => {
             <div className="flex justify-start items-end gap-2">
               <div className="relative w-10 h-10 flex-shrink-0">
                 {friendAvatarFrame && (
-                  <img src={friendAvatarFrame} alt="头像框" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+                  <AvatarFrameImage source={friendAvatarFrame} className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
                 )}
                 <div className="absolute inset-[15%] rounded-full overflow-hidden flex items-center justify-center">
                   {characterPreview?.avatar_url ? (

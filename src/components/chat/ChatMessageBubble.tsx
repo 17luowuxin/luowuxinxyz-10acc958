@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useState } from 'react';
+import { AvatarFrameImage } from './AvatarFrameImage';
 import { Phone, Video, Quote, Copy, RotateCcw, Trash2, X } from 'lucide-react';
 import VoiceMessageBubble from './VoiceMessageBubble';
 import TransferCard from './TransferCard';
@@ -79,7 +80,7 @@ const MessageAvatar = memo(({
 }) => (
   <div className="relative w-9 h-9 flex-shrink-0 mt-0.5">
     {avatarFrame && (
-      <img src={avatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+      <AvatarFrameImage source={avatarFrame} className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
     )}
     <div className={`absolute rounded-full overflow-hidden ${avatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
       {avatarUrl ? (

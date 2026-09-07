@@ -453,7 +453,7 @@ const FriendsPage: React.FC = () => {
       }
     }
     
-    toast.success('角色创建成功!');
+    toast.success('角色创建成功!', { duration: 1500 });
     resetForm();
     setOpen(false);
     fetchCharacters();
@@ -497,7 +497,7 @@ const FriendsPage: React.FC = () => {
       await supabase.from('characters').update(changes).eq('id', editingChar.id);
     }
     
-    toast.success('角色已更新');
+    toast.success('角色已更新', { duration: 1500 });
     resetForm();
     setEditingChar(null);
     setOpen(false);
@@ -652,7 +652,7 @@ const FriendsPage: React.FC = () => {
           (row) => row.character_id === editingChar.id,
           payload,
         );
-        toast.success('记忆已保存到本机');
+        toast.success('记忆已保存到本机', { duration: 1500 });
         return;
       }
 
@@ -696,7 +696,7 @@ const FriendsPage: React.FC = () => {
       }
       
       if (error) throw error;
-      toast.success('记忆已保存');
+      toast.success('记忆已保存', { duration: 1500 });
     } catch (err: any) {
       console.error('Failed to save memory:', err);
       toast.error(`保存失败：${err?.message || '请稍后重试'}`);

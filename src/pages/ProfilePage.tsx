@@ -76,7 +76,7 @@ const ProfilePage: React.FC = () => {
       
       // 更新 profile 头像
       await saveProfile({ avatar_url: nextAvatarUrl });
-      toast.success('头像已更新');
+      toast.success('头像已更新', { duration: 1500 });
     } catch (error) {
       console.error('Avatar upload error:', error);
       toast.error('头像上传失败');
@@ -121,7 +121,7 @@ const ProfilePage: React.FC = () => {
 
   const handleSave = async () => {
     const ok = await saveProfile();
-    if (ok) toast.success('资料已保存');
+    if (ok) toast.success('资料已保存', { duration: 1500 });
   };
 
   return (

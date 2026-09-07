@@ -497,7 +497,7 @@ const SettingsPage: React.FC = () => {
     setUsingDefaultApi(false);
     setIsConfigured(true);
     console.log('[Settings] Custom API config saved successfully');
-    toast.success('API配置已保存');
+    toast.success('API配置已保存', { duration: 1500 });
   };
 
   const testConnection = async () => {
@@ -621,7 +621,7 @@ const SettingsPage: React.FC = () => {
     }
     
     setTtsConfigured(true);
-    toast.success('TTS配置已保存');
+    toast.success('TTS配置已保存', { duration: 1500 });
   };
 
   const testTtsConnection = async () => {
@@ -708,7 +708,7 @@ const SettingsPage: React.FC = () => {
     }
     
     setSpaceImageConfigured(true);
-    toast.success('空间图片API配置已保存');
+    toast.success('空间图片API配置已保存', { duration: 1500 });
   };
 
   const testSpaceImageApi = async () => {
@@ -893,7 +893,7 @@ const SettingsPage: React.FC = () => {
     }
     
     setUnsplashConfigured(true);
-    toast.success('Unsplash 配置已保存');
+    toast.success('Unsplash 配置已保存', { duration: 1500 });
   };
 
   const testUnsplashApi = async () => {
@@ -944,7 +944,7 @@ const SettingsPage: React.FC = () => {
     }
 
     setVnConfigured(true);
-    toast.success('视觉小说 API 配置已保存');
+    toast.success('视觉小说 API 配置已保存', { duration: 1500 });
   };
 
   const testVnConnection = async () => {

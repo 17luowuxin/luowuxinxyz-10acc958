@@ -1,4 +1,5 @@
 import React, { useRef, useCallback, useEffect, memo, useState } from 'react';
+import { AvatarFrameImage } from './AvatarFrameImage';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageItem } from './ChatMessageList';
 import { Loader2 } from 'lucide-react';
@@ -79,7 +80,7 @@ const TypingIndicator = memo(({ character, friendAvatarFrame }: { character: any
   <div className="flex items-end gap-2 px-3 py-1">
     <div className="relative w-9 h-9 flex-shrink-0">
       {friendAvatarFrame && (
-        <img src={friendAvatarFrame} alt="" className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
+        <AvatarFrameImage source={friendAvatarFrame} className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
       )}
       <div className={`absolute rounded-full overflow-hidden ${friendAvatarFrame ? 'inset-[15%]' : 'inset-0'}`}>
         {character?.avatar_url ? (
