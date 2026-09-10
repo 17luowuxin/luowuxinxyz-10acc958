@@ -845,8 +845,12 @@ const FriendsPage: React.FC = () => {
             
             {editingChar ? (
               <Tabs defaultValue="basic" className="mt-4">
-                <TabsList className="grid w-full grid-cols-3 rounded-xl bg-gray-100">
+                <TabsList className="grid w-full grid-cols-4 rounded-xl bg-gray-100">
                   <TabsTrigger value="basic" className="rounded-lg text-xs">基本信息</TabsTrigger>
+                  <TabsTrigger value="look" className="rounded-lg text-xs">
+                    <ImageIcon className="w-3 h-3 mr-1" />
+                    形象
+                  </TabsTrigger>
                   <TabsTrigger value="settings" className="rounded-lg text-xs">
                     <Settings className="w-3 h-3 mr-1" />
                     设置
@@ -856,6 +860,13 @@ const FriendsPage: React.FC = () => {
                     记忆
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="look" className="mt-4">
+                  {user?.id && editingChar?.id && (
+                    <CharacterImageSettings userId={user.id} characterId={String(editingChar.id)} />
+                  )}
+                </TabsContent>
+
                 
                 <TabsContent value="basic" className="space-y-4 mt-4">
                   {/* Avatar Upload */}
