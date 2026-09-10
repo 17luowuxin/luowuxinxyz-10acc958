@@ -504,7 +504,8 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 - 符合角色性格
 - 简短自然，1-3句话
 - 可以使用emoji
-- 不要加引号`;
+- 不要加引号
+- 最后另起一行，只输出配图标记：如果这条动态适合放你自己的自拍/人像照，输出「#配图:自拍」；如果更适合放风景、食物、物品等场景照，输出「#配图:场景」。标记后再另起一行用一句话描述这张配图的画面内容（不要写成对话）。`;
     } else if (type === "reply") {
       const shortName = userName.length > 2 ? userName.slice(0, 2) : userName;
       
