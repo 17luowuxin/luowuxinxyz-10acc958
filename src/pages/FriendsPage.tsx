@@ -1,7 +1,9 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, CheckCheck } from 'lucide-react';
+import { ChevronLeft, Plus, User, MoreVertical, Pencil, Trash2, X, Camera, Brain, RefreshCw, Settings, Gift, Upload, CheckCheck, Image as ImageIcon } from 'lucide-react';
+import CharacterImageSettings from '@/components/friends/CharacterImageSettings';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
