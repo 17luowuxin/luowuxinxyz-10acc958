@@ -98,6 +98,31 @@ async function getSpaceImageConfig(userId: string): Promise<SpaceImageConfig | n
   return { enabled, apiKey, apiUrl, model, stylePrompt, size };
 }
 
+interface CharacterImageConfig {
+  referenceImage: string;
+  appearance: string;
+  artStyle: string;
+}
+
+async function getCharacterImageConfig(userId: string, characterId: string): Promise<CharacterImageConfig> {
+  const empty: CharacterImageConfig = { referenceImage: '', appearance: '', artStyle: '' };
+  if (!userId || !characterId) return empty;
+  const settings = await fetchApiSettings(userId);
+  const raw = settings?.get(`char_image_${characterId}`);
+  if (!raw) return empty;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      referenceImage: typeof parsed.referenceImage === 'string' ? parsed.referenceImage : '',
+      appearance: typeof parsed.appearance === 'string' ? parsed.appearance : '',
+      artStyle: typeof parsed.artStyle === 'string' ? parsed.artStyle : '',
+    };
+  } catch {
+    return empty;
+  }
+}
+
+
 async function getAICompletion(
   messages: Array<{ role: string; content: string }>,
   config: AIConfig
