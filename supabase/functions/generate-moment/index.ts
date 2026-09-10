@@ -586,24 +586,32 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
     console.log(`Using provider: ${usingCustom ? provider : (apiSetting.useDefault ? 'default-api' : 'lovable-ai')}`);
     console.log(`Moment request has images: ${!!userImages}`);
 
-    const content = await getAICompletion(
+    let content = await getAICompletion(
       [{ role: "user", content: prompt }],
       config
     );
 
-    let imagePrompts: string[] = [];
+    let imagePrompts: Array<{ prompt: string; kind: 'selfie' | 'scene'; useReference: boolean }> = [];
     if (type === "moment") {
+      // 解析AI给出的配图决定（自拍 / 场景）与画面描述
+      const tagMatch = content.match(/#\s*配图\s*[:：]\s*(自拍|场景)/);
+      const kind: 'selfie' | 'scene' = tagMatch?.[1] === '场景' ? 'scene' : 'selfie';
+      let sceneDesc = '';
+      if (tagMatch) {
+        const after = content.slice((tagMatch.index ?? 0) + tagMatch[0].length);
+        sceneDesc = after.split('\n').map((line) => line.trim()).filter(Boolean)[0] || '';
+        content = content.slice(0, tagMatch.index).trim();
+      }
+
+      const charConfig = await getCharacterImageConfig(userId, character?.id || '');
       const spaceImageConfig = await getSpaceImageConfig(userId);
       if (prepareImagePrompts === true || spaceImageConfig) {
-        console.log("Space image generation enabled, preparing prompt only...");
-
         const persona = character?.persona || '';
         const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
         const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
 
         let genderDesc = '一个人';
         let genderGuard = '';
-
         if (maleHits > femaleHits) {
           genderDesc = '一个男生';
           genderGuard = '男性角色，男性五官与体态，不要女性特征';
@@ -612,23 +620,31 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
           genderGuard = '女性角色，女性五官与体态，不要男性特征';
         }
 
-        console.log('Gender detection:', { maleHits, femaleHits, genderDesc });
-
         const appearanceParts: string[] = [];
+        if (charConfig.appearance) appearanceParts.push(charConfig.appearance);
         const hairMatch = persona.match(/(?:头发|发色|发型)[：:]\s*([^，。\n]+)/);
         if (hairMatch) appearanceParts.push(hairMatch[1]);
         const eyeMatch = persona.match(/(?:眼睛|眼色|瞳色)[：:]\s*([^，。\n]+)/);
         if (eyeMatch) appearanceParts.push(eyeMatch[1]);
         const appearanceMatch = persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
         if (appearanceMatch) appearanceParts.push(appearanceMatch[1]);
-
         const appearanceStr = appearanceParts.length > 0 ? '，' + appearanceParts.join('，') : '';
-        const imagePrompt = [`${genderDesc}${appearanceStr}`, genderGuard, content].filter(Boolean).join('，');
-        imagePrompts = [imagePrompt].filter(Boolean).slice(0, 3);
+
+        const sceneText = sceneDesc || content;
+        const imagePrompt = kind === 'selfie'
+          ? [charConfig.artStyle, `${genderDesc}的自拍照${appearanceStr}`, genderGuard, sceneText].filter(Boolean).join('，')
+          : [charConfig.artStyle, '场景照片，画面中不要出现人物', sceneText].filter(Boolean).join('，');
+
+        console.log('Image decision:', { kind, useReference: kind === 'selfie' && !!charConfig.referenceImage });
+
+        imagePrompts = imagePrompt
+          ? [{ prompt: imagePrompt, kind, useReference: kind === 'selfie' && !!charConfig.referenceImage }]
+          : [];
       }
     }
 
     return new Response(JSON.stringify({ content, imagePrompts }), {
+
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
