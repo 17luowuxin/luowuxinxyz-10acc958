@@ -269,6 +269,11 @@ const MessageItem = memo(({
             </div>
           )}
           
+          {/* 待生成配图占位卡片 */}
+          {pendingImagePrompt && (
+            <PendingImageCard msg={msg} prompt={pendingImagePrompt} />
+          )}
+
           {/* 通话记录 */}
           {isCallRecord && callType && callDuration && (
             <CallRecordBubble callType={callType} duration={callDuration} />
