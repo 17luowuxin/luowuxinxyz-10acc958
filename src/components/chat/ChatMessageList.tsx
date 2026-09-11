@@ -6,6 +6,8 @@ import TransferCard from './TransferCard';
 import UserTransferCard from './UserTransferCard';
 import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
+import PendingImageCard from './PendingImageCard';
+import { parsePendingImagePrompt } from '@/lib/pendingChatImage';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
@@ -165,11 +167,14 @@ const MessageItem = memo(({
     };
   }, [msg.created_at, prevMsg]);
 
+  const pendingImagePrompt = !msg.image_url ? parsePendingImagePrompt(msg.content) : null;
+
   const { displayContent, transferData, isCallRecord, callType, callDuration, showBubble } = useMemo(() => {
     const transferCmd = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
     const rawContent = transferCmd ? removeTransferCommand(msg.content) : msg.content;
     const content = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
-    const shouldShowBubble = content && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
+    const isPendingImage = !msg.image_url && parsePendingImagePrompt(msg.content) !== null;
+    const shouldShowBubble = content && !isPendingImage && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
     const callMatch = content?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
 
     return {
@@ -264,6 +269,11 @@ const MessageItem = memo(({
             </div>
           )}
           
+          {/* 待生成配图占位卡片 */}
+          {pendingImagePrompt && (
+            <PendingImageCard msg={msg} prompt={pendingImagePrompt} />
+          )}
+
           {/* 通话记录 */}
           {isCallRecord && callType && callDuration && (
             <CallRecordBubble callType={callType} duration={callDuration} />
