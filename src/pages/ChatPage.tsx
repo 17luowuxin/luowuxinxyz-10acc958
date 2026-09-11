@@ -1869,6 +1869,13 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  const pendingImageActions = useMemo(() => ({
+    generatingIds: pendingImageIds,
+    onGenerate: (msg: any) => { void generatePendingChatImage(msg); },
+    onDiscard: (msg: any) => { void discardPendingChatImage(msg); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [pendingImageIds, unifiedImageConfig, hasUnifiedImageConfig, localMode, user?.id, characterId]);
+
   const generateChatImage = async (prompt: string) => {
     if (!user?.id) return;
 
