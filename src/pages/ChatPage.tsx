@@ -2597,7 +2597,7 @@ const ChatPage: React.FC = () => {
             if (combinedForImage) {
               const { should, prompt } = shouldGenerateImage(messageContent, combinedForImage);
               if (should) {
-                void generateChatImage(prompt);
+                void queuePendingChatImage(prompt);
               }
             }
           }
@@ -2825,7 +2825,7 @@ const ChatPage: React.FC = () => {
         const { should, prompt } = shouldGenerateImage(messageContent, cleanContent);
         if (should) {
           // 异步生成图片，不阻塞主流程
-          generateChatImage(prompt);
+          void queuePendingChatImage(prompt);
         }
       }
       
@@ -4348,6 +4348,7 @@ const ChatPage: React.FC = () => {
       </header>
 
       {/* Virtual Message List - 虚拟滚动优化，只渲染可见消息 */}
+      <PendingImageContext.Provider value={pendingImageActions}>
       <VirtualMessageList
         messages={messages}
         character={character}
