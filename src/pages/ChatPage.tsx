@@ -26,6 +26,7 @@ import { sanitizeMessageContent } from '@/utils/messageParser';
 import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hooks/useLocalCache';
 import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
 import { parseStickerImport } from '@/utils/stickerImport';
+import { PendingImageContext, buildPendingImageContent, parsePendingImagePrompt } from '@/lib/pendingChatImage';
 import {
   deleteLocalRows,
   getLocalTable,
@@ -332,6 +333,7 @@ const ChatPage: React.FC = () => {
   } | null>(null);
 
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [pendingImageIds, setPendingImageIds] = useState<Array<string | number>>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null);
   // 表情包相关状态
