@@ -165,11 +165,14 @@ const MessageItem = memo(({
     };
   }, [msg.created_at, prevMsg]);
 
+  const pendingImagePrompt = !msg.image_url ? parsePendingImagePrompt(msg.content) : null;
+
   const { displayContent, transferData, isCallRecord, callType, callDuration, showBubble } = useMemo(() => {
     const transferCmd = msg.role === 'assistant' ? parseTransferCommand(msg.content) : null;
     const rawContent = transferCmd ? removeTransferCommand(msg.content) : msg.content;
     const content = msg.role === 'assistant' ? sanitizeMessageContent(rawContent) : rawContent;
-    const shouldShowBubble = content && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
+    const isPendingImage = !msg.image_url && parsePendingImagePrompt(msg.content) !== null;
+    const shouldShowBubble = content && !isPendingImage && !content.startsWith('[STICKER:') && !(msg.image_url && content.startsWith('[图片]'));
     const callMatch = content?.match(/^\[((语音通话|视频通话))\]\s*通话时长\s*(\d{2}:\d{2})$/);
 
     return {
