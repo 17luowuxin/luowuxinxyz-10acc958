@@ -4391,6 +4391,7 @@ const ChatPage: React.FC = () => {
         getBubbleBackgroundStyle={getBubbleBackgroundStyle}
         getBubblePadding={getBubblePadding}
       />
+      </PendingImageContext.Provider>
 
       {/* 待发送图片预览 */}
       {pendingImage && (
