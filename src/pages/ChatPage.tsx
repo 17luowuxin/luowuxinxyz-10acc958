@@ -1808,6 +1808,65 @@ const ChatPage: React.FC = () => {
     return { should: true, prompt };
   };
 
+  // 角色想发图时，只先生成一张“待生成配图”占位卡片，由用户点“生成”才真正调用图片API
+  const queuePendingChatImage = async (prompt: string) => {
+    if (!user?.id || !hasUnifiedImageConfig || !prompt.trim()) return;
+    const content = buildPendingImageContent(prompt.trim());
+    const { data: savedMsg } = await saveChatMessage({
+      user_id: user.id,
+      character_id: characterId,
+      role: 'assistant',
+      content,
+    });
+    setMessages(prev => [...prev, {
+      id: savedMsg?.id ?? Date.now() + 1000,
+      role: 'assistant',
+      content,
+      created_at: savedMsg?.created_at ?? new Date().toISOString(),
+    }]);
+  };
+
+  const discardPendingChatImage = async (msg: any) => {
+    await deleteSingleMessage(msg);
+  };
+
+  const generatePendingChatImage = async (msg: any) => {
+    const prompt = parsePendingImagePrompt(msg?.content);
+    if (!prompt || !user?.id || !hasUnifiedImageConfig) return;
+    if (pendingImageIds.some((id) => String(id) === String(msg.id))) return;
+    setPendingImageIds(prev => [...prev, msg.id]);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: {
+          prompt,
+          userId: user.id,
+          characterId,
+          testMode: Boolean(unifiedImageConfig?.apiKey && unifiedImageConfig?.apiUrl),
+          apiKey: unifiedImageConfig?.apiKey,
+          apiUrl: unifiedImageConfig?.apiUrl,
+          model: unifiedImageConfig?.model,
+          size: unifiedImageConfig?.size,
+          stylePrompt: unifiedImageConfig?.stylePrompt,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success || !data?.imageUrl) throw new Error(data?.error || '图片生成失败');
+
+      const imageUrl = data.imageUrl as string;
+      if (localMode && user?.id) {
+        await updateLocalRows(user.id, 'chat_messages', (row) => row.id === msg.id, { content: '', image_url: imageUrl });
+      } else {
+        await supabase.from('chat_messages').update({ content: '', image_url: imageUrl }).eq('id', msg.id);
+      }
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: '', image_url: imageUrl } : m));
+      toast.success('图片生成完成~');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '画图失败，请稍后重试');
+    } finally {
+      setPendingImageIds(prev => prev.filter((id) => String(id) !== String(msg.id)));
+    }
+  };
+
   const generateChatImage = async (prompt: string) => {
     if (!user?.id) return;
 
