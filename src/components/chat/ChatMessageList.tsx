@@ -6,6 +6,8 @@ import TransferCard from './TransferCard';
 import UserTransferCard from './UserTransferCard';
 import { NovelModeText } from '@/utils/novelModeParser';
 import { sanitizeMessageContent } from '@/utils/messageParser';
+import PendingImageCard from './PendingImageCard';
+import { parsePendingImagePrompt } from '@/lib/pendingChatImage';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
