@@ -572,7 +572,8 @@ const VisualNovelChatPage: React.FC<{
   characterId: string;
   storySettings?: StorySettings;
   userSpriteUrl?: string;
-}> = ({ characterId, storySettings, userSpriteUrl }) => {
+  initialSave?: VNSave | null;
+}> = ({ characterId, storySettings, userSpriteUrl, initialSave }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { apiConfig, ttsConfig, vnConfig } = useAPIConfig();
