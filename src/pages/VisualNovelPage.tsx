@@ -648,17 +648,25 @@ const VisualNovelChatPage: React.FC<{
             if (storedBg) setBackgroundUrl(storedBg);
           }
 
-          // 使用故事设置的开场白，如果没有则使用角色的开场白
-          const openingText = storySettings?.opening || (data as any).opening_line;
-          if (openingText) {
-            const openingMessage: Message = {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              content: openingText,
-              created_at: new Date().toISOString()
-            };
-            setMessages([openingMessage]);
-            setCurrentMessageIndex(0);
+          if (initialSave) {
+            // 继续上次的剧情
+            setMessages(initialSave.messages || []);
+            setCurrentMessageIndex(initialSave.current_index || 0);
+            if (initialSave.background_url) setBackgroundUrl(initialSave.background_url);
+            if (initialSave.user_sprite_url) setUserSprite(initialSave.user_sprite_url);
+          } else {
+            // 使用故事设置的开场白，如果没有则使用角色的开场白
+            const openingText = storySettings?.opening || (data as any).opening_line;
+            if (openingText) {
+              const openingMessage: Message = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: openingText,
+                created_at: new Date().toISOString()
+              };
+              setMessages([openingMessage]);
+              setCurrentMessageIndex(0);
+            }
           }
         }
       } catch (err) {
