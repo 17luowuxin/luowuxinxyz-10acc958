@@ -65,7 +65,10 @@ interface VNSave {
 }
 
 // 故事设置页面 - 全新独特设计
-const StorySetupPage: React.FC<{ onStart: (settings: StorySettings, characterId: string, userSpriteUrl?: string) => void }> = ({ onStart }) => {
+const StorySetupPage: React.FC<{
+  onStart: (settings: StorySettings, characterId: string, userSpriteUrl?: string) => void;
+  onBack?: () => void;
+}> = ({ onStart, onBack }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [allCharacters, setAllCharacters] = useState<Character[]>([]);
