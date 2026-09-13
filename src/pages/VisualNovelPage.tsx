@@ -7,7 +7,7 @@ import { useAPIConfig } from '@/hooks/useAPIConfig';
 import { 
   ArrowLeft, Settings, ChevronLeft, ChevronRight, Send, Image, 
   Volume2, VolumeX, User, Plus, ChevronDown, Music, MoreVertical,
-  Eye, Edit, Trash2, Save, FolderOpen, X
+  Eye, Edit, Trash2, Save, FolderOpen, X, Sparkles, BookOpen
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteLocalRows, getLocalTable, insertLocalRow, isLocalModeEnabled, updateLocalRows, upsertLocalRow } from '@/lib/localDataStore';
