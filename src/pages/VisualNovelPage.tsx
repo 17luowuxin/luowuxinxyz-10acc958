@@ -1332,32 +1332,209 @@ const VisualNovelChatPage: React.FC<{
   );
 };
 
+// 小剧场首页：玩法介绍 + 继续上次剧情 + 开始新剧情
+const VNHomePage: React.FC<{
+  onNew: () => void;
+  onResume: (save: VNSave) => void;
+}> = ({ onNew, onResume }) => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [saves, setSaves] = useState<VNSave[]>([]);
+  const [charMap, setCharMap] = useState<Record<string, Character>>({});
+  const [loading, setLoading] = useState(true);
+  const [localMode, setLocalMode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    isLocalModeEnabled(user.id).then(setLocalMode).catch(() => setLocalMode(false));
+  }, [user?.id]);
+
+  const loadAll = React.useCallback(async () => {
+    if (!user || localMode === null) return;
+    try {
+      const chars = localMode
+        ? await getLocalTable(user.id, 'characters')
+        : (await supabase.from('characters').select('id, name, avatar_url, persona, sprite_url, voice_id').eq('user_id', user.id)).data;
+      const map: Record<string, Character> = {};
+      (chars || []).forEach((c: any) => { map[c.id] = c as Character; });
+      setCharMap(map);
+
+      const rows = localMode
+        ? (await getLocalTable(user.id, 'vn_saves')).sort(
+            (a: any, b: any) => new Date(String(b.updated_at || b.created_at)).getTime() - new Date(String(a.updated_at || a.created_at)).getTime(),
+          )
+        : (await supabase.from('vn_saves').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })).data;
+
+      setSaves(((rows as any[]) || []).map((s: any) => ({
+        ...s,
+        story_settings: s.story_settings as StorySettings | null,
+        messages: (s.messages as Message[]) || [],
+      })));
+    } catch (err) {
+      console.error('Load VN home error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, localMode]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const removeSave = async (saveId: string) => {
+    if (!user) return;
+    try {
+      if (localMode) await deleteLocalRows(user.id, 'vn_saves', (row) => row.id === saveId);
+      else await supabase.from('vn_saves').delete().eq('id', saveId).eq('user_id', user.id);
+      setSaves((prev) => prev.filter((s) => s.id !== saveId));
+      toast.success('存档已删除');
+    } catch {
+      toast.error('删除失败');
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-b from-background via-background to-muted/20 flex flex-col">
+      <header className="flex items-center justify-between p-4 border-b border-border/50">
+        <button
+          onClick={() => navigate('/games')}
+          className="w-10 h-10 rounded-xl bg-muted/80 flex items-center justify-center hover:bg-muted transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="text-lg font-semibold">小剧场</h1>
+        <div className="w-10" />
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-28 pt-4 space-y-5">
+        {/* 玩法介绍 */}
+        <div className="rounded-2xl p-4 bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <p className="font-semibold">和角色一起演一段故事</p>
+          </div>
+          <ul className="text-xs text-muted-foreground leading-relaxed space-y-1">
+            <li>1. 选角色、写世界观和开场白</li>
+            <li>2. 上传立绘和背景，画面更有代入感</li>
+            <li>3. 一句一句往下演，随时存档，下次接着玩</li>
+          </ul>
+        </div>
+
+        {/* 存档 */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-4 h-4 text-primary" />
+              <p className="text-sm font-medium text-foreground/80">继续剧情</p>
+            </div>
+            <span className="text-xs text-muted-foreground">{saves.length} 个存档</span>
+          </div>
+
+          {loading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">加载中...</div>
+          ) : saves.length === 0 ? (
+            <div className="bg-card border border-dashed border-border rounded-xl p-6 text-center">
+              <BookOpen className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">还没有存档，先开一段新剧情吧</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {saves.map((save) => {
+                const char = charMap[save.character_id];
+                return (
+                  <motion.div
+                    key={save.id}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex items-center gap-3 bg-card border border-border/60 rounded-xl p-3"
+                  >
+                    <button onClick={() => onResume(save)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 bg-muted flex items-center justify-center">
+                        {char?.avatar_url ? (
+                          <img src={char.avatar_url} alt={char.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{save.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {char?.name || '未知角色'} · {save.messages?.length || 0} 段剧情
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => removeSave(save.id)}
+                      className="w-9 h-9 rounded-lg bg-muted/60 flex items-center justify-center text-muted-foreground hover:text-destructive"
+                      aria-label="删除存档"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={onNew}
+          className="w-full py-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground rounded-xl font-semibold shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" /> 开始新剧情
+        </motion.button>
+      </div>
+    </div>
+  );
+};
+
 // 主入口组件
 const VisualNovelPage: React.FC = () => {
   const { characterId } = useParams<{ characterId: string }>();
-  const navigate = useNavigate();
+  const [mode, setMode] = useState<'home' | 'setup' | 'play'>('home');
   const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
-  const [activeCharId, setActiveCharId] = useState<string | null>(characterId || null);
+  const [activeCharId, setActiveCharId] = useState<string | null>(null);
   const [userSpriteUrl, setUserSpriteUrl] = useState<string | undefined>();
+  const [resumeSave, setResumeSave] = useState<VNSave | null>(null);
 
   const handleStartStory = (settings: StorySettings, charId: string, spriteUrl?: string) => {
+    setResumeSave(null);
     setStorySettings(settings);
     setActiveCharId(charId);
     setUserSpriteUrl(spriteUrl);
+    setMode('play');
   };
 
-  // 如果URL中有characterId，直接进入聊天
+  const handleResume = (save: VNSave) => {
+    setResumeSave(save);
+    setStorySettings(save.story_settings || null);
+    setActiveCharId(save.character_id);
+    setUserSpriteUrl(save.user_sprite_url || undefined);
+    setMode('play');
+  };
+
+  // 如果URL中有characterId，直接进入剧情
   if (characterId) {
     return <VisualNovelChatPage characterId={characterId} />;
   }
 
-  // 如果已经设置了故事并选择了角色
-  if (activeCharId && storySettings) {
-    return <VisualNovelChatPage characterId={activeCharId} storySettings={storySettings} userSpriteUrl={userSpriteUrl} />;
+  if (mode === 'play' && activeCharId) {
+    return (
+      <VisualNovelChatPage
+        key={resumeSave?.id || activeCharId}
+        characterId={activeCharId}
+        storySettings={storySettings || undefined}
+        userSpriteUrl={userSpriteUrl}
+        initialSave={resumeSave}
+      />
+    );
   }
 
-  // 否则显示故事设置页面
-  return <StorySetupPage onStart={handleStartStory} />;
+  if (mode === 'setup') {
+    return <StorySetupPage onStart={handleStartStory} onBack={() => setMode('home')} />;
+  }
+
+  return <VNHomePage onNew={() => setMode('setup')} onResume={handleResume} />;
 };
 
 export default VisualNovelPage;
