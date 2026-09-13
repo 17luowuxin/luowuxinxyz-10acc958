@@ -289,7 +289,7 @@ const StorySetupPage: React.FC<{
       {/* 顶部栏 */}
       <header className="flex items-center justify-between p-4 border-b border-border/50">
         <button
-          onClick={() => navigate('/games')}
+          onClick={() => (onBack ? onBack() : navigate('/games'))}
           className="w-10 h-10 rounded-xl bg-muted/80 flex items-center justify-center hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
