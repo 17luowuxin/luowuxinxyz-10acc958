@@ -657,13 +657,8 @@ const SpacePage: React.FC = () => {
     }
     
     try {
-      let prepareImagePrompts: boolean | undefined;
-      if (localMode && user?.id) {
-        const localApiRows = await getLocalTable(user.id, 'api_keys');
-        prepareImagePrompts = localApiRows.some(
-          (row) => row.provider === 'space_image_enabled' && row.api_key === 'true',
-        );
-      }
+      // 始终让角色给动态附上配图提示词，由用户决定是否点击生成
+      const prepareImagePrompts = true;
       for (const char of selectedChars) {
         const { data, error } = await supabase.functions.invoke('generate-moment', {
           body: { 
