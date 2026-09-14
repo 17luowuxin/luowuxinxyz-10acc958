@@ -1814,6 +1814,14 @@ const ChatPage: React.FC = () => {
     }
 
     if (genderGuard) cnParts.push(genderGuard);
+
+    // 角色编辑里选择的画风
+    const styleId = charImageConfig.artStyle?.trim();
+    if (styleId) {
+      const preset = ART_STYLE_PRESETS.find(s => s.id === styleId);
+      cnParts.push(preset ? `${preset.name}，${preset.prompt}` : styleId);
+    }
+
     const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
     return { should: true, prompt };
   };
