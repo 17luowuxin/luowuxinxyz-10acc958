@@ -27,6 +27,7 @@ import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hook
 import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
 import { parseStickerImport } from '@/utils/stickerImport';
 import { PendingImageContext, buildPendingImageContent, parsePendingImagePrompt } from '@/lib/pendingChatImage';
+import { ART_STYLE_PRESETS, EMPTY_CHARACTER_IMAGE_CONFIG, loadCharacterImageConfig, type CharacterImageConfig } from '@/lib/characterImageConfig';
 import {
   deleteLocalRows,
   getLocalTable,
@@ -332,6 +333,8 @@ const ChatPage: React.FC = () => {
     stylePrompt?: string;
   } | null>(null);
 
+  const [charImageConfig, setCharImageConfig] = useState<CharacterImageConfig>(EMPTY_CHARACTER_IMAGE_CONFIG);
+
   const [generatingImage, setGeneratingImage] = useState(false);
   const [pendingImageIds, setPendingImageIds] = useState<Array<string | number>>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -497,6 +500,7 @@ const ChatPage: React.FC = () => {
       : (await supabase.from('characters').select('*').eq('id', characterId).single()).data;
     if (data) {
       console.log('[fetchCharacter] loaded:', data.name, 'ringtone_url:', data.ringtone_url);
+      loadCharacterImageConfig(user.id, characterId).then(setCharImageConfig).catch(() => {});
       setCharacter(data);
       if (data.reply_mode) {
         setReplyMode(data.reply_mode as 'novel' | 'online');
@@ -1702,8 +1706,8 @@ const ChatPage: React.FC = () => {
     const hasTwoPeople = /(两个人|我们俩|咱俩|你我|和你|跟你|一起|couple|together)/.test(userInput + reply);
     const isWhatDoingRequest = isWhatDoingTrigger;
 
-    // 从最近对话中提取场景描述（用户消息+AI回复），过滤掉图片消息
-    const recentDialogue = messages.slice(-10).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
+    // 只取最近一两条对话，保证每次配图提示词跟随当前剧情变化
+    const recentDialogue = messages.slice(-2).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
     const dialogueContext: string[] = [];
     
     for (const msg of recentDialogue) {
@@ -1734,8 +1738,10 @@ const ChatPage: React.FC = () => {
     }
     cnParts.push(genderDesc);
 
-    // 从角色人设提取外貌特征（中文）
-    if (character?.persona) {
+    // 角色编辑里填写的形象描述优先
+    if (charImageConfig.appearance?.trim()) {
+      cnParts.push(charImageConfig.appearance.trim());
+    } else if (character?.persona) {
       const cnAppearancePatterns = [
         /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/g,
         /(?:头发|发色|眼睛|眼色|瞳色|发型)[：:]?\s*([^，。\n]+)/g,
@@ -1748,8 +1754,11 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 从用户意图和对话中提取场景（保留中文）
-    for (const detail of [...new Set(dialogueContext)].slice(0, 8)) {
+    // 当前这一轮剧情的场景细节优先（保证每次提示词都不一样）
+    for (const detail of extractSceneDetails(reply).slice(0, 8)) {
+      cnParts.push(detail);
+    }
+    for (const detail of [...new Set(dialogueContext)].slice(0, 4)) {
       cnParts.push(detail);
     }
 
@@ -1806,6 +1815,14 @@ const ChatPage: React.FC = () => {
     }
 
     if (genderGuard) cnParts.push(genderGuard);
+
+    // 角色编辑里选择的画风
+    const styleId = charImageConfig.artStyle?.trim();
+    if (styleId) {
+      const preset = ART_STYLE_PRESETS.find(s => s.id === styleId);
+      cnParts.push(preset ? `${preset.name}，${preset.prompt}` : styleId);
+    }
+
     const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
     return { should: true, prompt };
   };

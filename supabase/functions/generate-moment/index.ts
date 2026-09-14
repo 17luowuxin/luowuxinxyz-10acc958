@@ -605,7 +605,7 @@ ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
       const charConfig = await getCharacterImageConfig(userId, character?.id || '');
       const spaceImageConfig = await getSpaceImageConfig(userId);
-      if (prepareImagePrompts === true || spaceImageConfig) {
+      if (prepareImagePrompts !== false) {
         const persona = character?.persona || '';
         const maleHits = (persona.match(/男生|男性|男孩|男孩纸|boy|male|先生|王子|哥哥|弟弟|少年|青年|性别男|男角色/gi) || []).length;
         const femaleHits = (persona.match(/女生|女性|女孩|girl|female|小姐|公主|姐姐|妹妹|少女|性别女|女角色/gi) || []).length;
