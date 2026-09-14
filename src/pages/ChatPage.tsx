@@ -500,6 +500,7 @@ const ChatPage: React.FC = () => {
       : (await supabase.from('characters').select('*').eq('id', characterId).single()).data;
     if (data) {
       console.log('[fetchCharacter] loaded:', data.name, 'ringtone_url:', data.ringtone_url);
+      loadCharacterImageConfig(user.id, characterId).then(setCharImageConfig).catch(() => {});
       setCharacter(data);
       if (data.reply_mode) {
         setReplyMode(data.reply_mode as 'novel' | 'online');

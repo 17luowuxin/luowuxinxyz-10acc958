@@ -237,7 +237,7 @@ const FinancePage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {transactions.map((tx, index) => (
+              {transactions.filter(t => t.is_received).map((tx, index) => (
                 <motion.div
                   key={tx.id}
                   initial={{ opacity: 0, y: 10 }}
