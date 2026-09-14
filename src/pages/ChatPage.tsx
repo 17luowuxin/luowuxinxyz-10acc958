@@ -27,6 +27,7 @@ import { useMessagesCache, useCustomizationCache, useProfileCache } from '@/hook
 import { exportSingleCharacter, downloadExportFile } from '@/utils/dataMigration';
 import { parseStickerImport } from '@/utils/stickerImport';
 import { PendingImageContext, buildPendingImageContent, parsePendingImagePrompt } from '@/lib/pendingChatImage';
+import { ART_STYLE_PRESETS, EMPTY_CHARACTER_IMAGE_CONFIG, loadCharacterImageConfig, type CharacterImageConfig } from '@/lib/characterImageConfig';
 import {
   deleteLocalRows,
   getLocalTable,
@@ -331,6 +332,8 @@ const ChatPage: React.FC = () => {
     size?: string;
     stylePrompt?: string;
   } | null>(null);
+
+  const [charImageConfig, setCharImageConfig] = useState<CharacterImageConfig>(EMPTY_CHARACTER_IMAGE_CONFIG);
 
   const [generatingImage, setGeneratingImage] = useState(false);
   const [pendingImageIds, setPendingImageIds] = useState<Array<string | number>>([]);
