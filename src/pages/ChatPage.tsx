@@ -1705,8 +1705,8 @@ const ChatPage: React.FC = () => {
     const hasTwoPeople = /(两个人|我们俩|咱俩|你我|和你|跟你|一起|couple|together)/.test(userInput + reply);
     const isWhatDoingRequest = isWhatDoingTrigger;
 
-    // 从最近对话中提取场景描述（用户消息+AI回复），过滤掉图片消息
-    const recentDialogue = messages.slice(-10).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
+    // 只取最近一两条对话，保证每次配图提示词跟随当前剧情变化
+    const recentDialogue = messages.slice(-2).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
     const dialogueContext: string[] = [];
     
     for (const msg of recentDialogue) {
