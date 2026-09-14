@@ -1737,8 +1737,10 @@ const ChatPage: React.FC = () => {
     }
     cnParts.push(genderDesc);
 
-    // 从角色人设提取外貌特征（中文）
-    if (character?.persona) {
+    // 角色编辑里填写的形象描述优先
+    if (charImageConfig.appearance?.trim()) {
+      cnParts.push(charImageConfig.appearance.trim());
+    } else if (character?.persona) {
       const cnAppearancePatterns = [
         /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/g,
         /(?:头发|发色|眼睛|眼色|瞳色|发型)[：:]?\s*([^，。\n]+)/g,
@@ -1751,8 +1753,11 @@ const ChatPage: React.FC = () => {
       }
     }
 
-    // 从用户意图和对话中提取场景（保留中文）
-    for (const detail of [...new Set(dialogueContext)].slice(0, 8)) {
+    // 当前这一轮剧情的场景细节优先（保证每次提示词都不一样）
+    for (const detail of extractSceneDetails(reply).slice(0, 8)) {
+      cnParts.push(detail);
+    }
+    for (const detail of [...new Set(dialogueContext)].slice(0, 4)) {
       cnParts.push(detail);
     }
 
