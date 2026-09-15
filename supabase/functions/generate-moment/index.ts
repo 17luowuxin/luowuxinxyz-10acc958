@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildCharacterContext } from "../_shared/character-context.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -489,10 +490,18 @@ serve(async (req) => {
     const userPersona = userProfile?.persona || '';
 
     let prompt = "";
-    
+
+    // 跨场景记忆同步：私聊 / 群聊 / 朋友圈 共用一份记忆
+    const crossContext = character?.id
+      ? await buildCharacterContext(supabase, userId, character.id, { momentLimit: 4, chatLimit: 14 })
+      : '';
+
     if (type === "moment") {
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
+${crossContext}
+【严格要求】你就是${character.name}本人，必须完全按照上面的人设说话做事，不能脱离设定（不要OOC），不要出现AI助手式的口吻。
+
 
 请以这个角色的身份发布一条朋友圈动态。内容可以是：
 - 分享今天的心情
@@ -556,7 +565,8 @@ ${conversationContext}
 
 【最新一条评论】${userName}: ${userPost}
 
-请以你的角色身份回复这条最新评论。要求：
+${crossContext}
+请以你的角色身份回复这条最新评论（你就是本人，严格按人设，不要OOC）。要求：
 - 符合你的角色性格和说话方式
 - 回复要针对最新评论的具体内容${imageDescriptions ? '，可以评论图片内容' : ''}
 - 如果有之前的对话，请接着上文自然回复，不要重复之前说过的话
@@ -573,7 +583,8 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 你的好友在留言板给你留言："${userPost}"
 ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
-请以你的角色身份回复这条留言。要求：
+${crossContext}
+请以你的角色身份回复这条留言（你就是本人，严格按人设，不要OOC）。要求：
 - 符合你的角色性格和说话方式
 - 亲切自然，像好朋友聊天
 - 偶尔叫"${shortName}"或用亲昵称呼

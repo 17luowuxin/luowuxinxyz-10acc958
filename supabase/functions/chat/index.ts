@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildCharacterContext } from "../_shared/character-context.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -295,6 +296,17 @@ serve(async (req) => {
         memoryContent += advancedMemory;
         console.log('Advanced memory loaded:', extractedMemories?.length || 0, 'memories,', summaries?.length || 0, 'summaries');
       }
+
+      // 跨场景记忆同步：把朋友圈和群聊里发生过的事也带进私聊
+      const crossSceneContext = await buildCharacterContext(supabase, userId, characterId, {
+        includeMemories: false,
+        includeChat: false,
+        momentLimit: 5,
+        groupLimit: 8,
+      });
+      if (crossSceneContext) memoryContent += crossSceneContext;
+
+      
       
       // 检查最近的拉黑历史（检查最近30分钟内是否有取消拉黑的记录）
       const { data: blockHistory } = await supabase

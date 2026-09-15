@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildCharacterContext } from "../_shared/character-context.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -298,6 +299,13 @@ serve(async (req) => {
 
     const responses: { characterId: string; characterName: string; content: string }[] = [];
 
+    // 跨场景记忆同步（私聊 / 朋友圈 / 群聊）
+    const extMemUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const extMemKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    const memDb = (extMemUrl && extMemKey)
+      ? createClient(extMemUrl, extMemKey)
+      : createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
     for (const character of responders) {
       const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
       
@@ -305,6 +313,8 @@ serve(async (req) => {
       const triggerCharacter = triggerCharacterId ? characters.find((c: any) => c.id === triggerCharacterId) : null;
       const triggerName = triggerCharacter?.name || userName;
       
+      const crossContext = await buildCharacterContext(memDb, userId, character.id, { groupLimit: 8 });
+
       const systemPrompt = `你正在模拟微信群聊中的角色"${character.name}"。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
@@ -328,7 +338,8 @@ ${isCharacterToCharacter ? `7. 你现在是在回复"${triggerName}"说的话，
 ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
 
 正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"
-错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"`;
+错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"
+${crossContext}`;
 
       try {
         let content = await getAICompletion(

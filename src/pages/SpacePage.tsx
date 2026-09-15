@@ -677,10 +677,12 @@ const SpacePage: React.FC = () => {
         if (error) throw error;
 
         const imagePrompts = normalizeMomentImagePrompts(
-          (data.imagePrompts ?? []).slice(0, 3).map((prompt: string) => ({
-            id: crypto.randomUUID(),
-            prompt,
-          })),
+          (Array.isArray(data?.imagePrompts) ? data.imagePrompts : [])
+            .slice(0, 3)
+            .map((item: unknown) => ({
+              id: crypto.randomUUID(),
+              prompt: typeof item === 'string' ? item : (item as { prompt?: string })?.prompt,
+            })),
         );
 
         // 只保存配图提示词，不在发布动态时自动调用图片 API

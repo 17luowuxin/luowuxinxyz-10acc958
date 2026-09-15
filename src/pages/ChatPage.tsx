@@ -1704,23 +1704,17 @@ const ChatPage: React.FC = () => {
     if (!userRequestsImage) return { should: false, prompt: '' };
 
     const hasTwoPeople = /(两个人|我们俩|咱俩|你我|和你|跟你|一起|couple|together)/.test(userInput + reply);
-    const isWhatDoingRequest = isWhatDoingTrigger;
 
-    // 只取最近一两条对话，保证每次配图提示词跟随当前剧情变化
-    const recentDialogue = messages.slice(-2).filter(m => !m.image_url && !m.content?.includes('给你发了一张图片'));
-    const dialogueContext: string[] = [];
-    
-    for (const msg of recentDialogue) {
-      // 跳过系统性消息
-      if (msg.content?.startsWith('*给你发了') || msg.content?.startsWith('[TRANSFER')) continue;
-      const sceneFromMsg = extractSceneDetails(msg.content);
-      dialogueContext.push(...sceneFromMsg);
-    }
-    
-    // ===== 即梦/统一图片API：使用中文自然语言提示词 =====
     const cnParts: string[] = [];
 
-    // 性别/角色描述 - 从人设提取
+    // 1) 画风（角色编辑里选的）
+    const styleId = charImageConfig.artStyle?.trim();
+    if (styleId) {
+      const preset = ART_STYLE_PRESETS.find(s => s.id === styleId);
+      cnParts.push(preset ? `${preset.name}，${preset.prompt}` : styleId);
+    }
+
+    // 2) 人物主体与性别（严格按人设，避免画错性别）
     let genderDesc = '一个人';
     let genderGuard = '';
     if (hasTwoPeople) {
@@ -1738,90 +1732,39 @@ const ChatPage: React.FC = () => {
     }
     cnParts.push(genderDesc);
 
-    // 角色编辑里填写的形象描述优先
+    // 3) 角色形象（角色编辑里写的外貌优先，其次从人设里提取）
     if (charImageConfig.appearance?.trim()) {
       cnParts.push(charImageConfig.appearance.trim());
     } else if (character?.persona) {
-      const cnAppearancePatterns = [
-        /(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/g,
-        /(?:头发|发色|眼睛|眼色|瞳色|发型)[：:]?\s*([^，。\n]+)/g,
-      ];
-      for (const pattern of cnAppearancePatterns) {
-        const matches = character.persona.matchAll(pattern);
-        for (const m of matches) {
-          if (m[1]) cnParts.push(m[1].trim());
-        }
-      }
+      const appearanceMatch = character.persona.match(/(?:外貌|外观|样貌|长相|形象|特征)[：:]\s*([^。\n]+)/);
+      if (appearanceMatch?.[1]) cnParts.push(appearanceMatch[1].trim());
     }
-
-    // 当前这一轮剧情的场景细节优先（保证每次提示词都不一样）
-    for (const detail of extractSceneDetails(reply).slice(0, 8)) {
-      cnParts.push(detail);
-    }
-    for (const detail of [...new Set(dialogueContext)].slice(0, 4)) {
-      cnParts.push(detail);
-    }
-
-    // 用户的意图关键词（中文版）
-    const cnActionMap: Record<string, string> = {
-      '在干嘛': '正在做事', '躺': '躺着', '坐': '坐着', '站': '站着',
-      '跑': '跑步', '走': '走路', '游泳': '游泳', '洗澡': '洗澡',
-      '睡觉': '睡觉', '吃': '吃东西', '喝': '喝东西', '抱': '拥抱',
-      '看书': '看书', '听音乐': '听音乐', '玩手机': '玩手机',
-      '做饭': '做饭', '化妆': '化妆', '工作': '工作', '学习': '学习',
-      '健身': '健身', '发呆': '发呆', '想你': '思念', '等你': '等待',
-    };
-    for (const [zh, cn] of Object.entries(cnActionMap)) {
-      if (userInput.includes(zh) || reply.includes(zh)) {
-        cnParts.push(cn);
-      }
-    }
-
-    // 构图类型（中文）
-    if (/(全身|站着|站立)/.test(userInput)) cnParts.push('全身');
-    else if (/(半身|上半身)/.test(userInput)) cnParts.push('半身');
-    else if (/(特写|脸)/.test(userInput)) cnParts.push('面部特写');
-
-    // 从"看看你在干嘛"请求提取AI回复中的动作
-    if (isWhatDoingRequest && reply) {
-      const actionPatterns = [
-        /我?(?:正在|在|刚|刚刚)([^，。！？\n]{2,20})/g,
-        /(?:现在|此刻|这会儿)([^，。！？\n]{2,20})/g,
-        /(?:躺在|坐在|站在|趴在|靠在|窝在)([^，。！？\n]{2,15})/g,
-        /(?:穿着|身穿|身着|换上了?)([^，。！？\n]{2,15})/g,
-      ];
-      for (const pattern of actionPatterns) {
-        const matches = reply.matchAll(pattern);
-        for (const m of matches) {
-          if (m[1]) cnParts.push(m[1].trim());
-        }
-      }
-    }
-
-    // 用户显式描述
-    if (userRequestsImage && userInput && !alwaysTrigger) {
-      const cleaned = userInput
-        .replace(/^\s*(\/draw|\/pic|\/image)\b/i, '')
-        .replace(/(画|发|来|给|要|想看|看|拍|秀|展示|出|生成).{0,6}(图|图片|照片|自拍|一下|你|出来)/g, '')
-        .replace(/(全身|半身|特写|脸|风景|场景|两个人|我们俩)/g, '')
-        .trim();
-      if (cleaned && cleaned.length > 1) cnParts.push(cleaned);
-    }
-
-    // 从AI回复提取场景描述
-    const sceneDetails = extractSceneDetails(reply);
-    if (sceneDetails.length > 0) {
-      cnParts.push(...sceneDetails.slice(0, 6));
-    }
-
     if (genderGuard) cnParts.push(genderGuard);
 
-    // 角色编辑里选择的画风
-    const styleId = charImageConfig.artStyle?.trim();
-    if (styleId) {
-      const preset = ART_STYLE_PRESETS.find(s => s.id === styleId);
-      cnParts.push(preset ? `${preset.name}，${preset.prompt}` : styleId);
-    }
+    // 4) 当前这一轮剧情才是画面主体：用角色这条回复的原文当场景描述
+    const cleanScene = (text: string) =>
+      (text || '')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/(https?:\/\/\S+)/g, ' ')
+        .replace(/[*#`>~]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const replyScene = cleanScene(reply).slice(0, 160);
+    if (replyScene) cnParts.push(`画面内容：${replyScene}`);
+
+    // 5) 上一条用户消息作为补充语境，保证每次提示词都跟着剧情变化
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.image_url);
+    const userScene = cleanScene(userInput || lastUserMsg?.content || '')
+      .replace(/^\s*(\/draw|\/pic|\/image|\/img)\b/i, '')
+      .slice(0, 80);
+    if (userScene) cnParts.push(`用户说：${userScene}`);
+
+    // 6) 构图
+    if (/(全身|站着|站立)/.test(userInput)) cnParts.push('全身构图');
+    else if (/(半身|上半身)/.test(userInput)) cnParts.push('半身构图');
+    else if (/(特写|脸)/.test(userInput)) cnParts.push('面部特写');
+    else if (/(自拍|看看你|你的样子)/.test(userInput)) cnParts.push('手机自拍视角');
 
     const prompt = [...new Set(cnParts)].filter(p => p.trim()).join('，');
     return { should: true, prompt };
