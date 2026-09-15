@@ -490,10 +490,18 @@ serve(async (req) => {
     const userPersona = userProfile?.persona || '';
 
     let prompt = "";
-    
+
+    // 跨场景记忆同步：私聊 / 群聊 / 朋友圈 共用一份记忆
+    const crossContext = character?.id
+      ? await buildCharacterContext(supabase, userId, character.id, { momentLimit: 4, chatLimit: 14 })
+      : '';
+
     if (type === "moment") {
       prompt = `你是一个名叫"${character.name}"的虚拟角色。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
+${crossContext}
+【严格要求】你就是${character.name}本人，必须完全按照上面的人设说话做事，不能脱离设定（不要OOC），不要出现AI助手式的口吻。
+
 
 请以这个角色的身份发布一条朋友圈动态。内容可以是：
 - 分享今天的心情
