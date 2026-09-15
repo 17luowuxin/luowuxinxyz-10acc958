@@ -565,7 +565,8 @@ ${conversationContext}
 
 【最新一条评论】${userName}: ${userPost}
 
-请以你的角色身份回复这条最新评论。要求：
+${crossContext}
+请以你的角色身份回复这条最新评论（你就是本人，严格按人设，不要OOC）。要求：
 - 符合你的角色性格和说话方式
 - 回复要针对最新评论的具体内容${imageDescriptions ? '，可以评论图片内容' : ''}
 - 如果有之前的对话，请接着上文自然回复，不要重复之前说过的话
@@ -582,7 +583,8 @@ ${character.persona ? `你的人设是: ${character.persona}` : ''}
 你的好友在留言板给你留言："${userPost}"
 ${userPersona ? `关于这位好友: ${userPersona}` : ''}
 
-请以你的角色身份回复这条留言。要求：
+${crossContext}
+请以你的角色身份回复这条留言（你就是本人，严格按人设，不要OOC）。要求：
 - 符合你的角色性格和说话方式
 - 亲切自然，像好朋友聊天
 - 偶尔叫"${shortName}"或用亲昵称呼
