@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildCharacterContext } from "../_shared/character-context.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -297,6 +298,13 @@ serve(async (req) => {
     }
 
     const responses: { characterId: string; characterName: string; content: string }[] = [];
+
+    // 跨场景记忆同步（私聊 / 朋友圈 / 群聊）
+    const extMemUrl = Deno.env.get('EXTERNAL_SUPABASE_URL');
+    const extMemKey = Deno.env.get('EXTERNAL_SUPABASE_SERVICE_ROLE_KEY');
+    const memDb = (extMemUrl && extMemKey)
+      ? createClient(extMemUrl, extMemKey)
+      : createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
     for (const character of responders) {
       const otherCharacters = characters.filter((c: any) => c.id !== character.id).map((c: any) => c.name).join('、');
