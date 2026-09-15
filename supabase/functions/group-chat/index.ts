@@ -313,6 +313,8 @@ serve(async (req) => {
       const triggerCharacter = triggerCharacterId ? characters.find((c: any) => c.id === triggerCharacterId) : null;
       const triggerName = triggerCharacter?.name || userName;
       
+      const crossContext = await buildCharacterContext(memDb, userId, character.id, { groupLimit: 8 });
+
       const systemPrompt = `你正在模拟微信群聊中的角色"${character.name}"。
 ${character.persona ? `你的人设是: ${character.persona}` : ''}
 
@@ -336,7 +338,8 @@ ${isCharacterToCharacter ? `7. 你现在是在回复"${triggerName}"说的话，
 ${userPersona ? `关于用户${userName}: ${userPersona}` : ''}
 
 正确示例: "哈哈今天心情不错呀~" 或 "(笑) 你怎么突然问这个"
-错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"`;
+错误示例: "小明: 你好 小红: 我也好" 或 "1. 内容"
+${crossContext}`;
 
       try {
         let content = await getAICompletion(
