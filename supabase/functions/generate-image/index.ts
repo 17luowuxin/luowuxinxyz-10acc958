@@ -178,7 +178,7 @@ async function generateImage(prompt: string, config: ImageConfig, size?: string)
         n: 1,
       }),
     },
-    50_000,
+    110_000,
   );
 
   if (!response.ok) {
@@ -197,7 +197,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt } = body;
+    const { prompt, userId, testMode, apiKey, apiUrl, model, size, stylePrompt, referenceImage } = body;
     const auth = await requireUser(req, userId);
     if (!auth.ok) return authErrorResponse(auth, corsHeaders);
     
@@ -243,7 +243,17 @@ serve(async (req) => {
   console.log(`[text2img] request size: ${size || 'default'}`);
     
     const finalSize = size || config.imageSize || '1024x1024';
-    const result = await generateImage(finalPrompt, config, finalSize);
+    let result: { url?: string; b64?: string };
+    if (typeof referenceImage === 'string' && referenceImage.trim()) {
+      try {
+        result = await editImage(finalPrompt, config, referenceImage.trim(), finalSize);
+      } catch (refError) {
+        console.error('Reference image generation failed, fallback to text2img:', refError);
+        result = await generateImage(finalPrompt, config, finalSize);
+      }
+    } else {
+      result = await generateImage(finalPrompt, config, finalSize);
+    }
     
     const imageUrl = result.url || (result.b64 ? `data:image/png;base64,${result.b64}` : null);
     
