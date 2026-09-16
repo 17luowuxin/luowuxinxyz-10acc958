@@ -67,6 +67,11 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('图片生成超时，请稍后再试或换一个更快的模型');
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -77,6 +82,64 @@ function buildImagesEndpoint(baseUrl: string): string {
   url = url.replace(/\/images\/(generations|edits)\b/, '/images/generations');
   if (url.includes('/images/generations')) return url;
   return `${url}/images/generations`;
+}
+
+function buildEditsEndpoint(baseUrl: string): string {
+  return buildImagesEndpoint(baseUrl).replace(/\/images\/generations$/, '/images/edits');
+}
+
+async function referenceImageToBlob(reference: string): Promise<Blob | null> {
+  try {
+    if (reference.startsWith('data:')) {
+      const [meta, b64] = reference.split(',');
+      const mime = meta.match(/data:([^;]+)/)?.[1] || 'image/png';
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      return new Blob([bytes], { type: mime });
+    }
+    if (/^https?:\/\//.test(reference)) {
+      const res = await fetchWithTimeout(reference, {}, 20_000);
+      if (!res.ok) return null;
+      const buf = await res.arrayBuffer();
+      return new Blob([buf], { type: res.headers.get('content-type') || 'image/png' });
+    }
+  } catch (err) {
+    console.error('reference image load failed:', err);
+  }
+  return null;
+}
+
+// 垫图（参考图）→ 图生图
+async function editImage(
+  prompt: string,
+  config: ImageConfig,
+  referenceImage: string,
+  size?: string,
+): Promise<{ url?: string; b64?: string }> {
+  const blob = await referenceImageToBlob(referenceImage);
+  if (!blob) throw new Error('参考图读取失败');
+
+  const form = new FormData();
+  form.append('model', config.model || 'gpt-image-1');
+  form.append('prompt', prompt);
+  form.append('image', blob, 'reference.png');
+  if (size) form.append('size', size);
+  form.append('n', '1');
+
+  const apiUrl = buildEditsEndpoint(config.apiUrl);
+  console.log('img2img URL:', apiUrl, 'model:', config.model || 'default');
+
+  const response = await fetchWithTimeout(
+    apiUrl,
+    { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form },
+    110_000,
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`垫图生成失败: ${response.status} - ${errorText.slice(0, 120)}`);
+  }
+
+  return await parseImageApiResponse(response);
 }
 
 async function parseImageApiResponse(response: Response): Promise<{ url?: string; b64?: string }> {
