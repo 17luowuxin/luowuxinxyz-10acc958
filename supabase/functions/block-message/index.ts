@@ -65,19 +65,7 @@ const resolveApiConfig = (apiUrl?: string, apiKey?: string, model?: string) => {
   let finalApiKey = apiKey;
   let finalModel = model || 'deepseek-chat';
 
-  if (!finalApiKey) {
-    finalApiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY") || Deno.env.get("DEFAULT_TENSDAQ_API_KEY");
-    if (!finalApiKey) {
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-      if (lovableKey) {
-        finalApiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-        finalApiKey = lovableKey;
-        finalModel = 'google/gemini-2.5-flash';
-      }
-    }
-  }
-
-  if (!finalApiKey) throw new Error('No API key available');
+  if (!finalApiKey) throw new Error('请先在设置中配置API密钥');
   finalApiUrl = normalizeChatCompletionsUrl(finalApiUrl);
 
   return { finalApiUrl, finalApiKey, finalModel };

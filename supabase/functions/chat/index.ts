@@ -359,7 +359,6 @@ serve(async (req) => {
     };
     
     // Check user's API settings from database
-    let useDefaultApi = false;
     let hasCustomApiConfig = false;
     let savedCustomKey = '';
     let savedBaseUrl = '';
@@ -387,16 +386,12 @@ serve(async (req) => {
         .eq('user_id', userId);
       
       if (apiSettings) {
-        const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
         const customKeySetting = apiSettings.find(s => s.provider === 'custom');
         const baseUrlSetting = apiSettings.find(s => s.provider === 'custom_base_url');
         const modelSetting = apiSettings.find(s => s.provider === 'custom_model');
         const historyLimitSetting = apiSettings.find(s => s.provider === 'history_limit');
         const timeSyncSetting = apiSettings.find(s => s.provider === 'time_sync_enabled');
         
-        if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
-          useDefaultApi = true;
-        }
         if (customKeySetting) {
           savedCustomKey = customKeySetting.api_key;
           hasCustomApiConfig = true;
