@@ -359,7 +359,6 @@ serve(async (req) => {
     };
     
     // Check user's API settings from database
-    let useDefaultApi = false;
     let hasCustomApiConfig = false;
     let savedCustomKey = '';
     let savedBaseUrl = '';
@@ -387,16 +386,12 @@ serve(async (req) => {
         .eq('user_id', userId);
       
       if (apiSettings) {
-        const defaultApiSetting = apiSettings.find(s => s.provider === 'use_default_api');
         const customKeySetting = apiSettings.find(s => s.provider === 'custom');
         const baseUrlSetting = apiSettings.find(s => s.provider === 'custom_base_url');
         const modelSetting = apiSettings.find(s => s.provider === 'custom_model');
         const historyLimitSetting = apiSettings.find(s => s.provider === 'history_limit');
         const timeSyncSetting = apiSettings.find(s => s.provider === 'time_sync_enabled');
         
-        if (defaultApiSetting && defaultApiSetting.api_key === 'true') {
-          useDefaultApi = true;
-        }
         if (customKeySetting) {
           savedCustomKey = customKeySetting.api_key;
           hasCustomApiConfig = true;
@@ -430,7 +425,7 @@ serve(async (req) => {
     // 优先级：用户自定义API > 默认API（仅当用户明确选择时）
     // 如果用户配置了自定义API，必须使用用户的，不自动fallback
     
-    if (hasCustomApiConfig && !useDefaultApi) {
+    if (hasCustomApiConfig) {
       // 用户配置了自定义API且没有选择使用默认API，使用用户的配置
       const finalApiKey = userApiKey || savedCustomKey;
       const finalBaseUrl = baseUrl || savedBaseUrl;
@@ -463,21 +458,6 @@ serve(async (req) => {
       console.log("Using user's custom API:", apiUrl);
       console.log("Model:", model);
       
-    } else if (useDefaultApi) {
-      // 用户明确选择使用默认API
-      apiKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
-      if (apiKey) {
-        apiUrl = "https://api.deepseek.com/v1/chat/completions";
-        model = "deepseek-chat";
-        headers["Authorization"] = `Bearer ${apiKey}`;
-        console.log("Using default DeepSeek API (user selected)");
-      } else {
-        // 默认API不可用时提示用户
-        return new Response(JSON.stringify({ error: "默认API暂不可用，请配置自定义API" }), {
-          status: 503,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
     } else if (userApiKey && provider) {
       // 前端传来的临时配置
       if (provider === 'deepseek') {
