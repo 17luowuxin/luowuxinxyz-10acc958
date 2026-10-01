@@ -75,11 +75,8 @@ async function checkDefaultApiSetting(userId: string): Promise<{ useDefault: boo
   let useDefault = false;
   let defaultModel = 'deepseek-chat';
   
-  if (settings) {
-    if (settings.get('use_default_api') === 'true') useDefault = true;
-    const dm = settings.get('default_model');
-    if (dm) defaultModel = dm;
-  }
+  // 默认API已移除，始终使用自定义API
+  void settings;
   return { useDefault, defaultModel };
 }
 
@@ -153,16 +150,6 @@ async function getAICompletion(
     headers['Authorization'] = `Bearer ${config.apiKey}`;
     model = 'gpt-4o-mini';
     console.log('Using OpenAI API');
-  } else if (config.useDefaultApi) {
-    const defaultKey = Deno.env.get("DEFAULT_DEEPSEEK_API_KEY");
-    if (defaultKey) {
-      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
-      headers['Authorization'] = `Bearer ${defaultKey}`;
-      model = 'deepseek-chat';
-      console.log('Using default DeepSeek API');
-    } else {
-      throw new Error("默认API暂不可用，请配置自定义API");
-    }
   } else {
     throw new Error("请先在设置中配置API密钥");
   }
