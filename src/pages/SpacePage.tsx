@@ -34,6 +34,7 @@ interface MomentImagePrompt {
   id: string;
   prompt: string;
   imageUrl?: string;
+  useReference?: boolean;
 }
 
 interface Moment {
@@ -61,12 +62,13 @@ const normalizeMomentImagePrompts = (value: unknown): MomentImagePrompt[] => {
       return [{ id: `prompt-${index}-${item.slice(0, 12)}`, prompt: item.trim() }];
     }
     if (item && typeof item === 'object') {
-      const record = item as { id?: unknown; prompt?: unknown; imageUrl?: unknown };
+      const record = item as { id?: unknown; prompt?: unknown; imageUrl?: unknown; useReference?: unknown; kind?: unknown };
       if (typeof record.prompt !== 'string' || !record.prompt.trim()) return [];
       return [{
         id: typeof record.id === 'string' ? record.id : `prompt-${index}-${record.prompt.slice(0, 12)}`,
         prompt: record.prompt.trim(),
         imageUrl: typeof record.imageUrl === 'string' && record.imageUrl ? record.imageUrl : undefined,
+        useReference: record.useReference === true || record.kind === 'selfie',
       }];
     }
     return [];
@@ -1076,9 +1078,15 @@ const SpacePage: React.FC = () => {
     setGeneratingPromptIds((prev) => new Set(prev).add(requestKey));
     try {
       const config = await getSpaceImageRequestConfig();
+      let referenceImage = '';
+      if (promptItem.useReference && moment.character_id) {
+        const { loadCharacterImageConfig } = await import('@/lib/characterImageConfig');
+        referenceImage = (await loadCharacterImageConfig(user.id, moment.character_id)).referenceImage;
+      }
       const { data, error } = await supabase.functions.invoke('generate-image', {
         body: {
           prompt: promptItem.prompt,
+          referenceImage: referenceImage || undefined,
           userId: user.id,
           testMode: true,
           apiKey: config.apiKey,
