@@ -1792,6 +1792,14 @@ const ChatPage: React.FC = () => {
     await deleteSingleMessage(msg);
   };
 
+  // 自拍/有人物的图才带垫图，纯场景图不带
+  const pickChatReference = (prompt: string): string | undefined => {
+    const ref = charImageConfig.referenceImage?.trim();
+    if (!ref) return undefined;
+    if (/无人|没有人物|no people|no person|scenery only/i.test(prompt)) return undefined;
+    return ref;
+  };
+
   const generatePendingChatImage = async (msg: any) => {
     const prompt = parsePendingImagePrompt(msg?.content);
     if (!prompt || !user?.id || !hasUnifiedImageConfig) return;
@@ -1809,6 +1817,7 @@ const ChatPage: React.FC = () => {
           model: unifiedImageConfig?.model,
           size: unifiedImageConfig?.size,
           stylePrompt: unifiedImageConfig?.stylePrompt,
+          referenceImage: pickChatReference(prompt),
         },
       });
       if (error) throw new Error(error.message);
@@ -1834,7 +1843,7 @@ const ChatPage: React.FC = () => {
     onGenerate: (msg: any) => { void generatePendingChatImage(msg); },
     onDiscard: (msg: any) => { void discardPendingChatImage(msg); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [pendingImageIds, unifiedImageConfig, hasUnifiedImageConfig, localMode, user?.id, characterId]);
+  }), [pendingImageIds, charImageConfig, unifiedImageConfig, hasUnifiedImageConfig, localMode, user?.id, characterId]);
 
   const generateChatImage = async (prompt: string) => {
     if (!user?.id) return;
@@ -1856,6 +1865,7 @@ const ChatPage: React.FC = () => {
           model: unifiedImageConfig?.model,
           size: unifiedImageConfig?.size,
           stylePrompt: unifiedImageConfig?.stylePrompt,
+          referenceImage: pickChatReference(prompt),
         },
       });
 
