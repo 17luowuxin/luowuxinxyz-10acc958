@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Zap, Sparkles, Image as ImageIcon, Volume2, Camera, Lock, Brush, Database, Palette } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Key, LogOut, Check, Loader2, Globe, Eye, EyeOff, TestTube, RefreshCw, Sparkles, Image as ImageIcon, Volume2, Camera, Lock, Brush, Database, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1132,7 +1132,6 @@ const SettingsPage: React.FC = () => {
                 保存配置
               </Button>
             </div>
-          )}
         </div>
         )}
         {/* TTS Configuration Card */}
