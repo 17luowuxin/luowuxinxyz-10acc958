@@ -675,7 +675,8 @@ const ChatPage: React.FC = () => {
     
     if (transferData) {
       setPendingTransfers(transferData);
-      transferData.forEach(transfer => {
+      const earliestLoadedMessage = chatData.length ? new Date(chatData[0].created_at).getTime() : -Infinity;
+      transferData.filter(transfer => new Date(transfer.created_at).getTime() >= earliestLoadedMessage).forEach(transfer => {
         allItems.push({
           id: transfer.id,
           role: 'transfer',
@@ -735,9 +736,12 @@ const ChatPage: React.FC = () => {
           timestamp: new Date(String(msg.created_at)).getTime(),
           quotedMessage: null,
         }));
+        const localTransfers = (await getLocalTable(user.id, 'dream_transactions'))
+          .filter((row) => row.character_id === characterId && String(row.created_at) >= String(orderedMessages[0].created_at) && String(row.created_at) < String(oldestMessageTimeRef.current));
         setMessages((prev) => {
           const existingIds = new Set(prev.map((message) => message.id));
-          return [...newMessages.filter((message) => !existingIds.has(message.id)), ...prev];
+          const transferItems = localTransfers.map((transfer) => ({ id: transfer.id, role: 'transfer', content: `[TRANSFER:${transfer.id}:${transfer.amount}:${transfer.message || ''}]`, created_at: transfer.created_at, timestamp: new Date(String(transfer.created_at)).getTime(), transferData: transfer }));
+          return [...newMessages, ...transferItems].filter((message) => !existingIds.has(message.id)).concat(prev).sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime());
         });
         return;
       }
@@ -781,12 +785,16 @@ const ChatPage: React.FC = () => {
         timestamp: new Date(msg.created_at).getTime(),
         quotedMessage: null // 历史消息的引用暂不处理
       }));
+      const { data: olderTransfers } = await supabase.from('dream_transactions').select('*')
+        .eq('user_id', user.id).eq('character_id', characterId)
+        .gte('created_at', orderedMessages[0].created_at).lt('created_at', oldestMessageTimeRef.current);
       
       // 合并到现有消息前面
       setMessages(prev => {
         const existingIds = new Set(prev.map(m => m.id));
-        const filteredNew = newMessages.filter(m => !existingIds.has(m.id));
-        return [...filteredNew, ...prev];
+        const transferItems = (olderTransfers || []).map(transfer => ({ id: transfer.id, role: 'transfer', content: `[TRANSFER:${transfer.id}:${transfer.amount}:${transfer.message || ''}]`, created_at: transfer.created_at, timestamp: new Date(transfer.created_at).getTime(), transferData: transfer }));
+        const filteredNew = [...newMessages, ...transferItems].filter(m => !existingIds.has(m.id));
+        return [...filteredNew, ...prev].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       });
     } catch (error) {
       console.error('Failed to load more messages:', error);
@@ -1742,23 +1750,54 @@ const ChatPage: React.FC = () => {
     if (genderGuard) cnParts.push(genderGuard);
 
     // 4) 当前这一轮剧情才是画面主体：用角色这条回复的原文当场景描述
-    const cleanScene = (text: string) =>
-      (text || '')
-        .replace(/\[[^\]]*\]/g, ' ')
+    // 4) 当前这一轮剧情才是画面主体：优先提取动作与环境，过滤纯对话以防模型在图中画出文字
+    const cleanScene = (text: string) => {
+      if (!text) return '';
+      const descriptors: string[] = [];
+      // 提取 *动作* 或 (动作) 或 [动作]
+      const bracketRegex = /[\[\(\*]([^\]\)\*]{2,})[\]\)\*]/g;
+      let m;
+      while ((m = bracketRegex.exec(text)) !== null) {
+        descriptors.push(m[1].trim());
+      }
+      
+      // 移除括号内容、引号对话、URL及Markdown符号
+      const remaining = text
+        .replace(/[\[\(\*][^\]\)\*]+[\]\)\*]/g, ' ')
+        .replace(/[""「」『』].*?[""「」『』]/g, ' ')
         .replace(/(https?:\/\/\S+)/g, ' ')
         .replace(/[*#`>~]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+      
+      if (remaining.length > 5) descriptors.push(remaining);
+      
+      // 如果提取后为空，则使用基础清理后的原文，但截断以防过长
+      if (descriptors.length === 0) {
+        return text
+          .replace(/(https?:\/\/\S+)/g, ' ')
+          .replace(/[*#`>~\[\]\(\)]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 100);
+      }
+      return descriptors.join(', ').slice(0, 160);
+    };
 
-    const replyScene = cleanScene(reply).slice(0, 160);
-    if (replyScene) cnParts.push(`画面内容：${replyScene}`);
+    const replyScene = cleanScene(reply);
+    if (replyScene) cnParts.push(replyScene);
 
-    // 5) 上一条用户消息作为补充语境，保证每次提示词都跟着剧情变化
+    // 5) 用户消息补充语境，仅保留视觉意义，排除纯画图指令
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user' && !m.image_url);
-    const userScene = cleanScene(userInput || lastUserMsg?.content || '')
-      .replace(/^\s*(\/draw|\/pic|\/image|\/img)\b/i, '')
-      .slice(0, 80);
-    if (userScene) cnParts.push(`用户说：${userScene}`);
+    const rawUserContent = (userInput || lastUserMsg?.content || '').trim();
+    const isPureCommand = /^(画|发|来|看|拍|show|pic|photo|image|draw)/i.test(rawUserContent) && rawUserContent.length < 8;
+    
+    if (!isPureCommand) {
+      const userScene = cleanScene(rawUserContent)
+        .replace(/^\s*(\/draw|\/pic|\/image|\/img)\b/i, '')
+        .slice(0, 80);
+      if (userScene && userScene.length > 2) cnParts.push(userScene);
+    }
 
     // 6) 构图
     if (/(全身|站着|站立)/.test(userInput)) cnParts.push('全身构图');
