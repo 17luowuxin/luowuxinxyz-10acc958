@@ -17,9 +17,6 @@ import {
   upsertLocalRow,
 } from '@/lib/localDataStore';
 
-const DEFAULT_MODELS = [
-  { id: 'deepseek-chat', name: 'DeepSeek', description: '强大的通用对话模型' },
-];
 const REQUEST_TIMEOUT_MS = 15000;
 
 const withTimeout = async <T,>(request: PromiseLike<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
@@ -141,8 +138,6 @@ const SettingsPage: React.FC = () => {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [usingDefaultApi, setUsingDefaultApi] = useState(false);
-  const [defaultModel, setDefaultModel] = useState('deepseek-chat');
   // TTS state
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [ttsBaseUrl, setTtsBaseUrl] = useState('');
@@ -271,16 +266,11 @@ const SettingsPage: React.FC = () => {
       const customKey = latestSetting(data, 'custom');
       const baseUrl = latestSetting(data, 'custom_base_url');
       const model = latestSetting(data, 'custom_model');
-      const useDefault = latestSetting(data, 'use_default_api');
-      const defaultModelSetting = latestSetting(data, 'default_model');
       // 总是加载保存的自定义API配置
       if (!apiFormEditedRef.current) {
         if (customKey) setApiKey(customKey.api_key);
         if (baseUrl) setCustomBaseUrl(baseUrl.api_key);
         if (model) setCustomModel(model.api_key);
-      }
-      if (defaultModelSetting) {
-        setDefaultModel(defaultModelSetting.api_key);
       }
       // TTS settings
       const ttsEnabledSetting = data.find(k => k.provider === 'tts_enabled');
@@ -342,12 +332,7 @@ const SettingsPage: React.FC = () => {
       const timeSyncSetting = data.find(k => k.provider === 'time_sync_enabled');
       if (timeSyncSetting) setTimeSyncEnabled(timeSyncSetting.api_key === 'true');
       
-      // 判断当前使用哪种API
-      if (!apiFormEditedRef.current && useDefault && useDefault.api_key === 'true') {
-        setUsingDefaultApi(true);
-        setIsConfigured(true);
-      } else if (!apiFormEditedRef.current && customKey) {
-        setUsingDefaultApi(false);
+      if (!apiFormEditedRef.current && customKey) {
         setIsConfigured(true);
       }
     }
@@ -454,9 +439,6 @@ const SettingsPage: React.FC = () => {
 
     console.log('[Settings] Saving custom API config');
 
-    // Clear default API flag when saving custom
-    await removeApiKeys(user.id, ['use_default_api']);
-
     const customRows = [
       { user_id: user.id, provider: 'custom', api_key: apiKey.trim() },
       { user_id: user.id, provider: 'custom_base_url', api_key: customBaseUrl.trim() },
@@ -494,7 +476,6 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
-    setUsingDefaultApi(false);
     setIsConfigured(true);
     console.log('[Settings] Custom API config saved successfully');
     toast.success('API配置已保存', { duration: 1500 });
@@ -553,44 +534,6 @@ const SettingsPage: React.FC = () => {
   const selectModel = (model: string) => {
     setCustomModel(model);
     setShowModelDropdown(false);
-  };
-
-  const useDefaultApiHandler = async () => {
-    if (!user) return;
-    markApiEdited(true);
-    
-    const err = await upsertApiKey(user.id, 'use_default_api', 'true');
-    if (err) {
-      toast.error(`切换失败: [${err.code}] ${err.message}`, { duration: 10000 });
-      return;
-    }
-    
-    // Clear custom API settings
-    await removeApiKeys(user.id, ['custom']);
-    
-    setUsingDefaultApi(true);
-    setApiKey('');
-    setIsConfigured(true);
-    toast.success('已切换到默认API');
-  };
-
-  const saveDefaultModel = async (modelId: string) => {
-    if (!user) return;
-    
-    setDefaultModel(modelId);
-    
-    const err = await upsertApiKey(user.id, 'default_model', modelId);
-    if (err) {
-      toast.error(`保存失败: [${err.code}] ${err.message}`, { duration: 10000 });
-      return;
-    }
-    
-    const modelName = DEFAULT_MODELS.find(m => m.id === modelId)?.name || modelId;
-    toast.success(`已切换到 ${modelName}`);
-  };
-  const useCustomApiHandler = () => {
-    markApiEdited();
-    setUsingDefaultApi(false);
   };
 
   // TTS functions
@@ -1064,70 +1007,7 @@ const SettingsPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Default API Button */}
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={useDefaultApiHandler}
-              className={`flex-1 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 transition-all ${
-                usingDefaultApi 
-                  ? 'bg-gradient-to-r from-green-400 to-emerald-400 text-white shadow-lg' 
-                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Zap className="w-4 h-4" />
-              使用默认API
-            </button>
-            <button
-              onClick={useCustomApiHandler}
-              className={`flex-1 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 transition-all ${
-                !usingDefaultApi 
-                  ? 'bg-gradient-to-r from-purple-400 to-pink-400 text-white shadow-lg' 
-                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Key className="w-4 h-4" />
-              自定义API
-            </button>
-          </div>
-
-          {usingDefaultApi ? (
-            <div className="space-y-4">
-              <div className="bg-green-50 rounded-2xl p-4 text-center">
-                <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-                  <Check className="w-5 h-5" />
-                  正在使用默认API
-                </div>
-                <p className="text-sm text-green-500 mt-1">请选择要使用的模型</p>
-              </div>
-              
-              {/* Default Model Selection */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-purple-600 block">选择模型</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {DEFAULT_MODELS.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => saveDefaultModel(model.id)}
-                      className={`p-4 rounded-2xl border-2 transition-all text-left ${
-                        defaultModel === model.id
-                          ? 'border-purple-400 bg-purple-50'
-                          : 'border-gray-200 bg-white hover:border-purple-200'
-                      }`}
-                    >
-                      <div className="font-medium text-gray-800">{model.name}</div>
-                      <div className="text-xs text-gray-500 mt-1">{model.description}</div>
-                      {defaultModel === model.id && (
-                        <div className="flex items-center gap-1 text-xs text-purple-600 mt-2">
-                          <Check className="w-3 h-3" /> 当前使用
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
+          <div className="space-y-4">
               {/* Base URL */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
