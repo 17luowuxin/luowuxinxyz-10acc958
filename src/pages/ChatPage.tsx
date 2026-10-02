@@ -716,10 +716,11 @@ const ChatPage: React.FC = () => {
     setIsLoadingMoreMessages(true);
     
     try {
+      const previousOldestTime = oldestMessageTimeRef.current;
       if (localMode) {
         const allMessages = await getLocalTable(user.id, 'chat_messages');
         const olderMessages = allMessages
-          .filter((row) => row.character_id === characterId && String(row.created_at) < oldestMessageTimeRef.current!)
+          .filter((row) => row.character_id === characterId && String(row.created_at) < previousOldestTime)
           .sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime())
           .slice(0, 20);
 
@@ -737,7 +738,7 @@ const ChatPage: React.FC = () => {
           quotedMessage: null,
         }));
         const localTransfers = (await getLocalTable(user.id, 'dream_transactions'))
-          .filter((row) => row.character_id === characterId && String(row.created_at) >= String(orderedMessages[0].created_at) && String(row.created_at) < String(oldestMessageTimeRef.current));
+          .filter((row) => row.character_id === characterId && String(row.created_at) >= String(orderedMessages[0].created_at) && String(row.created_at) < previousOldestTime);
         setMessages((prev) => {
           const existingIds = new Set(prev.map((message) => message.id));
           const transferItems = localTransfers.map((transfer) => ({ id: transfer.id, role: 'transfer', content: `[TRANSFER:${transfer.id}:${transfer.amount}:${transfer.message || ''}]`, created_at: transfer.created_at, timestamp: new Date(String(transfer.created_at)).getTime(), transferData: transfer }));
@@ -751,7 +752,7 @@ const ChatPage: React.FC = () => {
         .select('id, role, content, created_at, image_url, audio_url, quoted_message_id')
         .eq('character_id', characterId)
         .eq('user_id', user.id)
-        .lt('created_at', oldestMessageTimeRef.current)
+        .lt('created_at', previousOldestTime)
         .order('created_at', { ascending: false })
         .limit(20);
       
@@ -787,7 +788,7 @@ const ChatPage: React.FC = () => {
       }));
       const { data: olderTransfers } = await supabase.from('dream_transactions').select('*')
         .eq('user_id', user.id).eq('character_id', characterId)
-        .gte('created_at', orderedMessages[0].created_at).lt('created_at', oldestMessageTimeRef.current);
+        .gte('created_at', orderedMessages[0].created_at).lt('created_at', previousOldestTime);
       
       // 合并到现有消息前面
       setMessages(prev => {
