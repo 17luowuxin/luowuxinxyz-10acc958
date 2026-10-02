@@ -14,9 +14,9 @@ export const EMPTY_CHARACTER_IMAGE_CONFIG: CharacterImageConfig = {
 };
 
 export const ART_STYLE_PRESETS: Array<{ id: string; name: string; prompt: string }> = [
-  { id: 'anime', name: '日系动漫', prompt: 'anime style, japanese anime illustration, clean lineart, vibrant colors' },
-  { id: 'guofeng', name: '国风古风', prompt: 'chinese ancient style illustration, guofeng, ink wash accents, elegant hanfu' },
-  { id: 'realistic', name: '真人写实', prompt: 'photorealistic, real person photography, natural lighting, 85mm lens' },
+  { id: 'anime', name: '日系动漫', prompt: 'anime style, japanese anime illustration, clean lineart, vibrant colors, no text, no watermark, no speech bubbles' },
+  { id: 'guofeng', name: '国风古风', prompt: 'chinese ancient style illustration, guofeng, ink wash accents, elegant hanfu, no text, no watermark' },
+  { id: 'realistic', name: '真人写实', prompt: 'photorealistic, real person photography, natural lighting, 85mm lens, high quality, masterpiece, no text, no watermark, no speech bubbles' },
   { id: 'jkpainting', name: '厚涂插画', prompt: 'semi-realistic digital painting, thick brush strokes, cinematic lighting' },
   { id: 'watercolor', name: '水彩清新', prompt: 'soft watercolor illustration, pastel palette, gentle light' },
   { id: 'cute', name: 'Q版可爱', prompt: 'chibi cute style, big eyes, soft shading, kawaii' },
