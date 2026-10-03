@@ -4660,7 +4660,7 @@ const ChatPage: React.FC = () => {
         )}
         
         {/* 表情按钮 */}
-        <Popover open={showEmoji} onOpenChange={setShowEmoji}>
+        <Popover open={showEmoji} onOpenChange={(open) => { setShowEmoji(open); if (open) { setShowPlusPanel(false); setShowStickerPicker(false); } }}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
               <Smile className="w-4 h-4" />
