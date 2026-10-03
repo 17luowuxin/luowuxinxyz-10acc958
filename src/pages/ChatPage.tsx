@@ -347,6 +347,7 @@ const ChatPage: React.FC = () => {
   const [pendingStickerFile, setPendingStickerFile] = useState<{ file: File; previewUrl: string } | null>(null);
   const [uploadingSticker, setUploadingSticker] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false); // 快捷发送表情包面板
+  const [showPlusPanel, setShowPlusPanel] = useState(false); // 微信风格加号展开面板
   const [batchStickerUrls, setBatchStickerUrls] = useState(''); // 批量导入URL
   const [importingBatch, setImportingBatch] = useState(false);
   const stickerImportRunningRef = useRef(false);
@@ -4460,6 +4461,117 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Fixed Input Bar - 拉黑状态时显示不同UI */}
+      {/* 微信风格加号展开面板 - 从底部滑出 */}
+      {!isBlocked && showPlusPanel && (
+        <div className="flex-shrink-0 bg-background border-t px-4 py-6 animate-slide-up z-20">
+          <div className="grid grid-cols-4 gap-y-6">
+            {/* 图片 */}
+            <button
+              className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+              onClick={() => {
+                setShowPlusPanel(false);
+                imageInputRef.current?.click();
+              }}
+              disabled={loading || uploadingImage}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                <ImagePlus className="w-6 h-6 text-blue-500" />
+              </div>
+              <span className="text-xs text-muted-foreground">图片</span>
+            </button>
+
+            {/* 表情包 */}
+            <button
+              className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+              onClick={() => {
+                setShowPlusPanel(false);
+                setShowStickerPicker(true);
+              }}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                <Sticker className="w-6 h-6 text-orange-500" />
+              </div>
+              <span className="text-xs text-muted-foreground">表情包</span>
+            </button>
+
+            {/* 语音通话 */}
+            <button
+              className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+              onClick={() => {
+                setShowPlusPanel(false);
+                startCall('voice');
+              }}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                <Phone className="w-6 h-6 text-green-500" />
+              </div>
+              <span className="text-xs text-muted-foreground">语音</span>
+            </button>
+
+            {/* 视频通话 */}
+            <button
+              className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+              onClick={() => {
+                setShowPlusPanel(false);
+                startCall('video');
+              }}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                <Video className="w-6 h-6 text-purple-500" />
+              </div>
+              <span className="text-xs text-muted-foreground">视频</span>
+            </button>
+
+            {/* 转账 */}
+            {transferEnabled && (
+              <button
+                className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+                onClick={() => {
+                  setShowPlusPanel(false);
+                  setShowUserTransferDialog(true);
+                }}
+                disabled={loading}
+              >
+                <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                  <Gift className="w-6 h-6 text-amber-500" />
+                </div>
+                <span className="text-xs text-muted-foreground">转账</span>
+              </button>
+            )}
+
+            {/* 角色语音模式切换 */}
+            {ttsConfig?.enabled && (
+              <button
+                className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-muted active:scale-95 transition-all"
+                onClick={() => {
+                  setShowPlusPanel(false);
+                  const modes: Array<'off' | 'sometimes' | 'always'> = ['off', 'sometimes', 'always'];
+                  const currentIndex = modes.indexOf(voiceMode);
+                  const nextMode = modes[(currentIndex + 1) % modes.length];
+                  setVoiceMode(nextMode);
+                  if (characterId && user?.id) {
+                    saveCharacterChanges({ voice_mode: nextMode }).catch(console.error);
+                  }
+                  const labels = { off: '关闭', sometimes: '偶尔', always: '总是' };
+                  toast.success(`角色语音：${labels[nextMode]}`);
+                }}
+              >
+                <div className={`w-12 h-12 rounded-2xl bg-muted flex items-center justify-center ${
+                  voiceMode === 'always' ? 'bg-pink-500/15' : 'bg-muted'
+                }`}>
+                  <Volume2 className={`w-6 h-6 ${
+                    voiceMode === 'always' ? 'text-pink-500' : voiceMode === 'sometimes' ? 'text-pink-400' : 'text-gray-400'
+                  }`} />
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {voiceMode === 'off' ? '语音关' : voiceMode === 'sometimes' ? '偶尔语音' : '总是语音'}
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {isBlocked ? (
         <footer className="h-14 flex-shrink-0 px-4 py-2 border-t bg-muted/50 flex items-center justify-center z-20">
           <div className="flex items-center gap-3">
@@ -4487,108 +4599,17 @@ const ChatPage: React.FC = () => {
           onChange={handleImageSelect}
         />
         
-        {/* 加号按钮 - 展开工具菜单 */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="flex-shrink-0 w-9 h-9 text-muted-foreground">
-              <Plus className="w-5 h-5" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-3 bg-background border shadow-lg z-50" align="start" side="top">
-            <div className="grid grid-cols-4 gap-3">
-              {/* 图片 */}
-              <button 
-                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={loading || uploadingImage}
-              >
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <ImagePlus className="w-5 h-5 text-blue-500" />
-                </div>
-                <span className="text-[10px] text-muted-foreground">图片</span>
-              </button>
-              
-              {/* 表情包 */}
-              <button 
-                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                onClick={() => {
-                  setShowStickerPicker(true);
-                }}
-              >
-                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <Sticker className="w-5 h-5 text-orange-500" />
-                </div>
-                <span className="text-[10px] text-muted-foreground">表情包</span>
-              </button>
-              
-              {/* 语音通话 */}
-              <button 
-                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                onClick={() => startCall('voice')}
-              >
-                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Phone className="w-5 h-5 text-green-500" />
-                </div>
-                <span className="text-[10px] text-muted-foreground">语音</span>
-              </button>
-              
-              {/* 视频通话 */}
-              <button 
-                className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                onClick={() => startCall('video')}
-              >
-                <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-                  <Video className="w-5 h-5 text-purple-500" />
-                </div>
-                <span className="text-[10px] text-muted-foreground">视频</span>
-              </button>
-              
-              {/* 转账 */}
-              {transferEnabled && (
-                <button 
-                  className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                  onClick={() => setShowUserTransferDialog(true)}
-                  disabled={loading}
-                >
-                  <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
-                    <Gift className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">转账</span>
-                </button>
-              )}
-              
-              {/* 角色语音模式切换 */}
-              {ttsConfig?.enabled && (
-                <button 
-                  className="flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-muted transition-colors"
-                  onClick={() => {
-                    const modes: Array<'off' | 'sometimes' | 'always'> = ['off', 'sometimes', 'always'];
-                    const currentIndex = modes.indexOf(voiceMode);
-                    const nextMode = modes[(currentIndex + 1) % modes.length];
-                    setVoiceMode(nextMode);
-                    // 保存到数据库
-                    if (characterId && user?.id) {
-                      saveCharacterChanges({ voice_mode: nextMode }).catch(console.error);
-                    }
-                    const labels = { off: '关闭', sometimes: '偶尔', always: '总是' };
-                    toast.success(`角色语音：${labels[nextMode]}`);
-                  }}
-                >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    voiceMode === 'always' ? 'bg-pink-500/20' : voiceMode === 'sometimes' ? 'bg-pink-500/10' : 'bg-gray-500/10'
-                  }`}>
-                    <Volume2 className={`w-5 h-5 ${
-                      voiceMode === 'always' ? 'text-pink-500' : voiceMode === 'sometimes' ? 'text-pink-400' : 'text-gray-400'
-                    }`} />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {voiceMode === 'off' ? '语音关' : voiceMode === 'sometimes' ? '偶尔语音' : '总是语音'}
-                  </span>
-                </button>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
+        {/* 加号按钮 - 微信风格展开面板开关 */}
+        <button
+          onClick={() => {
+            setShowPlusPanel((v) => !v);
+            setShowStickerPicker(false);
+          }}
+          className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-muted-foreground active:scale-90 transition-transform"
+          aria-label="更多功能"
+        >
+          <Plus className={`w-6 h-6 transition-transform duration-200 ${showPlusPanel ? 'rotate-45' : ''}`} />
+        </button>
 
         {/* 表情包快捷发送弹窗 - 固定左下角显示，避免和底部菜单重叠 */}
         {showStickerPicker && (
@@ -4639,7 +4660,7 @@ const ChatPage: React.FC = () => {
         )}
         
         {/* 表情按钮 */}
-        <Popover open={showEmoji} onOpenChange={setShowEmoji}>
+        <Popover open={showEmoji} onOpenChange={(open) => { setShowEmoji(open); if (open) { setShowPlusPanel(false); setShowStickerPicker(false); } }}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="flex-shrink-0 w-8 h-8 text-muted-foreground">
               <Smile className="w-4 h-4" />
