@@ -347,6 +347,7 @@ const ChatPage: React.FC = () => {
   const [pendingStickerFile, setPendingStickerFile] = useState<{ file: File; previewUrl: string } | null>(null);
   const [uploadingSticker, setUploadingSticker] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false); // 快捷发送表情包面板
+  const [showPlusPanel, setShowPlusPanel] = useState(false); // 微信风格加号展开面板
   const [batchStickerUrls, setBatchStickerUrls] = useState(''); // 批量导入URL
   const [importingBatch, setImportingBatch] = useState(false);
   const stickerImportRunningRef = useRef(false);
