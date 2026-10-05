@@ -18,6 +18,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import DreamOrdersPanel from '@/components/gift/DreamOrdersPanel';
+import {
+  ChatWriter, DreamOrder, createOrder, loadOrders, processOrders, rollCharacterPurchases, signOrder,
+} from '@/lib/dreamOrders';
 import {
   deleteLocalRows,
   getLocalTable,
