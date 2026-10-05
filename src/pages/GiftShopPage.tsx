@@ -161,6 +161,30 @@ const GiftShopPage: React.FC = () => {
     }
   }, [user, localMode]);
 
+  const [orders, setOrders] = useState<DreamOrder[]>([]);
+  const writeChat: ChatWriter = async (characterId, role, content) => {
+    if (!user) return;
+    const row = { user_id: user.id, character_id: characterId, role, content };
+    if (localMode) await insertLocalRow(user.id, 'chat_messages', row);
+    else await supabase.from('chat_messages').insert(row);
+  };
+  const writeChatRef = useRef(writeChat);
+  writeChatRef.current = writeChat;
+
+  useEffect(() => {
+    if (!user || localMode === null) return;
+    const tick = async () => setOrders(await processOrders(user.id, (...a) => writeChatRef.current(...a)));
+    void tick();
+    const t = setInterval(tick, 15000);
+    return () => clearInterval(t);
+  }, [user, localMode]);
+
+  useEffect(() => {
+    if (!user || localMode === null || characters.length === 0) return;
+    rollCharacterPurchases(user.id, characters, defaultGifts.filter((g) => g.price <= 3000), (...a) => writeChatRef.current(...a))
+      .then((n) => { if (n > 0) { toast.success(`有角色偷偷给你下单了 ${n} 件礼物！`); setOrders(loadOrders(user.id)); } });
+  }, [user, localMode, characters]);
+
   // 加载自定义图片
   const fetchCustomImages = async () => {
     if (!user) return;
@@ -430,7 +454,15 @@ const GiftShopPage: React.FC = () => {
       }
 
       // 发送聊天消息给角色
-      const userMessage = `我给你送了${giftNames}，希望你喜欢！💝`;
+      createOrder(user.id, {
+        buyer: 'user',
+        characterId: selectedCharacter.id,
+        characterName: selectedCharacter.name,
+        items: giftList.map((i) => ({ name: i.gift.name, price: i.gift.price, quantity: i.quantity })),
+        total: totalPrice,
+      });
+      setOrders(loadOrders(user.id));
+      const userMessage = `我在梦阁给你下单了${giftNames}，已经付款，等发货后会送到你手上～📦`;
       
       const userChatRow = {
         user_id: user.id,
@@ -798,6 +830,15 @@ const GiftShopPage: React.FC = () => {
 
       {activeTab === 'mine' && (
         <div className="px-4 pb-8">
+          {user && (
+            <DreamOrdersPanel
+              userId={user.id}
+              orders={orders}
+              characters={characters}
+              onSign={async (id) => setOrders(await signOrder(user.id, id, writeChat))}
+            />
+          )}
+          <p className="text-sm font-medium text-gray-700 mb-2">赠送记录</p>
           {giftHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
               <Gift className="w-12 h-12 mb-2 opacity-30" />
