@@ -346,7 +346,7 @@ const HomeScreen: React.FC = () => {
     const diff = touchStart - touchEnd;
     
     if (Math.abs(diff) > 50) {
-      if (diff > 0 && currentPage < 1) {
+      if (diff > 0 && currentPage < 0) {
         setCurrentPage(1);
       } else if (diff < 0 && currentPage > 0) {
         setCurrentPage(0);
@@ -610,7 +610,7 @@ const HomeScreen: React.FC = () => {
 
         {/* Page dots */}
         <div className="flex gap-2">
-          {[0, 1].map((page) => (
+          {[0].map((page) => (
             <button
               key={page}
               onClick={() => setCurrentPage(page)}
