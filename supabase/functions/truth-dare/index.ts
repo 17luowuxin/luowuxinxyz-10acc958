@@ -273,6 +273,12 @@ serve(async (req) => {
       config
     );
 
+    const sceneDb = getDataDb(auth.source);
+
+    await logSceneEvent(sceneDb, auth.userId, character?.id, '真心话大冒险', String(reply));
+
+    await maybeAutoSummarize(req, sceneDb, auth.userId, character?.id, character?.name || '', auth.source);
+
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

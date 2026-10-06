@@ -260,6 +260,15 @@ ${scriptRole.isMurderer ? '【重要】你是凶手，需要隐藏自己的身�
     );
 
 
+    const sceneDb = getDataDb(auth.source);
+
+
+    await logSceneEvent(sceneDb, auth.userId, character?.id, '剧本杀', String(reply));
+
+
+    await maybeAutoSummarize(req, sceneDb, auth.userId, character?.id, character?.name || '', auth.source);
+
+
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

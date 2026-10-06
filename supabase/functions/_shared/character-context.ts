@@ -71,13 +71,27 @@ export async function buildCharacterContext(
       return data as any[] | null;
     });
 
+    const coreMemory = await safe(async () => {
+      const { data } = await db
+        .from('character_memories')
+        .select('summary')
+        .eq('user_id', userId)
+        .eq('character_id', characterId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as any;
+    });
+
     let block = '';
+    if (coreMemory?.summary) block += '总记忆（私聊/朋友圈/群聊/游戏汇总）：\n' + coreMemory.summary + '\n\n';
     if (summaries?.length) {
       block += '历史对话摘要：\n' + summaries.map((s, i) => `${i + 1}. ${s.summary}`).join('\n') + '\n';
     }
     if (memories?.length) {
       const grouped: Record<string, string[]> = {};
       for (const m of memories) {
+        if (m.category === 'scene_log') continue;
         const cat = m.category || 'other';
         (grouped[cat] ||= []).push(m.content);
       }
@@ -158,6 +172,19 @@ export async function buildCharacterContext(
       if (lines.length) sections.push('【最近的群聊】\n' + lines.join('\n'));
     }
   }
+
+  const sceneLog = await safe(async () => {
+    const { data } = await db
+      .from('character_extracted_memories')
+      .select('content')
+      .eq('user_id', userId)
+      .eq('character_id', characterId)
+      .eq('category', 'scene_log')
+      .limit(1)
+      .maybeSingle();
+    return data as any;
+  });
+  if (sceneLog?.content) sections.push('【最近在游戏/朋友圈里的经历】\n' + String(sceneLog.content).slice(-1200));
 
   if (!sections.length) return '';
   return (

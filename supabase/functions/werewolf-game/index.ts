@@ -296,6 +296,15 @@ serve(async (req) => {
     );
 
 
+    const sceneDb = getDataDb(auth.source);
+
+
+    await logSceneEvent(sceneDb, auth.userId, character?.id, '狼人杀', String(reply));
+
+
+    await maybeAutoSummarize(req, sceneDb, auth.userId, character?.id, character?.name || '', auth.source);
+
+
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
