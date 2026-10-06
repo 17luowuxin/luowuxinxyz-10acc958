@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
+import { getDataDb, maybeAutoSummarize } from "../_shared/scene-memory.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -357,6 +358,12 @@ ${crossContext}`;
       }
     }
 
+    {
+      const sceneDb = getDataDb(auth.source);
+      for (const r of responses) {
+        await maybeAutoSummarize(req, sceneDb, auth.userId, r.characterId, r.characterName, auth.source);
+      }
+    }
     return new Response(JSON.stringify({ responses }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

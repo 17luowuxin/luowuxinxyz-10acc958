@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
+import { getDataDb, logSceneEvent, maybeAutoSummarize } from "../_shared/scene-memory.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -641,6 +642,11 @@ ${crossContext}
       }
     }
 
+    if (character?.id) {
+      const sceneDb = getDataDb(auth.source);
+      await logSceneEvent(sceneDb, auth.userId, character.id, type === 'moment' ? '朋友圈' : '朋友圈互动', String(content || ''));
+      await maybeAutoSummarize(req, sceneDb, auth.userId, character.id, character.name || '', auth.source);
+    }
     return new Response(JSON.stringify({ content, imagePrompts }), {
 
       headers: { ...corsHeaders, "Content-Type": "application/json" },
