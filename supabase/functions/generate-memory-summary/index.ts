@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildCharacterContext } from "../_shared/character-context.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,20 +96,7 @@ async function getAICompletion(
       max_tokens: 2048,
     };
   } else {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('No API configuration available');
-    }
-    apiUrl = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-    headers = {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    };
-    body = {
-      model: 'google/gemini-2.5-flash',
-      messages,
-      max_tokens: 2048,
-    };
+    throw new Error('请先在设置中配置API密钥');
   }
 
   console.log(`Using ${config.provider} API for memory summary`);
@@ -212,8 +200,9 @@ serve(async (req) => {
       throw messagesError;
     }
 
+    const crossScene = await buildCharacterContext(dataSupabase, userId, characterId, { includeMemories: false, includeChat: false, momentLimit: 10, groupLimit: 20 });
     const messageCount = rawMessages?.length || 0;
-    if (messageCount < 3) {
+    if (messageCount < 3 && !crossScene) {
       console.log(`Not enough messages for summary: ${messageCount} messages found for character ${characterId} (source=${dataSource})`);
       return new Response(
         JSON.stringify({ success: true, message: `消息不足（当前${messageCount}条，至少需要3条）` }),
@@ -300,7 +289,8 @@ ${existingSummary ? `之前的记忆摘要：\n${existingSummary}\n\n请在此�
 
     const userPrompt = `以下是${characterName || '角色'}与用户的最近对话，请总结关键记忆：
 
-${conversationText}`;
+${conversationText}
+${crossScene ? `\n此外，以下是${characterName || '角色'}在朋友圈、群聊、游戏等其他场景中的经历，也请一并总结进记忆（标明发生在哪个场景）：\n${crossScene}` : ''}`;
 
     const summary = await getAICompletion([
       { role: 'system', content: systemPrompt },
