@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.register-with-invite]
 verify_jwt = false
+
+[functions.character-phone]
+verify_jwt = false
