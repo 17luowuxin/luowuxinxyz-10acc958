@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { detectSensitiveWords, replaceSensitiveWords, DetectionResult } from '@/utils/sensitiveWordChecker';
 import SensitiveWordWarning from '@/components/SensitiveWordWarning';
+import CharacterMemoryManager from '@/components/friends/CharacterMemoryManager';
 import { useCharactersCache } from '@/hooks/useLocalCache';
 import {
   deleteLocalRows,
@@ -1177,6 +1178,13 @@ const FriendsPage: React.FC = () => {
                   >
                     保存记忆
                   </Button>
+                  {user && editingChar && (
+                    <CharacterMemoryManager
+                      userId={user.id}
+                      characterId={editingChar.id}
+                      onSummaryCleared={() => setMemorySummary('')}
+                    />
+                  )}
                 </TabsContent>
               </Tabs>
             ) : (
