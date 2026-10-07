@@ -36,6 +36,7 @@ const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const FinancePage = lazy(() => import("./pages/FinancePage"));
 const GiftShopPage = lazy(() => import("./pages/GiftShopPage"));
+const CharacterPhonePage = lazy(() => import("./pages/CharacterPhonePage"));
 const VisualNovelPage = lazy(() => import("./pages/VisualNovelPage"));
 const VisualNovelSpritesPage = lazy(() => import("./pages/VisualNovelSpritesPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
@@ -101,6 +102,7 @@ const App = () => (
                 <Route path="/terms" element={<WithPhoneFrame><TermsPage /></WithPhoneFrame>} />
                 <Route path="/finance" element={<ProtectedPhoneFrame><FinancePage /></ProtectedPhoneFrame>} />
                 <Route path="/gift-shop" element={<ProtectedPhoneFrame><GiftShopPage /></ProtectedPhoneFrame>} />
+                <Route path="/char-phone" element={<ProtectedPhoneFrame><CharacterPhonePage /></ProtectedPhoneFrame>} />
                 <Route
                   path="/visual-novel"
                   element={
