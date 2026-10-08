@@ -64,6 +64,7 @@ const allApps: AppConfig[] = [
 const dockApps: AppConfig[] = [
   { id: 'friends', name: '好友', icon: MessageCircle, bgColor: 'bg-[#42A5F5]', route: '/friends' },
   { id: 'group', name: '群聊', icon: Users, bgColor: 'bg-[#26A69A]', route: '/group' },
+  { id: 'music', name: '音乐', icon: Music, bgColor: 'bg-[#5C6BC0]', route: '/music' },
   { id: 'char-phone', name: 'TA的手机', icon: Smartphone, bgColor: 'bg-[#37474F]', route: '/char-phone' },
   { id: 'settings', name: '设置', icon: Settings, bgColor: 'bg-[#78909C]', route: '/settings' },
 ];
@@ -624,7 +625,7 @@ const HomeScreen: React.FC = () => {
 
         {/* Dock */}
         <div className="bg-background/30 backdrop-blur-xl rounded-2xl px-4 py-2 mx-3">
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-3 justify-center">
             {dockApps.map(app => renderDockIcon(app))}
           </div>
         </div>
