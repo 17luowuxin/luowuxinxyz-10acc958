@@ -2,21 +2,9 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 
-// 智能构建API URL
-function buildApiUrl(baseUrl: string): string {
-  let finalUrl = baseUrl.trim().replace(/\/+$/, '');
-  
-  if (finalUrl.endsWith('/chat/completions')) {
-    return finalUrl;
-  } else if (finalUrl.endsWith('/v1')) {
-    return `${finalUrl}/chat/completions`;
-  } else if (finalUrl.includes('/v1/')) {
-    return finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
-  } else {
-    // 尝试添加/v1/chat/completions
-    return `${finalUrl}/v1/chat/completions`;
-  }
-}
+import { buildChatCompletionsUrl, describeAiError, htmlResponseMessage, looksLikeHtml } from "../_shared/ai-endpoint.ts";
+
+const buildApiUrl = buildChatCompletionsUrl;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -125,73 +113,45 @@ serve(async (req) => {
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
-        return new Response(JSON.stringify({ success: false, error: '连接超时，请检查API地址或网络' }), {
+        return new Response(JSON.stringify({ success: false, error: `连接超时：12秒内服务商没有回应，请检查API地址或换个更快的模型（实际请求：${testUrl}）` }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      throw error;
+      return new Response(JSON.stringify({ success: false, error: `连不上这个地址，请检查API地址有没有写错（实际请求：${testUrl}）` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     } finally {
       clearTimeout(timeoutId);
     }
 
     const responseText = await response.text();
     console.log('Response status:', response.status);
+    const reply = (body: Record<string, unknown>) => new Response(JSON.stringify({ ...body, testedUrl: testUrl }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
-    // 检查是否有有效响应
-    if (response.ok) {
-      // 尝试解析响应验证格式
-      try {
-        const json = JSON.parse(responseText);
-        // 检查是否有choices或其他有效内容
-        if (json.choices || json.content || json.result || json.output || json.response) {
-          return new Response(JSON.stringify({ 
-            success: true, 
-            message: '连接成功，API响应正常' 
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        // 如果有error字段
-        if (json.error) {
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: json.error.message || json.error || '未知错误' 
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        // 其他情况也认为成功
-        return new Response(JSON.stringify({ 
-          success: true, 
-          message: '连接成功' 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch {
-        // 非JSON响应但状态码OK
-        return new Response(JSON.stringify({ 
-          success: true, 
-          message: '连接成功' 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    } else {
-      let errorMessage = '连接失败';
-      try {
-        const errorData = JSON.parse(responseText);
-        errorMessage = errorData.error?.message || errorData.message || errorData.error || `HTTP ${response.status}`;
-      } catch {
-        errorMessage = responseText.substring(0, 200) || `HTTP ${response.status}`;
-      }
-      
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: errorMessage 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (looksLikeHtml(responseText, response.headers.get('content-type') || '')) {
+      return reply({ success: false, error: htmlResponseMessage(testUrl) });
     }
+    if (!response.ok) {
+      return reply({ success: false, error: describeAiError(response.status, responseText, testUrl) });
+    }
+
+    let json: any;
+    try {
+      json = JSON.parse(responseText);
+    } catch {
+      return reply({ success: false, error: `返回的内容不是AI回复，请检查API地址是否正确（实际请求：${testUrl}）。返回开头：${responseText.trim().slice(0, 80)}` });
+    }
+    if (json?.error) {
+      return reply({ success: false, error: describeAiError(400, responseText, testUrl) });
+    }
+    const hasReply = Array.isArray(json?.choices) && json.choices.length > 0
+      || Array.isArray(json?.content) || typeof json?.content === 'string';
+    if (!hasReply) {
+      return reply({ success: false, error: `服务商有响应，但没有返回AI回复，可能是地址或模型不对（实际请求：${testUrl}）` });
+    }
+    return reply({ success: true, message: '连接成功，API响应正常' });
   } catch {
     console.error('API connection test failed');
     return new Response(JSON.stringify({ 
