@@ -1143,6 +1143,14 @@ ${willSendImage ? `
           break;
         }
         
+        // 返回的是网页（API地址填错），直接告诉用户，不再重试
+        if (validity.htmlPage) {
+          return new Response(JSON.stringify({ error: htmlResponseMessage(apiUrl) }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         // 如果是内容过滤问题，直接返回明确错误，不再重试
         if (validity.contentFiltered) {
           console.log("Content filter detected, not retrying");
