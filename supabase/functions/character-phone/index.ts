@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
 import { getDataDb } from "../_shared/scene-memory.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,8 +26,7 @@ serve(async (req) => {
     const get = (p: string) => (keys || []).find((k: any) => k.provider === p)?.api_key;
     const apiKey = get('custom');
     if (!apiKey) return json({ error: '请先在设置中配置API密钥' }, 400);
-    let base = String(get('custom_base_url') || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    const url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
+    const url = buildChatCompletionsUrl(String(get('custom_base_url') || 'https://api.openai.com/v1'));
     const model = get('custom_model') || 'gpt-4o-mini';
 
     const { data: character } = await db.from('characters').select('name, persona').eq('id', characterId).eq('user_id', uid).maybeSingle();
@@ -52,9 +52,10 @@ notes 4-6条（至少两条是关于${userName}的心里话），photos 6-9条�
     if (!resp.ok) {
       const t = await resp.text();
       console.error('character-phone api error', resp.status, t);
-      return json({ error: `API请求失败（${resp.status}）：${t.slice(0, 200)}` }, 502);
+      return json({ error: describeAiError(resp.status, t, url) }, 502);
     }
-    const data = await resp.json();
+    let data: any;
+    try { data = await readAiJson(resp, url); } catch (e) { return json({ error: e instanceof Error ? e.message : 'AI返回格式不正确' }, 502); }
     let raw = String(data.choices?.[0]?.message?.content || '');
     raw = raw.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/```json?/g, '').replace(/```/g, '');
     const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');

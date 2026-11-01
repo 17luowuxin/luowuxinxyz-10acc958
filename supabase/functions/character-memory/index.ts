@@ -66,7 +66,7 @@ async function callAI(
   let body: any;
 
   if (config.provider === 'custom' && config.apiKey) {
-    apiUrl = `${config.baseUrl}/chat/completions`;
+    apiUrl = buildChatCompletionsUrl(config.baseUrl);
     headers = { 'Authorization': `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' };
     body = { model: config.model || 'gpt-3.5-turbo', messages, max_tokens: maxTokens };
   } else if (config.provider === 'deepseek' && config.apiKey) {

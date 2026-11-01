@@ -158,7 +158,7 @@ ${charPersona}
             continue;
           }
 
-          const data = await readAiJson(response, apiUrl);
+          const data = await readAiJson(response, finalApiUrl);
           const raw = data.choices?.[0]?.message?.content || '';
           const cleaned = cleanMessage(raw, charName);
           if (cleaned && cleaned.length > 0) {
@@ -229,7 +229,7 @@ ${charPersona}
         throw new Error(`API error: ${errorText}`);
       }
 
-      const data = await readAiJson(response, apiUrl);
+      const data = await readAiJson(response, finalApiUrl);
       const rawContent = data.choices?.[0]?.message?.content || '你终于回来了！我好想你...';
       
       // 解析多条消息

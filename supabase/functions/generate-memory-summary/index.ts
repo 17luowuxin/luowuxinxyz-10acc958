@@ -64,7 +64,7 @@ async function getAICompletion(
   let body: any;
 
   if (config.provider === 'custom' && config.apiKey) {
-    apiUrl = `${config.baseUrl}/chat/completions`;
+    apiUrl = buildChatCompletionsUrl(config.baseUrl);
     headers = {
       'Authorization': `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
