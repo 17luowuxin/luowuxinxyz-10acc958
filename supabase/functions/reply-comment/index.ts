@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,10 +87,7 @@ async function getAICompletion(
 
   // 【关键修复】优先检查用户传递的自定义API配置
   if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
-    let baseUrl = config.baseUrl.replace(/\/+$/, '');
-    if (!baseUrl.endsWith('/chat/completions')) {
-      baseUrl = `${baseUrl}/chat/completions`;
-    }
+    let baseUrl = buildChatCompletionsUrl(config.baseUrl);
     apiUrl = baseUrl;
     headers['Authorization'] = `Bearer ${config.apiKey}`;
     model = config.model || 'deepseek-chat';
@@ -134,10 +132,10 @@ async function getAICompletion(
     } else if (response.status === 402) {
       throw new Error("AI额度不足，请充值");
     }
-    throw new Error(`AI API error: ${response.status}`);
+    throw new Error(describeAiError(response.status, errorText, apiUrl));
   }
 
-  const data = await response.json();
+  const data = await readAiJson(response, apiUrl);
   
   // 检测是否被截断
   let finishReason = data.choices?.[0]?.finish_reason;
@@ -203,7 +201,7 @@ async function getAICompletion(
       });
       
       if (continueResponse.ok) {
-        const continueData = await continueResponse.json();
+        const continueData = await readAiJson(continueResponse, apiUrl);
         const newContent = continueData.choices?.[0]?.message?.content || '';
         finishReason = continueData.choices?.[0]?.finish_reason || null;
         

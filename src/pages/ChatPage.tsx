@@ -2100,7 +2100,7 @@ const ChatPage: React.FC = () => {
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
-        toast.error(errorData.error || 'AI服务暂时不可用');
+        toast.error(errorData.error || 'AI服务暂时不可用', { duration: 10000 });
         setLoading(false);
         return;
       }
@@ -2352,7 +2352,7 @@ const ChatPage: React.FC = () => {
           
           const errorData = await resp.json().catch(() => ({ error: '请求失败' }));
           console.error('Chat error:', errorData);
-          toast.error(errorData.error || 'AI服务暂时不可用');
+          toast.error(errorData.error || 'AI服务暂时不可用', { duration: 10000 });
           setLoading(false);
           return;
         } catch (fetchErr: any) {

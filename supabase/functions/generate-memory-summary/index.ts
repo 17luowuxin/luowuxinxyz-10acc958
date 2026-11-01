@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,7 +64,7 @@ async function getAICompletion(
   let body: any;
 
   if (config.provider === 'custom' && config.apiKey) {
-    apiUrl = `${config.baseUrl}/chat/completions`;
+    apiUrl = buildChatCompletionsUrl(config.baseUrl);
     headers = {
       'Authorization': `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
@@ -110,10 +111,10 @@ async function getAICompletion(
   if (!response.ok) {
     const errorText = await response.text();
     console.error('AI API error:', response.status, errorText);
-    throw new Error(`AI API error: ${response.status}`);
+    throw new Error(describeAiError(response.status, errorText, apiUrl));
   }
 
-  const data = await response.json();
+  const data = await readAiJson(response, apiUrl);
   
   if (data.choices?.[0]?.message?.content) {
     return data.choices[0].message.content;

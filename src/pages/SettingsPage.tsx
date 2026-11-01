@@ -511,12 +511,12 @@ const SettingsPage: React.FC = () => {
       }
 
       if (data.success) {
-        toast.success(`${currentModel} 连接成功！`);
+        toast.success(`${currentModel} 连接成功！AI已正常回复`);
       } else {
         const message = String(data.error || '未知错误');
         toast.error(/no available channel/i.test(message)
           ? `${currentModel}：服务商暂无该模型的可用通道，请换一个模型或联系API提供商`
-          : `${currentModel} 连接失败: ${message}`);
+          : `${currentModel} 连接失败：${message}`, { duration: 15000 });
       }
     } catch (error) {
       if (requestId !== testRequestRef.current) return;

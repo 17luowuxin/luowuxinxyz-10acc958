@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { buildChatCompletionsUrl, describeAiError, htmlResponseMessage, looksLikeHtml } from "../_shared/ai-endpoint.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
@@ -440,18 +441,7 @@ serve(async (req) => {
       }
       
       apiKey = finalApiKey;
-      let finalUrl = finalBaseUrl.trim().replace(/\/+$/, '');
-      
-      // 智能处理URL格式
-      if (finalUrl.endsWith('/chat/completions')) {
-        apiUrl = finalUrl;
-      } else if (finalUrl.endsWith('/v1')) {
-        apiUrl = `${finalUrl}/chat/completions`;
-      } else if (finalUrl.includes('/v1/')) {
-        apiUrl = finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
-      } else {
-        apiUrl = `${finalUrl}/v1/chat/completions`;
-      }
+      apiUrl = buildChatCompletionsUrl(finalBaseUrl);
       
       model = finalModel;
       headers["Authorization"] = `Bearer ${apiKey}`;
@@ -478,17 +468,7 @@ serve(async (req) => {
         headers["anthropic-version"] = "2023-06-01";
       } else if (provider === 'custom' && baseUrl) {
         apiKey = userApiKey;
-        let finalUrl = baseUrl.trim().replace(/\/+$/, '');
-        
-        if (finalUrl.endsWith('/chat/completions')) {
-          apiUrl = finalUrl;
-        } else if (finalUrl.endsWith('/v1')) {
-          apiUrl = `${finalUrl}/chat/completions`;
-        } else if (finalUrl.includes('/v1/')) {
-          apiUrl = finalUrl.replace(/\/v1\/.*$/, '/v1/chat/completions');
-        } else {
-          apiUrl = `${finalUrl}/v1/chat/completions`;
-        }
+        apiUrl = buildChatCompletionsUrl(baseUrl);
         
         model = customModel || "deepseek-chat";
         headers["Authorization"] = `Bearer ${apiKey}`;
@@ -1061,7 +1041,7 @@ ${willSendImage ? `
     };
 
     // 检查响应是否有效（非空内容）以及是否触发内容审核
-    const isValidResponse = async (resp: Response): Promise<{ valid: boolean; content?: string; isStream?: boolean; contentFiltered?: boolean; filterReason?: string }> => {
+    const isValidResponse = async (resp: Response): Promise<{ valid: boolean; content?: string; isStream?: boolean; contentFiltered?: boolean; filterReason?: string; htmlPage?: boolean }> => {
       const contentType = resp.headers.get('content-type') || '';
       
       // SSE流式响应，需要先检查是否有效
@@ -1072,6 +1052,9 @@ ${willSendImage ? `
       // 克隆响应以便多次读取
       const clonedResp = resp.clone();
       const text = await clonedResp.text();
+      if (looksLikeHtml(text, contentType)) {
+        return { valid: false, htmlPage: true };
+      }
       
       try {
         const json = JSON.parse(text);
@@ -1160,6 +1143,14 @@ ${willSendImage ? `
           break;
         }
         
+        // 返回的是网页（API地址填错），直接告诉用户，不再重试
+        if (validity.htmlPage) {
+          return new Response(JSON.stringify({ error: htmlResponseMessage(apiUrl) }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         // 如果是内容过滤问题，直接返回明确错误，不再重试
         if (validity.contentFiltered) {
           console.log("Content filter detected, not retrying");
@@ -1227,13 +1218,13 @@ ${willSendImage ? `
         });
       }
       if (response.status === 401) {
-        return new Response(JSON.stringify({ error: "API密钥无效，请检查配置" }), {
+        return new Response(JSON.stringify({ error: describeAiError(401, errorText, apiUrl) }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      return new Response(JSON.stringify({ error: "AI服务错误: " + errorText.slice(0, 200) }), {
+      return new Response(JSON.stringify({ error: describeAiError(response.status, errorText, apiUrl) }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1458,6 +1449,13 @@ ${willSendImage ? `
     // 非SSE响应 - 读取并解析，支持自动续写
     const responseText = await response.text();
     console.log("Response text received, length:", responseText.length);
+
+    if (looksLikeHtml(responseText, contentType)) {
+      return new Response(JSON.stringify({ error: htmlResponseMessage(apiUrl) }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     let { content, finishReason } = extractContent(responseText);
     let fullContent = content;

@@ -1,20 +1,14 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const normalizeChatCompletionsUrl = (input: string) => {
-  const trimmed = (input || '').trim();
-  if (!trimmed) return trimmed;
-  const url = trimmed.replace(/\/+$/g, '');
-  if (url.endsWith('/chat/completions')) return url;
-  if (/^https?:\/\/[^/]+$/.test(url)) return `${url}/v1/chat/completions`;
-  return `${url}/chat/completions`;
-};
+const normalizeChatCompletionsUrl = (input: string) => buildChatCompletionsUrl(input);
 
 // 情绪模板：拉黑后的消息
 const blockEmotionTemplates = [
@@ -157,7 +151,7 @@ ${charPersona}
             continue;
           }
 
-          const data = await response.json();
+          const data = await readAiJson(response, finalApiUrl);
           const raw = data.choices?.[0]?.message?.content || '';
           const cleaned = cleanMessage(raw, charName);
           if (cleaned && cleaned.length > 0) {
@@ -228,7 +222,7 @@ ${charPersona}
         throw new Error(`API error: ${errorText}`);
       }
 
-      const data = await response.json();
+      const data = await readAiJson(response, finalApiUrl);
       const rawContent = data.choices?.[0]?.message?.content || '你终于回来了！我好想你...';
       
       // 解析多条消息
