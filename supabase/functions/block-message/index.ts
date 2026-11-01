@@ -8,14 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const normalizeChatCompletionsUrl = (input: string) => {
-  const trimmed = (input || '').trim();
-  if (!trimmed) return trimmed;
-  const url = trimmed.replace(/\/+$/g, '');
-  if (url.endsWith('/chat/completions')) return url;
-  if (/^https?:\/\/[^/]+$/.test(url)) return `${url}/v1/chat/completions`;
-  return `${url}/chat/completions`;
-};
+const normalizeChatCompletionsUrl = (input: string) => buildChatCompletionsUrl(input);
 
 // 情绪模板：拉黑后的消息
 const blockEmotionTemplates = [
