@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,10 +91,10 @@ async function callAI(
   if (!response.ok) {
     const errText = await response.text();
     console.error('AI API error:', response.status, errText);
-    throw new Error(`AI API error: ${response.status}`);
+    throw new Error(describeAiError(response.status, errorText, apiUrl));
   }
 
-  const data = await response.json();
+  const data = await readAiJson(response, apiUrl);
   return data.choices?.[0]?.message?.content || data.choices?.[0]?.text || data.content || data.response || '';
 }
 

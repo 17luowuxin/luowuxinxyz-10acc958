@@ -4,6 +4,7 @@ import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/b
 import { authErrorResponse, requireUser } from "../_shared/require-user.ts";
 import { buildCharacterContext } from "../_shared/character-context.ts";
 import { getDataDb, logSceneEvent, maybeAutoSummarize } from "../_shared/scene-memory.ts";
+import { buildChatCompletionsUrl, describeAiError, readAiJson } from "../_shared/ai-endpoint.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -133,10 +134,7 @@ async function getAICompletion(
   let model: string;
 
   if (config.apiKey && config.provider === 'custom' && config.baseUrl) {
-    let baseUrl = config.baseUrl.replace(/\/+$/, '');
-    if (!baseUrl.endsWith('/chat/completions')) {
-      baseUrl = `${baseUrl}/chat/completions`;
-    }
+    let baseUrl = buildChatCompletionsUrl(config.baseUrl);
     apiUrl = baseUrl;
     headers['Authorization'] = `Bearer ${config.apiKey}`;
     model = config.model || 'deepseek-chat';
@@ -234,11 +232,11 @@ async function getAICompletion(
     } else if (response.status === 402) {
       throw new Error("AI额度不足，请充值");
     } else {
-      throw new Error(`AI API error: ${response.status}`);
+      throw new Error(describeAiError(response.status, errorText, apiUrl));
     }
   }
 
-  const data = await response.json();
+  const data = await readAiJson(response, apiUrl);
   
   const finishReason = data.choices?.[0]?.finish_reason;
   console.log("Finish reason:", finishReason);
@@ -377,9 +375,7 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
       const apiUrl =
         config.provider === 'custom'
           ? (() => {
-              let baseUrl = (config.baseUrl || '').replace(/\/+$/, '');
-              if (!baseUrl.endsWith('/chat/completions')) baseUrl = `${baseUrl}/chat/completions`;
-              return baseUrl;
+              return buildChatCompletionsUrl(config.baseUrl || '');
             })()
           : 'https://api.openai.com/v1/chat/completions';
 
@@ -436,7 +432,7 @@ async function getImageDescription(imageUrl: string, config: AIConfig): Promise<
       return '';
     }
 
-    const data = await response.json();
+    const data = await readAiJson(response, apiUrl);
     return data.choices?.[0]?.message?.content?.trim() || '';
   } catch (err) {
     console.error('Lovable image recognition error:', err);
