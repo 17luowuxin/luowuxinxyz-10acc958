@@ -463,6 +463,38 @@ export async function getLocalMeta<T>(key: string): Promise<T | null> {
   }
 }
 
+export async function listLocalBackupAccounts(): Promise<Array<{ userId: string; label: string; records: number; assets: number }>> {
+  const database = await openLocalDatabase();
+  try {
+    const transaction = database.transaction(['records', 'assets'], 'readonly');
+    const done = transactionDone(transaction);
+    const recordsRequest = transaction.objectStore('records').getAll();
+    const assetsRequest = transaction.objectStore('assets').getAllKeys();
+    const [records, assetKeys] = await Promise.all([
+      requestResult(recordsRequest as IDBRequest<StoredRecord[]>),
+      requestResult(assetsRequest),
+    ]);
+    await done;
+    const accounts = new Map<string, { userId: string; label: string; records: number; assets: number }>();
+    for (const record of records) {
+      const account = accounts.get(record.userId) ?? { userId: record.userId, label: `本机账号 ${accounts.size + 1}`, records: 0, assets: 0 };
+      account.records += 1;
+      if (record.table === 'profiles' && typeof record.data.email === 'string') account.label = record.data.email;
+      accounts.set(record.userId, account);
+    }
+    for (const key of assetKeys) {
+      if (typeof key !== 'string') continue;
+      const userId = key.split(':')[0];
+      const account = accounts.get(userId) ?? { userId, label: `本机账号 ${accounts.size + 1}`, records: 0, assets: 0 };
+      account.assets += 1;
+      accounts.set(userId, account);
+    }
+    return Array.from(accounts.values());
+  } finally {
+    releaseLocalDatabase(database);
+  }
+}
+
 export async function createLocalBackup(userId: string): Promise<LocalBackupPackage> {
     const database = await openLocalDatabase();
   try {
