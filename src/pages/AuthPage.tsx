@@ -9,6 +9,7 @@ import { Heart, Sparkles, Mail, Lock, Ticket } from 'lucide-react';
 import { cloudSupabase } from '@/lib/supabase';
 import { getSupabaseUrl } from '@/lib/supabaseUrl';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { LoginLocalExport } from '@/components/data/LoginLocalExport';
 
 const REGISTER_TIMEOUT_MS = 12000;
 
@@ -200,7 +201,7 @@ const AuthPage: React.FC = () => {
             <p className="text-xs text-blue-700 dark:text-blue-300 text-center leading-relaxed">
               ☁️ 账号数据默认保存在云端。
               <br />
-              以前已启用本机保存的设备，请先在设置中导出备份。
+              以前已启用本机保存的设备，可在下方直接导出备份。
             </p>
           </div>
 
@@ -263,6 +264,8 @@ const AuthPage: React.FC = () => {
               </Button>
             </form>
           )}
+
+          <LoginLocalExport />
 
           <div className="mt-6 text-center space-y-2">
             {mode === 'login' && (
